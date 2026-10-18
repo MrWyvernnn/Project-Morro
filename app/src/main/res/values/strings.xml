@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Morro</string>
+    <string name="fire_alarm_button">Fire Alarm in 1 Minute</string>
+    <string name="alarm_firing">ALARM FIRING</string>
+    <string name="dismiss">Dismiss</string>
+</resources>
