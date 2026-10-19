@@ -20,8 +20,19 @@ object AlarmScheduler {
     /**
      * Schedule an exact alarm at the given time.
      * Stores the time in SharedPreferences for boot rescheduling.
+     * Validates that the trigger time is in the future.
      */
     fun scheduleAlarm(context: Context, triggerTimeMillis: Long) {
+        val now = System.currentTimeMillis()
+
+        // Reject past times — AlarmManager would fire immediately
+        if (triggerTimeMillis <= now) {
+            throw IllegalArgumentException(
+                "Alarm trigger time must be in the future. " +
+                "Given: $triggerTimeMillis, now: $now"
+            )
+        }
+
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val intent = Intent(context, AlarmReceiver::class.java)
         val pendingIntent = PendingIntent.getBroadcast(

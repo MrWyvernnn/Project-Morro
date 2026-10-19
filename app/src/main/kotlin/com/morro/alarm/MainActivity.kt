@@ -59,6 +59,7 @@ class MainActivity : ComponentActivity() {
 
     /**
      * Request POST_NOTIFICATIONS permission (required on API 33+)
+     * Only launches the permission dialog if not already granted.
      */
     private fun requestNotificationPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -74,7 +75,7 @@ class MainActivity : ComponentActivity() {
 
     /**
      * Request exact alarm permission.
-     * On API 31+, this requires user to grant permission via system settings.
+     * On API 31+, only redirects to settings if permission is not already granted.
      */
     private fun requestExactAlarmPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
