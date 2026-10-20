@@ -9,6 +9,9 @@
     <!-- Notification permission (runtime on API 33+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Vibrate for alarm -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
     <!-- Full-screen intent permission for showing alarm over lock screen -->
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 
@@ -41,8 +44,9 @@
             android:name=".AlarmActivity"
             android:exported="false"
             android:showWhenLocked="true"
+            android:showForAllUsers="true"
             android:turnScreenOn="true"
-            android:launchMode="singleTop"
+            android:launchMode="singleTask"
             android:excludeFromRecents="true" />
 
         <!-- Alarm receiver -->

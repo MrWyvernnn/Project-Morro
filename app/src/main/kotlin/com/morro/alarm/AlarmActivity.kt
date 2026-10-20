@@ -8,25 +8,21 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
-/**
- * AlarmActivity: Full-screen activity that displays when alarm fires.
- * Shows over lock screen via manifest attributes (showWhenLocked, turnScreenOn).
- * Displays "ALARM FIRING" text and a dismiss button.
- * Stops alarm sound when dismissed.
- */
 class AlarmActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // For API < 27, set flags to show over lock screen and turn screen on
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O_MR1) {
             @Suppress("DEPRECATION")
             window.addFlags(
@@ -35,66 +31,106 @@ class AlarmActivity : ComponentActivity() {
                 WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
             )
         } else {
-            // API 27+ uses manifest attributes and setShowWhenLocked/setTurnScreenOn
             setShowWhenLocked(true)
             setTurnScreenOn(true)
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
 
         setContent {
-            AlarmScreen(
-                onDismiss = { dismissAlarm() }
-            )
+            MaterialTheme(
+                colorScheme = darkColorScheme(
+                    primary = Color(0xFFBB86FC),
+                    background = Color(0xFF121212),
+                    surface = Color(0xFF1E1E1E)
+                )
+            ) {
+                AlarmScreen(onDismiss = { dismissAlarm() })
+            }
         }
     }
 
-    /**
-     * Stop alarm sound and finish activity
-     */
     private fun dismissAlarm() {
         AlarmSoundPlayer.stop()
+        val nm = getSystemService(NOTIFICATION_SERVICE) as android.app.NotificationManager
+        nm.cancel(1001)
         finish()
     }
 
     override fun onBackPressed() {
-        // Prevent back button from dismissing alarm
-        // User must tap dismiss button
+        // Prevent back from dismissing; must tap Dismiss
     }
 }
 
 @Composable
 fun AlarmScreen(onDismiss: () -> Unit) {
+    val currentTime = remember {
+        mutableStateOf(SimpleDateFormat("h:mm:ss a", Locale.getDefault()).format(Date()))
+    }
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(500)
+            currentTime.value = SimpleDateFormat("h:mm:ss a", Locale.getDefault()).format(Date())
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Red),
+            .background(Color(0xFF121212)),
         contentAlignment = Alignment.Center
     ) {
         Column(
+            modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(32.dp)
+            verticalArrangement = Arrangement.Center
         ) {
+            // Glowing ring effect via layered circles
+            Box(
+                modifier = Modifier.size(240.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(220.dp)
+                        .background(Color(0x15BB86FC), shape = androidx.compose.foundation.shape.CircleShape)
+                )
+                Box(
+                    modifier = Modifier
+                        .size(180.dp)
+                        .background(Color(0x30BB86FC), shape = androidx.compose.foundation.shape.CircleShape)
+                )
+                Box(
+                    modifier = Modifier
+                        .size(120.dp)
+                        .background(Color(0x50BB86FC), shape = androidx.compose.foundation.shape.CircleShape)
+                )
+                Text(
+                    text = currentTime.value,
+                    style = MaterialTheme.typography.displayLarge,
+                    color = Color(0xFFBB86FC),
+                    fontSize = 56.sp
+                )
+            }
+
+            Spacer(modifier = Modifier.height(48.dp))
             Text(
-                text = "ALARM FIRING",
-                fontSize = 48.sp,
-                color = Color.White,
-                style = MaterialTheme.typography.displayLarge
+                text = "ALARM",
+                style = MaterialTheme.typography.displayMedium,
+                color = Color.White
             )
+            Spacer(modifier = Modifier.height(32.dp))
 
             Button(
                 onClick = onDismiss,
                 modifier = Modifier
-                    .width(200.dp)
-                    .height(64.dp),
+                    .width(240.dp)
+                    .height(72.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color.White,
-                    contentColor = Color.Red
+                    containerColor = Color(0xFFBB86FC),
+                    contentColor = Color.Black
                 )
             ) {
-                Text(
-                    text = "Dismiss",
-                    fontSize = 24.sp
-                )
+                Text("Dismiss", fontSize = 24.sp)
             }
         }
     }
