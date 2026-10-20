@@ -41,6 +41,11 @@ object AlarmScheduler {
         savePrefs(context, triggerTimeMillis)
     }
 
+    fun snoozeAlarm(context: Context, minutes: Int = 10) {
+        val triggerTime = System.currentTimeMillis() + minutes * 60_000L
+        scheduleAlarm(context, triggerTime)
+    }
+
     fun cancelAlarm(context: Context) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val intent = Intent(context, AlarmReceiver::class.java)

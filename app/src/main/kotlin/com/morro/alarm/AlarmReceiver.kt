@@ -11,7 +11,8 @@ import androidx.core.app.NotificationCompat
 
 class AlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        AlarmSoundPlayer.start(context)
+        // Only trigger notification + full-screen intent; do NOT start MediaPlayer here.
+        // Playback life-cycle is owned by AlarmActivity so sound stays alive with screen.
 
         val channelId = "morro_alarm_channel"
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager

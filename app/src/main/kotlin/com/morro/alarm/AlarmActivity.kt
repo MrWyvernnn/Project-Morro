@@ -36,33 +36,60 @@ class AlarmActivity : ComponentActivity() {
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
 
+        AlarmSoundPlayer.start(this)
+
         setContent {
             MaterialTheme(
                 colorScheme = darkColorScheme(
-                    primary = Color(0xFFBB86FC),
-                    background = Color(0xFF121212),
-                    surface = Color(0xFF1E1E1E)
+                    primary = Color(0xFFFF8C00),
+                    background = Color(0xFF000000),
+                    surface = Color(0xFF1A1200),
+                    onPrimary = Color.Black,
+                    onBackground = Color(0xFFFFE0B2),
+                    onSurface = Color(0xFFFFCC80)
                 )
             ) {
-                AlarmScreen(onDismiss = { dismissAlarm() })
+                AlarmScreen(
+                    onDismiss = { dismissAlarm() },
+                    onSnooze = { snoozeAlarm() }
+                )
             }
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        AlarmSoundPlayer.start(this)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        // Keep sound running if just briefly obscured; stop only on explicit dismiss/snooze
+    }
+
     private fun dismissAlarm() {
         AlarmSoundPlayer.stop()
+        AlarmScheduler.cancelAlarm(this)
+        val nm = getSystemService(NOTIFICATION_SERVICE) as android.app.NotificationManager
+        nm.cancel(1001)
+        finish()
+    }
+
+    private fun snoozeAlarm() {
+        AlarmSoundPlayer.stop()
+        AlarmScheduler.snoozeAlarm(this, 10)
         val nm = getSystemService(NOTIFICATION_SERVICE) as android.app.NotificationManager
         nm.cancel(1001)
         finish()
     }
 
     override fun onBackPressed() {
-        // Prevent back from dismissing; must tap Dismiss
+        // Must use Dismiss or Snooze buttons; back does nothing
     }
 }
 
 @Composable
-fun AlarmScreen(onDismiss: () -> Unit) {
+fun AlarmScreen(onDismiss: () -> Unit, onSnooze: () -> Unit) {
     val currentTime = remember {
         mutableStateOf(SimpleDateFormat("h:mm:ss a", Locale.getDefault()).format(Date()))
     }
@@ -76,7 +103,7 @@ fun AlarmScreen(onDismiss: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF121212)),
+            .background(Color(0xFF000000)),
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -84,7 +111,7 @@ fun AlarmScreen(onDismiss: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // Glowing ring effect via layered circles
+            // Glowing amber ring
             Box(
                 modifier = Modifier.size(240.dp),
                 contentAlignment = Alignment.Center
@@ -92,22 +119,22 @@ fun AlarmScreen(onDismiss: () -> Unit) {
                 Box(
                     modifier = Modifier
                         .size(220.dp)
-                        .background(Color(0x15BB86FC), shape = androidx.compose.foundation.shape.CircleShape)
+                        .background(Color(0x15FF8C00), shape = androidx.compose.foundation.shape.CircleShape)
                 )
                 Box(
                     modifier = Modifier
                         .size(180.dp)
-                        .background(Color(0x30BB86FC), shape = androidx.compose.foundation.shape.CircleShape)
+                        .background(Color(0x30FF8C00), shape = androidx.compose.foundation.shape.CircleShape)
                 )
                 Box(
                     modifier = Modifier
                         .size(120.dp)
-                        .background(Color(0x50BB86FC), shape = androidx.compose.foundation.shape.CircleShape)
+                        .background(Color(0x50FF8C00), shape = androidx.compose.foundation.shape.CircleShape)
                 )
                 Text(
                     text = currentTime.value,
                     style = MaterialTheme.typography.displayLarge,
-                    color = Color(0xFFBB86FC),
+                    color = Color(0xFFFFE0B2),
                     fontSize = 56.sp
                 )
             }
@@ -116,21 +143,40 @@ fun AlarmScreen(onDismiss: () -> Unit) {
             Text(
                 text = "ALARM",
                 style = MaterialTheme.typography.displayMedium,
-                color = Color.White
+                color = Color(0xFFFFCC80)
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Promise what you're doing today.",
+                style = MaterialTheme.typography.bodyLarge,
+                color = Color(0xFFFFB74D)
             )
             Spacer(modifier = Modifier.height(32.dp))
 
-            Button(
-                onClick = onDismiss,
-                modifier = Modifier
-                    .width(240.dp)
-                    .height(72.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFFBB86FC),
-                    contentColor = Color.Black
-                )
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally)
             ) {
-                Text("Dismiss", fontSize = 24.sp)
+                Button(
+                    onClick = onSnooze,
+                    modifier = Modifier.weight(1f).height(72.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFFF8C00),
+                        contentColor = Color.Black
+                    )
+                ) {
+                    Text("Snooze (10m)", fontSize = 20.sp)
+                }
+                Button(
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f).height(72.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFC62828),
+                        contentColor = Color.White
+                    )
+                ) {
+                    Text("Dismiss", fontSize = 20.sp)
+                }
             }
         }
     }

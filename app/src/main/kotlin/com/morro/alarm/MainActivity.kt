@@ -29,25 +29,28 @@ class MainActivity : ComponentActivity() {
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
-        if (!isGranted) Toast.makeText(this, "Notifications disabled", Toast.LENGTH_SHORT).show()
+        if (!isGranted) Toast.makeText(this, "Notifications disabled — alarm may not show", Toast.LENGTH_LONG).show()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         requestNotificationPermission()
         requestExactAlarmPermission()
 
         setContent {
             MaterialTheme(
                 colorScheme = darkColorScheme(
-                    primary = Color(0xFFBB86FC),
-                    background = Color(0xFF121212),
-                    surface = Color(0xFF1E1E1E),
-                    onBackground = Color.White
+                    primary = Color(0xFFFF8C00),
+                    secondary = Color(0xFFFFA726),
+                    background = Color(0xFF000000),
+                    surface = Color(0xFF1A1200),
+                    onPrimary = Color.Black,
+                    onSecondary = Color.Black,
+                    onBackground = Color(0xFFFFE0B2),
+                    onSurface = Color(0xFFFFCC80)
                 )
             ) {
-                Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFF121212)) {
+                Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFF000000)) {
                     MainScreen(
                         context = this,
                         onScheduleAlarm = { timeMillis -> scheduleAlarm(timeMillis) },
@@ -82,7 +85,7 @@ class MainActivity : ComponentActivity() {
 
     private fun scheduleAlarm(timeMillis: Long) {
         AlarmScheduler.scheduleAlarm(this, timeMillis)
-        Toast.makeText(this, "Alarm set", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "Alarm set for ${AlarmScheduler.getFormattedTime(this)}", Toast.LENGTH_SHORT).show()
     }
 
     private fun scheduleTestAlarm() {
@@ -108,7 +111,6 @@ fun MainScreen(
         val fmt = java.text.SimpleDateFormat("h:mm a", java.util.Locale.getDefault())
         mutableStateOf(fmt.format(java.util.Date()))
     }
-
     LaunchedEffect(Unit) {
         while (true) {
             kotlinx.coroutines.delay(1000)
@@ -121,6 +123,22 @@ fun MainScreen(
     val alarmFormatted = AlarmScheduler.getFormattedTime(context)
     val hasActiveAlarm = alarmTime != null && alarmTime > System.currentTimeMillis()
 
+    // Countdown to next alarm
+    val countdownStr = remember(alarmTime) {
+        if (hasActiveAlarm && alarmTime != null) {
+            val diffMillis = maxOf(0, alarmTime - System.currentTimeMillis())
+            val hours = diffMillis / (1000 * 60 * 60)
+            val minutes = (diffMillis / (1000 * 60)) % 60
+            if (hours > 0) "Rings in $hours hours $minutes mins" else "Rings in $minutes mins"
+        } else {
+            "No alarm set"
+        }
+    }
+
+    var vibrateEnabled by remember { mutableStateOf(true) }
+    var snoozeMinutes by remember { mutableStateOf(10) }
+    val snoozeOptions = listOf(5 to "5m", 10 to "10m", 15 to "15m")
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -128,27 +146,79 @@ fun MainScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
-        // Hero status card
+        // Hero Clock + Next Alarm Card
         Card(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E))
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1200)),
+            shape = MaterialTheme.shapes.large
         ) {
             Column(
                 modifier = Modifier.padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = if (hasActiveAlarm) "Alarm Active" else "No Active Alarm",
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = if (hasActiveAlarm) Color(0xFFBB86FC) else Color.Gray
+                    text = currentTimeStr.value,
+                    style = MaterialTheme.typography.displayLarge,
+                    color = Color(0xFFFFE0B2),
+                    fontSize = 64.sp
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = if (hasActiveAlarm) "Set for $alarmFormatted" else "Select a time below",
+                    text = if (hasActiveAlarm) "Next alarm at $alarmFormatted" else "No alarm scheduled",
                     style = MaterialTheme.typography.bodyLarge,
-                    color = Color.LightGray
+                    color = Color(0xFFFFB74D)
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = countdownStr,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color(0xFFFFA726)
+                )
+            }
+        }
+
+        // Vibrate Toggle
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Start,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Switch(
+                checked = vibrateEnabled,
+                onCheckedChange = { vibrateEnabled = it },
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = Color(0xFFFF8C00),
+                    checkedTrackColor = Color(0xFFFFA726),
+                    uncheckedThumbColor = Color.Gray,
+                    uncheckedTrackColor = Color.DarkGray
+                )
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Text(
+                text = if (vibrateEnabled) "Vibrate on alarm: ON" else "Vibrate on alarm: OFF",
+                color = Color(0xFFFFCC80),
+                fontSize = 16.sp
+            )
+        }
+
+        // Snooze settings selector
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Snooze:", color = Color(0xFFFFCC80), fontSize = 16.sp)
+            snoozeOptions.forEach { (mins, label) ->
+                FilterChip(
+                    selected = snoozeMinutes == mins,
+                    onClick = { snoozeMinutes = mins },
+                    label = { Text(label, color = if (snoozeMinutes == mins) Color.Black else Color(0xFFFFCC80)) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Color(0xFFFF8C00),
+                        containerColor = Color(0xFF1A1200)
+                    )
                 )
             }
         }
@@ -180,17 +250,17 @@ fun MainScreen(
                         },
                         selectedHour,
                         selectedMinute,
-                        false // 24-hour format false
+                        false
                     ).show()
                 },
                 modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFBB86FC))
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF8C00), contentColor = Color.Black)
             ) { Text("Set Alarm") }
 
             Button(
                 onClick = { onTestAlarm() },
                 modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF03DAC5))
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828), contentColor = Color.White)
             ) { Text("Test +1 Min") }
         }
 
@@ -198,16 +268,8 @@ fun MainScreen(
             Button(
                 onClick = { onCancel() },
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFCF6679))
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828), contentColor = Color.White)
             ) { Text("Cancel Alarm") }
         }
-
-        Spacer(modifier = Modifier.height(32.dp))
-        Text(
-            text = currentTimeStr.value,
-            style = MaterialTheme.typography.displayLarge,
-            color = Color(0x55BB86FC),
-            fontSize = 64.sp
-        )
     }
 }
