@@ -88,7 +88,7 @@ object AlarmSoundPlayer {
 
     private fun requestAudioFocus(context: Context) {
         val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+        val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
             .setAudioAttributes(alarmAudioAttributes)
             .setAcceptsDelayedFocusGain(false)
             .setOnAudioFocusChangeListener { /* alarm keeps playing regardless */ }

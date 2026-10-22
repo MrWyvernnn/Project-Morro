@@ -6,6 +6,9 @@
         android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
 
+    <!-- Record the user's own voice memo (runtime permission) -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
     <!-- Notification permission (runtime on API 33+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
