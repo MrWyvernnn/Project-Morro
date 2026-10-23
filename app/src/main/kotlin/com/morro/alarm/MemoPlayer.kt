@@ -69,7 +69,7 @@ object MemoPlayer {
                 prepare()
                 start()
             }
-            Log.d(TAG, "Playing memo: $filePath")
+            Log.d(TAG, "Successfully playing memo: $filePath")
         } catch (e: Exception) {
             Log.e(TAG, "Could not start playback", e)
             releasePlayer()
