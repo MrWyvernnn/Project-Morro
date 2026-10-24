@@ -10,6 +10,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -31,7 +34,7 @@ import java.util.Locale
 class AlarmActivity : ComponentActivity() {
 
     /** Which gate the alarm is currently in. */
-    enum class AlarmGateState { PUZZLE, PLAYING_MEMO }
+    enum class AlarmGateState { PUZZLE, PLAYING_MEMO, RECORDING_TOMORROW }
 
     private var gateState by mutableStateOf(AlarmGateState.PUZZLE)
     private var problemsSolved by mutableStateOf(0)
@@ -39,6 +42,11 @@ class AlarmActivity : ComponentActivity() {
 
     private var currentQuestion by mutableStateOf<MathEngine.Question?>(null)
     private var userInput by mutableStateOf("")
+
+    // Recording gate state: isRecording, countdownSeconds, hasTemp
+    private var isRecording by mutableStateOf(false)
+    private var recordingCountdown by mutableStateOf(15)
+    private var hasTempMemo by mutableStateOf(false)
 
     private val TAG = "AlarmActivity"
 
@@ -85,7 +93,18 @@ class AlarmActivity : ComponentActivity() {
                     onAnswerChanged = { userInput = it },
                     onBackspace = { clearInput() },
                     onSubmit = { submitAnswer(it) },
-                    onSnooze = { snoozeAlarm() }
+                    onSnooze = { snoozeAlarm() },
+                    onRecordTomorrow = {
+                        RecordingGateUI(
+                            isRecording = isRecording,
+                            countdown = recordingCountdown,
+                            hasTempMemo = hasTempMemo,
+                            onStartRecording = { startRecordingTomorrow() },
+                            onStopRecording = { stopRecordingTomorrow(true) },
+                            onCancelRecording = { stopRecordingTomorrow(false) },
+                            onPlayMemo = { playMemo() }
+                        )
+                    }
                 )
             }
         }
@@ -128,7 +147,7 @@ class AlarmActivity : ComponentActivity() {
         MemoPlayer.startPlayback(
             context = this,
             filePath = memoPath,
-            onCompletion = { finishAlarm() },
+            onCompletion = { promptForTomorrowMemo() },
             onError = { err ->
                 Log.w(TAG, "Memo playback failed: $err; ending alarm", null)
                 finishAlarm()
@@ -140,6 +159,91 @@ class AlarmActivity : ComponentActivity() {
     private fun finishAlarm() {
         cancelAlarm()
         finishAndRemoveTask()
+    }
+
+    /** Prompt the user to record tomorrow's one-line commitment (~15s). */
+    private fun promptForTomorrowMemo() {
+        gateState = AlarmGateState.RECORDING_TOMORROW
+    }
+
+    /** End the recording-of-tomorrow memo and finish the alarm. */
+    private fun completeTomorrowMemo(success: Boolean) {
+        if (success) {
+            // Memo was saved; next morning the fallback will replay it.
+            finishAlarm()
+        } else {
+            // No recording; next morning the fallback will replay the most recent clip.
+            finishAlarm()
+        }
+    }
+
+    /** Starts recording tomorrow's memo with countdown */
+    private fun startRecordingTomorrow() {
+        isRecording = true
+        recordingCountdown = 15
+        MemoRecorder.startRecording(
+            this,
+            onError = { err ->
+                Log.w(TAG, "Recording failed: $err")
+                isRecording = false
+            },
+            onMaxDurationReached = {
+                Log.d(TAG, "Recording auto-stopped at 15s")
+                isRecording = false
+                hasTempMemo = true
+            }
+        )
+        // Countdown timer. Each tick re-reads isRecording so early-stop exits cleanly.
+        lifecycleScope.launch {
+            while (isRecording && recordingCountdown > 0) {
+                delay(1000)
+                if (!isRecording) break // user stopped early — exit without calling stop again
+                recordingCountdown--
+            }
+            // Auto-stop: if still recording when countdown hits 0, save automatically.
+            if (isRecording) {
+                stopRecordingTomorrow(true)
+            }
+        }
+    }
+
+    /** Stops recording tomorrow's memo.
+     *  @param save  if true, promotes the temp clip to latest_memo.m4a via MemoStorage.
+     *               if false, cancels and discards the temp clip (latest_memo.m4a stays intact).
+     *  @param skip  if true, the user explicitly chose to skip recording (no UI change needed).
+     */
+    private fun stopRecordingTomorrow(save: Boolean, skip: Boolean = false) {
+        isRecording = false
+        if (save) {
+            // Stop the recorder first, then promote to latest_memo.m4a.
+            val recorded = MemoRecorder.stopRecording(this)
+            if (recorded) {
+                hasTempMemo = true
+                // *** This is the missing call — the new recording must replace latest_memo.m4a ***
+                val promoted = MemoStorage.saveMemo(this)
+                Log.d(TAG, "Memo promoted to latest: $promoted")
+                completeTomorrowMemo(promoted)
+            } else {
+                hasTempMemo = false
+                completeTomorrowMemo(false)
+            }
+        } else {
+            // Skip or cancel: discard the temp clip; latest_memo.m4a is untouched.
+            MemoRecorder.cancelRecording(this)
+            hasTempMemo = false
+            completeTomorrowMemo(false)
+        }
+    }
+
+    /** Plays back the recorded memo */
+    private fun playMemo() {
+        val path = MemoStorage.getTempPath(this)
+        MemoPlayer.startPlayback(
+            this,
+            path,
+            onCompletion = { Log.d(TAG, "Memo playback completed") },
+            onError = { err -> Log.w(TAG, "Memo playback failed: $err") }
+        )
     }
 
     override fun onResume() {
@@ -170,7 +274,8 @@ class AlarmActivity : ComponentActivity() {
         nm.cancel(1001)
     }
 
-    @Suppress("MissingSuperCall")
+    @Deprecated("Deprecated in Java")
+    @Suppress("DEPRECATION", "MissingSuperCall")
     override fun onBackPressed() {
         // Must solve the puzzle; back does nothing (no bypass of the gate).
         // Calling super would dismiss the alarm, so we intentionally don't.
@@ -194,7 +299,8 @@ class AlarmActivity : ComponentActivity() {
         onAnswerChanged: (String) -> Unit,
         onBackspace: () -> Unit,
         onSubmit: (String) -> Unit,
-        onSnooze: () -> Unit
+        onSnooze: () -> Unit,
+        onRecordTomorrow: @Composable () -> Unit
     ) {
         val currentTime = remember {
             mutableStateOf(SimpleDateFormat("h:mm:ss a", Locale.getDefault()).format(Date()))
@@ -298,6 +404,29 @@ class AlarmActivity : ComponentActivity() {
                             color = Color(0xFFFFB74D)
                         )
                     }
+                    AlarmGateState.RECORDING_TOMORROW -> {
+                        Spacer(modifier = Modifier.height(48.dp))
+                        Text(
+                            text = "Record tomorrow's commitment",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = Color(0xFFFF9E1B)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "What is the ONE thing you will do today?",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = Color(0xFFFFCC80)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Speak it out loud. Max 15 seconds.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color(0xFFFFB74D)
+                        )
+                        Spacer(modifier = Modifier.height(32.dp))
+                        // Recording controls injected from outside (AlarmActivity owns MemoRecorder)
+                        onRecordTomorrow()
+                    }
                 }
             }
         }
@@ -327,13 +456,6 @@ class AlarmActivity : ComponentActivity() {
     }
 
     @Composable
-    private fun key(digit: Int, content: @Composable () -> Unit) {
-        // Used to stabilize digit-button recompositions. Provides a stable key for Row elements,
-        // avoiding repeated recomposition of the entire number pad when a digit is pressed.
-        key(digit) { content() }
-    }
-
-    @Composable
     private fun digitButton(digit: Int, onClick: () -> Unit) {
         Button(
             onClick = onClick,
@@ -344,6 +466,97 @@ class AlarmActivity : ComponentActivity() {
             )
         ) {
             Text(text = digit.toString(), fontSize = 24.sp)
+        }
+    }
+
+    /**
+     * RecordingGateUI: controls for capturing tomorrow's commitment.
+     *
+     * Flow:
+     *   Idle → [Start Recording] → Recording (countdown 15→0, auto-stop at 0)
+     *                        → [Stop & Save] → saved to latest_memo.m4a
+     *                        → [Cancel] → discards clip, latest_memo.m4a stays intact
+     *   Idle → [Skip] → ends alarm; latest_memo.m4a is the fallback tomorrow
+     *
+     * No preview before save: per CLAUDE.md, the user speaks it, commits it, done.
+     */
+    @Composable
+    private fun RecordingGateUI(
+        isRecording: Boolean,
+        countdown: Int,
+        hasTempMemo: Boolean,
+        onStartRecording: () -> Unit,
+        onStopRecording: () -> Unit,
+        onCancelRecording: () -> Unit,
+        onPlayMemo: () -> Unit
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            if (isRecording) {
+                Text(
+                    text = "Recording: $countdown",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = Color(0xFFFF9E1B)
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Button(
+                    onClick = onStopRecording,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF4CAF50),
+                        contentColor = Color.Black
+                    )
+                ) {
+                    Text("Stop & Save", fontSize = 18.sp)
+                }
+                Button(
+                    onClick = onCancelRecording,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFB71C1C),
+                        contentColor = Color.White
+                    )
+                ) {
+                    Text("Cancel", fontSize = 18.sp)
+                }
+            } else if (hasTempMemo) {
+                // User stopped early; save it.
+                Text(
+                    text = "Recording complete",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = Color(0xFFFFCC80)
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Button(
+                    onClick = onPlayMemo,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFFF9E1B),
+                        contentColor = Color.Black
+                    )
+                ) {
+                    Text("Preview", fontSize = 18.sp)
+                }
+            } else {
+                // Idle: prompt to record, or skip if they don't want to.
+                Button(
+                    onClick = onStartRecording,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFFF9E1B),
+                        contentColor = Color.Black
+                    )
+                ) {
+                    Text("Start Recording", fontSize = 18.sp)
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                // Skip: discards nothing, latest_memo.m4a stays as the fallback.
+                TextButton(onClick = onCancelRecording) {
+                    Text(
+                        text = "Skip — use last recording",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFF9E9E9E)
+                    )
+                }
+            }
         }
     }
 }

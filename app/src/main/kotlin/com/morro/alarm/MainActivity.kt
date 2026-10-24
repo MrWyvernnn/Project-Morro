@@ -49,6 +49,16 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Gate: if onboarding hasn't been completed, redirect before anything else.
+        if (!OnboardingActivity.isOnboardingComplete(this)) {
+            startActivity(Intent(this, OnboardingActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            })
+            finish()
+            return
+        }
+
         requestNotificationPermission()
         requestExactAlarmPermission()
 

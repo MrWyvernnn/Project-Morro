@@ -15,6 +15,8 @@ import java.io.File
  *
  * Playback is deliberately linear: there is no seek and no skip. The clip runs
  * to the end and then reports completion, which is what the alarm gate needs.
+ *
+ * Uses prepareAsync() with OnPreparedListener for robust startup on all devices.
  */
 object MemoPlayer {
 
@@ -30,6 +32,8 @@ object MemoPlayer {
             .build()
 
     private var mediaPlayer: MediaPlayer? = null
+    private var pendingCompletion: (() -> Unit)? = null
+    private var pendingError: ((String) -> Unit)? = null
 
     /**
      * Plays the clip at [filePath] to the end.
@@ -51,25 +55,33 @@ object MemoPlayer {
             return
         }
 
+        pendingCompletion = onCompletion
+        pendingError = onError
+
         try {
             mediaPlayer = MediaPlayer().apply {
                 setAudioAttributes(audioAttributes)
                 setDataSource(file.absolutePath)
                 setOnCompletionListener {
                     Log.d(TAG, "Playback completed")
+                    val completion = pendingCompletion
                     releasePlayer()
-                    onCompletion()
+                    completion?.invoke()
                 }
                 setOnErrorListener { _, what, extra ->
                     Log.w(TAG, "MediaPlayer error what=$what extra=$extra")
+                    val error = pendingError
                     releasePlayer()
-                    onError("Playback failed (code $what)")
+                    error?.invoke("Playback failed (code $what)")
                     true
                 }
-                prepare()
-                start()
+                setOnPreparedListener {
+                    Log.d(TAG, "MediaPlayer prepared, starting playback")
+                    start()
+                }
+                prepareAsync()
             }
-            Log.d(TAG, "Successfully playing memo: $filePath")
+            Log.d(TAG, "Prepared async for memo: $filePath")
         } catch (e: Exception) {
             Log.e(TAG, "Could not start playback", e)
             releasePlayer()
@@ -79,6 +91,8 @@ object MemoPlayer {
 
     /** Stops playback and releases the player. Safe to call repeatedly. */
     fun stopPlayback() {
+        pendingCompletion = null
+        pendingError = null
         try {
             mediaPlayer?.apply {
                 if (isPlaying) stop()
