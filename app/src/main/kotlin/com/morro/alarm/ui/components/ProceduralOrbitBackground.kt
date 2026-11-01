@@ -70,7 +70,7 @@ private fun DrawScope.drawOrbitalRings(
     rotationDegrees: Float,
     alpha: Float
 ) {
-    val orbitColor = Color(0xFF00F0FF).copy(alpha = alpha * 0.5f)
+    val orbitColor = Color.White.copy(alpha = alpha * 0.05f) // Subtle warm white orbits
 
     // Ring 1: Large outer ring
     drawOrbit(
@@ -86,7 +86,7 @@ private fun DrawScope.drawOrbitalRings(
         centerX = centerX,
         centerY = centerY,
         radiusDp = 80.dp.toPx(),
-        strokeColor = orbitColor.copy(alpha = alpha * 0.7f),
+        strokeColor = orbitColor.copy(alpha = alpha * 0.07f),
         rotation = -rotationDegrees * 0.7f
     )
 
@@ -95,16 +95,12 @@ private fun DrawScope.drawOrbitalRings(
         centerX = centerX,
         centerY = centerY,
         radiusDp = 40.dp.toPx(),
-        strokeColor = orbitColor.copy(alpha = alpha),
+        strokeColor = orbitColor.copy(alpha = alpha * 0.10f),
         rotation = rotationDegrees * 1.2f
     )
 
-    // Deep void core: subtle pulsing circle at center
-    drawCircle(
-        color = Color(0xFF00F0FF).copy(alpha = alpha * 0.3f),
-        radius = 6.dp.toPx(),
-        center = Offset(centerX, centerY)
-    )
+    // Deep void core: subtle pulsing circle at center (no glow)
+    // Removed to keep it minimal
 }
 
 private fun DrawScope.drawOrbit(

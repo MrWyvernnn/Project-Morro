@@ -15,11 +15,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
 /**
- * MorroGhostMascot — Minimalist spectral mascot with floating animation.
+ * MorroGhostMascot — Adorable charcoal-black blob mascot with bouncing animation.
  *
  * Features:
- * - Soft rounded spectral silhouette (modern ghost shape)
- * - Off-white body (#F5F5F7) with glowing cyan eyes (#00F0FF)
+ * - Charcoal-black body (#1A1A1A) with glowing warm honey-amber eyes (#FFA726)
  * - Gentle floating micro-animation (breathing 6.dp up/down)
  * - Pure Canvas drawing, no external assets
  * - 80dp × 100dp default size
@@ -66,7 +65,7 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawGhostBody(
     width: Float,
     height: Float
 ) {
-    val ghostColor = Color(0xFFF5F5F7)
+    val ghostColor = Color(0xFF1A1A1A) // Charcoal black blob
     val bodyRadiusX = width * 0.35f
     val bodyRadiusY = height * 0.4f
 
@@ -107,7 +106,7 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawGhostEyes(
     centerX: Float,
     centerY: Float
 ) {
-    val eyeColor = Color(0xFF00F0FF)
+    val eyeColor = Color(0xFFFFA726) // Warm honey-amber glow
     val eyeRadius = 4.dp.toPx()
     val eyeGlowRadius = eyeRadius * 1.5f
     val eyeSpacing = 16.dp.toPx()
