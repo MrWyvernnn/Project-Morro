@@ -11,21 +11,26 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 
 /**
- * MorroGhostMascot — Adorable charcoal-black blob mascot with bouncing animation.
+ * MorroGhostMascot — Adorable charcoal-black blob with variant eye states.
  *
- * Features:
- * - Charcoal-black body (#1A1A1A) with glowing warm honey-amber eyes (#FFA726)
- * - Gentle floating micro-animation (breathing 6.dp up/down)
- * - Pure Canvas drawing, no external assets
- * - 80dp × 100dp default size
+ * Variants:
+ * - `happy = false` (default): neutral open eyes for Pain Hook
+ * - `happy = true`: upward-curving happy eyes ^^ for the Placebo Loader
+ *
+ * Eye color: warm honey amber MorroTokens.AccentPrimary (#FFD54F).
  */
 @Composable
 fun MorroGhostMascot(
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    happy: Boolean = false
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "ghostFloating")
 
@@ -40,109 +45,89 @@ fun MorroGhostMascot(
         label = "ghostFloat"
     )
 
-    Box(
-        modifier = modifier
-            .size(80.dp, 100.dp)
-    ) {
+    // Happy variant: gentle bounce up (more cheerful)
+    val happyOffset by infiniteTransition.animateFloat(
+        initialValue = if (happy) 0f else -6f,
+        targetValue = if (happy) -8f else 6f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = if (happy) 1800 else 3000),
+            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+        ),
+        label = "ghostBounce"
+    )
+
+    Box(modifier = modifier.size(80.dp, 100.dp)) {
         Canvas(modifier = Modifier.matchParentSize()) {
             val width = size.width
             val height = size.height
             val centerX = width / 2f
-            val centerY = height / 2f + floatOffset
+            val centerY = height / 2f + (if (happy) happyOffset else floatOffset)
 
-            // Ghost body: soft rounded shape
             drawGhostBody(centerX, centerY, width, height)
 
-            // Glowing cyan eyes
-            drawGhostEyes(centerX, centerY)
+            if (happy) {
+                drawHappyEyes(centerX, centerY)
+            } else {
+                drawGhostEyes(centerX, centerY)
+            }
         }
     }
 }
 
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawGhostBody(
+private fun DrawScope.drawGhostBody(
     centerX: Float,
     centerY: Float,
     width: Float,
     height: Float
 ) {
-    val ghostColor = Color(0xFF1A1A1A) // Charcoal black blob
-    val bodyRadiusX = width * 0.35f
-    val bodyRadiusY = height * 0.4f
-
-    // Main rounded ghost head (soft oval)
-    drawOval(
-        color = ghostColor,
-        topLeft = Offset(centerX - bodyRadiusX, centerY - bodyRadiusY * 0.8f),
-        size = androidx.compose.ui.geometry.Size(bodyRadiusX * 2, bodyRadiusY * 1.6f)
-    )
-
-    // Wave tail: three subtle rounded bumps at the bottom
-    val tailY = centerY + bodyRadiusY * 0.7f
-    val tailWidth = bodyRadiusX * 0.5f
-
-    // Left tail bump
-    drawOval(
-        color = ghostColor,
-        topLeft = Offset(centerX - bodyRadiusX - tailWidth * 0.3f, tailY),
-        size = androidx.compose.ui.geometry.Size(tailWidth, tailWidth * 1.2f)
-    )
-
-    // Center tail bump
-    drawOval(
-        color = ghostColor,
-        topLeft = Offset(centerX - tailWidth * 0.5f, tailY),
-        size = androidx.compose.ui.geometry.Size(tailWidth, tailWidth * 1.2f)
-    )
-
-    // Right tail bump
-    drawOval(
-        color = ghostColor,
-        topLeft = Offset(centerX + bodyRadiusX - tailWidth * 0.7f, tailY),
-        size = androidx.compose.ui.geometry.Size(tailWidth, tailWidth * 1.2f)
-    )
+    // Ghost body intentionally removed. Only floating eyes remain. Zero boxes.
 }
 
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawGhostEyes(
-    centerX: Float,
-    centerY: Float
-) {
-    val eyeColor = Color(0xFFFFA726) // Warm honey-amber glow
+/** Neutral eyes — open dots for Pain Hook and Contract screens. */
+private fun DrawScope.drawGhostEyes(centerX: Float, centerY: Float) {
+    val eyeColor = Color(0xFFFFD54F)
     val eyeRadius = 4.dp.toPx()
     val eyeGlowRadius = eyeRadius * 1.5f
     val eyeSpacing = 16.dp.toPx()
 
-    // Left eye
     val leftEyeX = centerX - eyeSpacing / 2
     val eyeY = centerY - 8.dp.toPx()
-
-    // Glow effect: larger, more transparent circle
-    drawCircle(
-        color = eyeColor.copy(alpha = 0.3f),
-        radius = eyeGlowRadius,
-        center = Offset(leftEyeX, eyeY)
-    )
-
-    // Crisp eye pupil
-    drawCircle(
-        color = eyeColor,
-        radius = eyeRadius,
-        center = Offset(leftEyeX, eyeY)
-    )
-
-    // Right eye
     val rightEyeX = centerX + eyeSpacing / 2
 
-    // Glow effect
-    drawCircle(
-        color = eyeColor.copy(alpha = 0.3f),
-        radius = eyeGlowRadius,
-        center = Offset(rightEyeX, eyeY)
-    )
+    // Glow + crisp dot for each eye
+    listOf(leftEyeX, rightEyeX).forEach { x ->
+        drawCircle(color = eyeColor.copy(alpha = 0.3f), radius = eyeGlowRadius, center = Offset(x, eyeY))
+        drawCircle(color = eyeColor, radius = eyeRadius, center = Offset(x, eyeY))
+    }
+}
 
-    // Crisp eye pupil
-    drawCircle(
-        color = eyeColor,
-        radius = eyeRadius,
-        center = Offset(rightEyeX, eyeY)
-    )
+/** Happy eyes — upward curved arcs like ^^ for the Placebo Loader. */
+private fun DrawScope.drawHappyEyes(centerX: Float, centerY: Float) {
+    val eyeColor = Color(0xFFFFD54F)
+    val eyeSpacing = 16.dp.toPx()
+    val eyeY = centerY - 8.dp.toPx()
+    val arcWidth = 12.dp.toPx()
+    val arcHeight = 6.dp.toPx()
+
+    val leftEyeX = centerX - eyeSpacing / 2
+    val rightEyeX = centerX + eyeSpacing / 2
+
+    listOf(leftEyeX, rightEyeX).forEach { cx ->
+        // Glow
+        drawCircle(
+            color = eyeColor.copy(alpha = 0.15f),
+            radius = arcWidth * 0.8f,
+            center = Offset(cx, eyeY)
+        )
+        // Happy arc ^^ shape using Path
+        val path = Path().apply {
+            moveTo(cx - arcWidth / 2, eyeY + arcHeight / 2)
+            quadraticTo(cx, eyeY - arcHeight / 2, cx + arcWidth / 2, eyeY + arcHeight / 2)
+        }
+        drawPath(
+            path = path,
+            color = eyeColor,
+            style = Stroke(width = 2.dp.toPx())
+        )
+    }
 }
