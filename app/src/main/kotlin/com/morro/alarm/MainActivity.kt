@@ -39,7 +39,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.morro.alarm.mission.MissionPrefs
 import com.morro.alarm.mission.MissionType
-import com.morro.alarm.ui.components.AlarmBuilderModal
+import com.morro.alarm.ui.components.AlarmBuilderSheet
 import com.morro.alarm.ui.components.MorroAnalogClock
 import com.morro.alarm.ui.components.MorroPrivacyPolicySheet
 import com.morro.alarm.ui.theme.MorroTheme
@@ -380,9 +380,9 @@ fun MainAlarmScreen(context: Context) {
         if (showAlarmBuilder) {
             val initialHour = savedAlarm?.first ?: 7
             val initialMinute = savedAlarm?.second ?: 0
-            AlarmBuilderModal(
-                initialHour = initialHour,
-                initialMinute = initialMinute,
+            AlarmBuilderSheet(
+                initialHour = savedAlarm?.first ?: 7,
+                initialMinute = savedAlarm?.second ?: 0,
                 onDismiss = { showAlarmBuilder = false },
                 onSaveAndArm = { hour, minute, _ ->
                     showAlarmBuilder = false

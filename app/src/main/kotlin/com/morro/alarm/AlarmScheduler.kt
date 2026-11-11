@@ -23,6 +23,14 @@ object AlarmScheduler {
     private const val PREFS_NAME = "morro_prefs"
     private const val KEY_NEXT_ALARM_TIME = "next_alarm_time"
     private const val KEY_NEXT_ALARM_FORMATTED = "next_alarm_formatted"
+
+    private val alarmPrefs: SharedPreferences
+        get() = try {
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not open alarm prefs", e)
+            throw e
+        }
     const val KEY_ALARM_HOUR = "alarm_hour"
     const val KEY_ALARM_MINUTE = "alarm_minute"
     private const val ALARM_REQUEST_CODE = 1001
@@ -30,7 +38,8 @@ object AlarmScheduler {
     /** The type of wake-up mission the user has selected */
     enum class MissionType {
         MATH,
-        AFFIRMATION
+        AFFIRMATION,
+        VOICE_COMMITMENT
     }
 
     const val KEY_MISSION_TYPE = "mission_type"
@@ -57,6 +66,14 @@ object AlarmScheduler {
      * Calculates the next occurrence (today if time is in future, else tomorrow).
      * Saves the hour and minute in SharedPreferences.
      */
+    private val alarmPrefs: SharedPreferences
+        get() = try {
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not open alarm prefs", e)
+            throw e
+        }
+
     fun scheduleDailyAlarm(context: Context, hour: Int, minute: Int): Boolean {
         val now = Calendar.getInstance()
         val targetCal = Calendar.getInstance().apply {
@@ -87,7 +104,7 @@ object AlarmScheduler {
      * Retrieves the saved daily alarm hour and minute, or null if not yet configured.
      */
     fun getSavedAlarmTime(context: Context): Pair<Int, Int>? {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val prefs = alarmPrefs
         if (!prefs.contains(KEY_ALARM_HOUR) || !prefs.contains(KEY_ALARM_MINUTE)) {
             return null
         }
@@ -184,6 +201,16 @@ object AlarmScheduler {
     }
 
     private fun savePrefs(context: Context, timeMillis: Long) {
+        try {
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .putLong(KEY_NEXT_ALARM_TIME, timeMillis)
+                .putString(KEY_NEXT_ALARM_FORMATTED, format)
+                .commit()
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to persist alarm prefs", e)
+        }
+    }
         val fmt = SimpleDateFormat("h:mm a", Locale.getDefault())
         val formatted = fmt.format(Date(timeMillis))
         // Synchronous commit: BootReceiver and RescheduleReceiver read this on reboot,
@@ -196,10 +223,14 @@ object AlarmScheduler {
     }
 
     private fun clearPrefs(context: Context) {
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit()
-            .remove(KEY_NEXT_ALARM_TIME)
-            .remove(KEY_NEXT_ALARM_FORMATTED)
-            .apply()
+        try {
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .remove(KEY_NEXT_ALARM_TIME)
+                .remove(KEY_NEXT_ALARM_FORMATTED)
+                .apply()
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to clear alarm prefs", e)
+        }
     }
 }
