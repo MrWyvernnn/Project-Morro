@@ -1,19 +1,19 @@
 package com.morro.alarm
 
 import android.content.Context
+import android.content.Intent
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,16 +21,34 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.morro.alarm.mission.MissionPrefs
+import com.morro.alarm.mission.MissionType
+import com.morro.alarm.ui.components.MorroAnalogClock
 import com.morro.alarm.ui.components.MorroGhostMascot
+import com.morro.alarm.ui.components.MorroPrimaryButton
+import com.morro.alarm.ui.components.MorroPrivacyPolicySheet
 import com.morro.alarm.ui.components.ProceduralOrbitBackground
+import com.morro.alarm.ui.theme.MorroShapes
 import com.morro.alarm.ui.theme.MorroTokens
+import com.morro.alarm.ui.theme.morroColors
+import com.morro.alarm.ui.theme.morroTypography
+import com.morro.alarm.ui.theme.morroShapes
 import kotlinx.coroutines.delay
+import java.util.Calendar
 import java.util.Locale
 
+/**
+ * OnboardingFlow — 4-step onboarding flow matching the exact screenshot structure.
+ * Step 1: Pain Hook (Ghost mascot)
+ * Step 2: Exact Timing (Permission explanation)
+ * Step 3: Battery Hardening
+ * Step 4: Mission Selection → Analog Clock Hub → Contract Sealed
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OnboardingScreen(
@@ -52,87 +70,89 @@ fun OnboardingFlow(
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("morro_prefs", Context.MODE_PRIVATE) }
 
+    // 4-step flow state
     var currentStep by remember { mutableIntStateOf(1) }
-    var selectedEnemy by remember { mutableStateOf(prefs.getString("onboarding_enemy", "Doomscrolling") ?: "Doomscrolling") }
-    var selectedProtection by remember { mutableStateOf(prefs.getString("onboarding_protection", "First task of the day") ?: "First task of the day") }
+
+    // Onboarding data
+    var selectedTarget by remember { mutableStateOf(prefs.getString("onboarding_target", "Deep Work") ?: "Deep Work") }
+    var selectedMissionType by remember { mutableStateOf(MissionPrefs.getMissionType(context)) }
+
     val savedAlarm = AlarmScheduler.getSavedAlarmTime(context) ?: Pair(6, 30)
     var wakeHour by remember { mutableIntStateOf(savedAlarm.first) }
     var wakeMinute by remember { mutableIntStateOf(savedAlarm.second) }
 
+    var showPrivacyPolicy by remember { mutableStateOf(false) }
+
+    if (showPrivacyPolicy) {
+        MorroPrivacyPolicySheet(onDismiss = { showPrivacyPolicy = false })
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MorroTokens.CanvasRoot)
+            .background(morroColors().canvas)
     ) {
-        // Subtle orbital background (behind all screens)
-        ProceduralOrbitBackground(
-            modifier = Modifier.fillMaxSize()
-        )
+        ProceduralOrbitBackground(modifier = Modifier.fillMaxSize())
 
-        // Onboarding content
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
                 .navigationBarsPadding()
         ) {
-            AnimatedContent(
-                targetState = currentStep,
-                transitionSpec = {
-                    fadeIn(animationSpec = tween(300)) togetherWith fadeOut(animationSpec = tween(300))
-                },
-                label = "OnboardingTransition"
-            ) { step ->
-                when (step) {
-                    1 -> Screen1PainHook(onNext = { currentStep = 2 }, onSkip = { currentStep = 5 })
-                    2 -> Screen2Questions(
-                        selectedEnemy = selectedEnemy,
-                        onEnemySelected = {
-                            selectedEnemy = it
-                            prefs.edit().putString("onboarding_enemy", it).apply()
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                // Content area with scrolling
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .weight(1f)
+                        .padding(horizontal = 24.dp, vertical = 16.dp)
+                        .verticalScroll(rememberScrollState()),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    AnimatedContent(
+                        targetState = currentStep,
+                        transitionSpec = {
+                            fadeIn(animationSpec = tween(300)) togetherWith fadeOut(animationSpec = tween(300))
                         },
-                        selectedProtection = selectedProtection,
-                        onProtectionSelected = {
-                            selectedProtection = it
-                            prefs.edit().putString("onboarding_protection", it).apply()
-                        },
-                        onNext = { currentStep = 3 }
-                    )
-                    3 -> Screen3Trust(onNext = { currentStep = 4 })
-                    4 -> Screen4Schedule(
-                        wakeHour = wakeHour,
-                        wakeMinute = wakeMinute,
-                        onTimeChanged = { h, m ->
-                            wakeHour = h
-                            wakeMinute = m
-                            AlarmScheduler.scheduleDailyAlarm(context, h, m)
-                        },
-                        onRequestPermissions = onRequestPermissions,
-                        onNext = { currentStep = 5 }
-                    )
-                    5 -> Screen5Summary(
-                        wakeHour = wakeHour,
-                        wakeMinute = wakeMinute,
-                        enemy = selectedEnemy,
-                        protection = selectedProtection,
-                        onStartTomorrow = {
-                            prefs.edit().putBoolean("has_onboarded", true).commit()
-                            onComplete()
+                        label = "OnboardingTransition"
+                    ) { step ->
+                        when (step) {
+                            1 -> ScreenPainHook(onNext = { currentStep = 2 })
+                            2 -> ScreenExactTiming(onNext = { currentStep = 3 })
+                            3 -> ScreenBatteryHardening(onNext = { currentStep = 4 })
+                            4 -> ScreenMissionAndClockHub(
+                                wakeHour = wakeHour,
+                                wakeMinute = wakeMinute,
+                                missionType = selectedMissionType,
+                                onAlarmConfigured = { h, m, mission ->
+                                    wakeHour = h
+                                    wakeMinute = m
+                                    selectedMissionType = mission
+                                    AlarmScheduler.scheduleDailyAlarm(context, h, m)
+                                    MissionPrefs.setMissionType(context, mission)
+                                },
+                                onRequestPermissions = onRequestPermissions,
+                                onOpenPrivacyPolicy = { showPrivacyPolicy = true },
+                                onNext = { currentStep = 5 }
+                            )
                         }
-                    )
+                    }
                 }
+
+                // Footer - always visible at bottom
+                OnboardingFooter()
             }
         }
     }
 }
 
-/**
- * Screen 1: Pain Hook + Bouncing Mascot
- *
- * Displays animated text frames with a bouncing charcoal ghost mascot.
- */
+/** Screen 1: Pain Hook — Bouncing ghost mascot on warm canvas. */
 @Composable
-fun Screen1PainHook(onNext: () -> Unit, onSkip: () -> Unit) {
+private fun ScreenPainHook(onNext: () -> Unit) {
     var frameIndex by remember { mutableIntStateOf(0) }
     val frames = listOf("3 hours of sleep.", "7 snoozes.", "Another morning gone.")
 
@@ -141,554 +161,774 @@ fun Screen1PainHook(onNext: () -> Unit, onSkip: () -> Unit) {
             delay(1800)
             frameIndex++
         } else {
-            delay(1800)
+            delay(800)
             onNext()
         }
     }
 
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(24.dp)
+            .padding(24.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(
             modifier = Modifier
-                .align(Alignment.TopEnd)
-                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onSkip() }
-                .padding(8.dp)
+                .size(130.dp)
+                .background(Color.Transparent),
+            contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = "SKIP",
-                style = MaterialTheme.typography.labelLarge,
-                color = MorroTokens.TextSecondary,
-                letterSpacing = 0.12.sp
+            MorroGhostMascot(
+                modifier = Modifier.size(80.dp, 100.dp),
+                happy = false
             )
         }
 
+        Spacer(modifier = Modifier.height(32.dp))
+
+        if (frameIndex < frames.size) {
+            Text(
+                text = frames[frameIndex],
+                style = morroTypography().headlineMedium,
+                color = morroColors().textPrimary,
+                textAlign = TextAlign.Center
+            )
+        } else {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "Not tomorrow.",
+                    style = morroTypography().headlineLarge.copy(color = morroColors().textPrimary),
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "Morro.",
+                    style = morroTypography().headlineLarge.copy(color = morroColors().accentTactical),
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+    }
+}
+
+/** Screen 2: Exact Timing — Permission explanation card with 4-step progress. */
+@Composable
+private fun ScreenExactTiming(onNext: () -> Unit) {
+    val colors = morroColors()
+    val typo = morroTypography()
+    val shapes = morroShapes()
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.SpaceBetween
+    ) {
+        // Header: MORRO + Subtitle
         Column(
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Bouncing ghost mascot
-            MorroGhostMascot(modifier = Modifier.size(80.dp, 100.dp))
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            if (frameIndex < frames.size) {
-                Text(
-                    text = frames[frameIndex],
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = MorroTokens.TextPrimary,
-                    textAlign = TextAlign.Center
-                )
-            } else {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Text(
-                        text = "Not tomorrow.",
-                        style = MaterialTheme.typography.headlineLarge.copy(color = MorroTokens.TextPrimary),
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = "Morro.",
-                        style = MaterialTheme.typography.headlineLarge.copy(color = MorroTokens.AccentPrimary),
-                        textAlign = TextAlign.Center
-                    )
-                }
-            }
-        }
-    }
-}
-
-/**
- * Screen 2: Simplified Selection Cards
- *
- * Two question substeps with clean flat card design.
- */
-@Composable
-fun Screen2Questions(
-    selectedEnemy: String,
-    onEnemySelected: (String) -> Unit,
-    selectedProtection: String,
-    onProtectionSelected: (String) -> Unit,
-    onNext: () -> Unit
-) {
-    var subStep by remember { mutableIntStateOf(1) }
-    val enemies = listOf("Doomscrolling", "Heavy Sleeper", "Hate Mornings", "Racing Thoughts", "Zero Intention")
-    val protections = listOf("First task of the day", "Deep work session", "Morning workout", "Quiet coffee")
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 24.dp, vertical = 16.dp)
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.SpaceBetween
-    ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Spacer(modifier = Modifier.height(20.dp))
-
             Text(
-                text = if (subStep == 1) "Biggest morning enemy?" else "First thing you're protecting tomorrow?",
-                style = MaterialTheme.typography.headlineLarge.copy(
-                    color = MorroTokens.TextPrimary,
-                    lineHeight = 36.sp
-                )
+                text = "MORRO",
+                style = typo.headlineLarge.copy(
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 2.sp
+                ),
+                color = colors.accentTactical
             )
-
-            Spacer(modifier = Modifier.height(28.dp))
-
-            val currentOptions = if (subStep == 1) enemies else protections
-            val currentSelected = if (subStep == 1) selectedEnemy else selectedProtection
-
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                currentOptions.forEach { option ->
-                    val isSelected = currentSelected == option
-                    SelectionCard(
-                        title = option,
-                        isSelected = isSelected,
-                        onSelect = {
-                            if (subStep == 1) onEnemySelected(option) else onProtectionSelected(option)
-                        }
-                    )
-                }
-            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Commitment-Driven Wake-Up",
+                style = typo.bodyMedium,
+                color = colors.textSecondary
+            )
         }
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Button(
-                onClick = {
-                    if (subStep == 1) subStep = 2 else onNext()
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
-                    .clip(MorroTokens.buttonShape),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MorroTokens.AccentPrimary,
-                    contentColor = Color.Black
-                )
-            ) {
-                Text(
-                    text = if (subStep == 1) "NEXT" else "CONTINUE",
-                    style = MaterialTheme.typography.headlineSmall.copy(
-                        letterSpacing = 1.sp,
-                        fontWeight = FontWeight.Bold
-                    ),
-                    color = Color.Black,
-                    textAlign = TextAlign.Center
-                )
-            }
-        }
-    }
-}
-
-/**
- * SelectionCard — clean, flat option card.
- */
-@Composable
-fun SelectionCard(
-    title: String,
-    isSelected: Boolean,
-    onSelect: () -> Unit
-) {
-    val backgroundColor = Color(0xFF0A0A0F)
-    val borderColor = if (isSelected) MorroTokens.AccentPrimary else Color.White.copy(alpha = 0.10f)
-    val borderWidth = if (isSelected) 1.5.dp else 1.dp
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(56.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(backgroundColor)
-            .border(borderWidth, borderColor, RoundedCornerShape(16.dp))
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onSelect() }
-            .padding(16.dp),
-        contentAlignment = Alignment.CenterStart
-    ) {
+        // Progress Bar: 4 distinct horizontal line segments
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(
-                text = title.uppercase(),
-                style = MaterialTheme.typography.headlineSmall.copy(
-                    color = MorroTokens.TextPrimary,
-                    fontWeight = FontWeight.Bold
-                )
-            )
-
-            if (isSelected) {
+            (1..4).forEach { i ->
+                val isActive = i <= 2 // Step 2 is active
+                val isCompleted = i < 2
                 Box(
                     modifier = Modifier
-                        .size(8.dp)
-                        .background(MorroTokens.AccentPrimary)
+                        .weight(1f)
+                        .height(4.dp)
+                        .background(
+                            if (isCompleted) colors.accentTactical
+                            else if (isActive) colors.accentTactical
+                            else colors.borderSubtle,
+                            RoundedCornerShape(2.dp)
+                        )
+                        .animateContentSize()
                 )
             }
-        }
-    }
-}
-
-/**
- * Screen 3: Trust Drop
- *
- * Clean trust messaging with ghost mascot and three trust cards.
- */
-@Composable
-fun Screen3Trust(onNext: () -> Unit) {
-    var showDialog by remember { mutableStateOf(false) }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 24.dp, vertical = 16.dp)
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.SpaceBetween
-    ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Spacer(modifier = Modifier.height(20.dp))
-
-            MorroGhostMascot(modifier = Modifier.size(80.dp, 100.dp))
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Text(
-                text = "Your Data Stays Yours.",
-                style = MaterialTheme.typography.headlineLarge.copy(color = MorroTokens.TextPrimary)
-            )
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                TrustCard(title = "Local-first", body = "Voice memos never leave this device. Stored only in app-private storage.")
-                TrustCard(title = "Zero telemetry", body = "No analytics, no accounts, no cloud sync, no tracking SDKs.")
-                TrustCard(title = "Open source", body = "Every line of code is inspectable and verifiable.")
-            }
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            Text(
-                text = "Privacy Policy (10s)",
-                style = MaterialTheme.typography.bodyLarge.copy(
-                    color = MorroTokens.AccentPrimary,
-                    fontWeight = FontWeight.Bold
-                ),
-                modifier = Modifier
-                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { showDialog = true }
-                    .padding(vertical = 8.dp)
-            )
         }
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        Column(
+        // Question Card: Centered MorroCard
+        MorroCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(bottom = 20.dp)
-        ) {
-            Button(
-                onClick = onNext,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
-                    .clip(MorroTokens.buttonShape),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MorroTokens.AccentPrimary,
-                    contentColor = Color.Black
-                )
-            ) {
-                Text(
-                    text = "I TRUST THIS DEVICE",
-                    style = MaterialTheme.typography.headlineSmall.copy(
-                        letterSpacing = 1.sp,
-                        fontWeight = FontWeight.Bold
-                    ),
-                    color = Color.Black
-                )
-            }
-        }
-    }
-
-    if (showDialog) {
-        PrivacyDialog(onDismiss = { showDialog = false })
-    }
-}
-
-@Composable
-fun TrustCard(title: String, body: String) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(Color(0xFF0A0A0F))
-            .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(16.dp))
-            .padding(16.dp)
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.headlineSmall.copy(
-                    color = MorroTokens.AccentPrimary,
-                    fontWeight = FontWeight.Bold
-                )
-            )
-            Text(
-                text = body,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MorroTokens.TextSecondary
-            )
-        }
-    }
-}
-
-@Composable
-fun PrivacyDialog(onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(16.dp),
-        containerColor = MorroTokens.Surface,
-        titleContentColor = MorroTokens.TextPrimary,
-        textContentColor = MorroTokens.TextSecondary,
-        title = {
-            Text(text = "Privacy Policy", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = MorroTokens.TextPrimary)
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("All audio recordings are stored solely in app-private local storage.", color = MorroTokens.TextSecondary)
-                Text("Zero network requests. This app is 100% offline.", color = MorroTokens.TextSecondary)
-                Text("No third-party tracking, analytics, or external telemetry.", color = MorroTokens.TextSecondary)
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = onDismiss,
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MorroTokens.AccentPrimary,
-                    contentColor = Color.Black
-                )
-            ) {
-                Text(text = "Close", fontWeight = FontWeight.Bold, color = Color.Black)
-            }
-        }
-    )
-}
-
-/**
- * Screen 4: Schedule & Permissions
- *
- * Clean time picker with auto-triggered permission request.
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun Screen4Schedule(
-    wakeHour: Int,
-    wakeMinute: Int,
-    onTimeChanged: (Int, Int) -> Unit,
-    onRequestPermissions: () -> Unit,
-    onNext: () -> Unit
-) {
-    LaunchedEffect(Unit) {
-        onRequestPermissions()
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 24.dp, vertical = 16.dp)
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.SpaceBetween
-    ) {
-        Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(24.dp)) {
-            Spacer(modifier = Modifier.height(20.dp))
-
-            Text(
-                text = "Set your first alarm.",
-                style = MaterialTheme.typography.headlineLarge.copy(color = MorroTokens.TextPrimary)
-            )
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(Color(0xFF0A0A0F))
-                    .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(16.dp))
-                    .padding(20.dp),
-                contentAlignment = Alignment.Center
-            ) {
+                .padding(horizontal = 8.dp),
+            content = { contentModifier ->
                 Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = contentModifier
+                        .padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
+                    // Title: "2. Exact Timing"
                     Text(
-                        text = String.format(Locale.getDefault(), "%02d:%02d", wakeHour, wakeMinute),
-                        style = MaterialTheme.typography.displayLarge.copy(
-                            color = MorroTokens.AccentPrimary
+                        text = "2. Exact Timing",
+                        style = typo.headlineMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = colors.accentTactical
                         ),
                         textAlign = TextAlign.Center
                     )
 
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Body text
+                    Text(
+                        text = "To preserve battery, Android delays ordinary timers by up to 15 minutes. Morro needs exact alarm permission to wake you at the precise minute you set.",
+                        style = typo.bodyLarge,
+                        color = colors.textPrimary,
+                        textAlign = TextAlign.Center,
+                        lineHeight = 24.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    // Status Line: "✓ Exact timing enabled"
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Button(
-                            onClick = { onTimeChanged((wakeHour + 1) % 24, wakeMinute) },
-                            modifier = Modifier
-                                .size(48.dp)
-                                .clip(RoundedCornerShape(10.dp)),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF14141A),
-                                contentColor = MorroTokens.TextPrimary
+                        Icon(
+                            imageVector = Icons.Filled.Check,
+                            contentDescription = null,
+                            tint = colors.success,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Exact timing enabled",
+                            style = typo.titleMedium.copy(
+                                fontWeight = FontWeight.SemiBold,
+                                color = colors.success
                             )
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.KeyboardArrowUp,
-                                contentDescription = "Increment hour",
-                                tint = MorroTokens.AccentPrimary,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.width(16.dp))
-
-                        Button(
-                            onClick = { onTimeChanged((wakeHour + 23) % 24, wakeMinute) },
-                            modifier = Modifier
-                                .size(48.dp)
-                                .clip(RoundedCornerShape(10.dp)),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF14141A),
-                                contentColor = MorroTokens.TextPrimary
-                            )
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.KeyboardArrowDown,
-                                contentDescription = "Decrement hour",
-                                tint = MorroTokens.AccentPrimary,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
+                        )
                     }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    // Action: MorroPrimaryButton "Next: Battery Hardening"
+                    MorroPrimaryButton(
+                        text = "Next: Battery Hardening",
+                        onClick = onNext,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
+            }
+        )
+    }
+}
+
+/** Screen 3: Battery Hardening — OEM battery optimization guidance. */
+@Composable
+private fun ScreenBatteryHardening(onNext: () -> Unit) {
+    val colors = morroColors()
+    val typo = morroTypography()
+    val shapes = morroShapes()
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.SpaceBetween
+    ) {
+        // Header: MORRO + Subtitle
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "MORRO",
+                style = typo.headlineLarge.copy(
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 2.sp
+                ),
+                color = colors.accentTactical
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Commitment-Driven Wake-Up",
+                style = typo.bodyMedium,
+                color = colors.textSecondary
+            )
+        }
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        // Progress Bar: 4 segments, step 3 active
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            (1..4).forEach { i ->
+                val isCompleted = i < 3
+                val isActive = i == 3
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(4.dp)
+                        .background(
+                            if (isCompleted) colors.accentTactical
+                            else if (isActive) colors.accentTactical
+                            else colors.borderSubtle,
+                            RoundedCornerShape(2.dp)
+                        )
+                )
             }
         }
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        Column(
+        // Battery Hardening Card
+        MorroCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(bottom = 20.dp)
+                .padding(horizontal = 8.dp),
+            content = { contentModifier ->
+                Column(
+                    modifier = contentModifier
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "3. Battery Hardening",
+                        style = typo.headlineMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = colors.accentTactical
+                        ),
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Text(
+                        text = "Manufacturers aggressively kill background alarms. Morro guides you to disable battery optimization for reliable wake-ups on your specific device.",
+                        style = typo.bodyLarge,
+                        color = colors.textPrimary,
+                        textAlign = TextAlign.Center,
+                        lineHeight = 24.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    // Status line - not yet enabled
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(20.dp)
+                                .background(colors.borderSubtle, RoundedCornerShape(50))
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Battery optimization: Not configured",
+                            style = typo.titleMedium.copy(
+                                color = colors.textSecondary
+                            )
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    MorroPrimaryButton(
+                        text = "Next: Choose Mission",
+                        onClick = onNext,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        )
+    }
+}
+
+/** Screen 4: Mission Selection + Analog Clock Hub combined. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ScreenMissionAndClockHub(
+    wakeHour: Int,
+    wakeMinute: Int,
+    missionType: MissionType,
+    onAlarmConfigured: (Int, Int, MissionType) -> Unit,
+    onRequestPermissions: () -> Unit,
+    onOpenPrivacyPolicy: () -> Unit,
+    onNext: () -> Unit
+) {
+    var showBuilderModal by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        onRequestPermissions()
+    }
+
+    val colors = morroColors()
+    val typo = morroTypography()
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.SpaceBetween
+    ) {
+        // Header
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Button(
-                onClick = onNext,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
-                    .clip(MorroTokens.buttonShape),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MorroTokens.AccentPrimary,
-                    contentColor = Color.Black
+            Text(
+                text = "MORRO",
+                style = typo.headlineLarge.copy(
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 2.sp
+                ),
+                color = colors.accentTactical
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Commitment-Driven Wake-Up",
+                style = typo.bodyMedium,
+                color = colors.textSecondary
+            )
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Progress Bar: 4 segments, step 4 active
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            (1..4).forEach { i ->
+                val isCompleted = i < 4
+                val isActive = i == 4
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(4.dp)
+                        .background(
+                            if (isCompleted) colors.accentTactical
+                            else if (isActive) colors.accentTactical
+                            else colors.borderSubtle,
+                            RoundedCornerShape(2.dp)
+                        )
                 )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Mission Selection Card
+        MorroCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp),
+            content = { contentModifier ->
+                Column(
+                    modifier = contentModifier
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "4. Choose Your Wake-Up Mission",
+                        style = typo.headlineMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = colors.accentTactical
+                        ),
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    // Three Mission Option Chips
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        MissionOptionChip(
+                            title = "Voice Commitment",
+                            subtitle = "15s personal commitment recorded in-app",
+                            icon = Icons.Filled.Mic,
+                            isSelected = missionType == MissionType.VOICE_COMMITMENT || missionType == MissionType.VOICE_MEMO,
+                            onSelect = { onAlarmConfigured(wakeHour, wakeMinute, MissionType.VOICE_COMMITMENT) }
+                        )
+                        MissionOptionChip(
+                            title = "QR / Barcode Scan",
+                            subtitle = "CameraX + offline ML Kit barcode scanner",
+                            icon = Icons.Filled.QrCodeScanner,
+                            isSelected = missionType == MissionType.QR_CODE || missionType == MissionType.QR_BARCODE,
+                            onSelect = { onAlarmConfigured(wakeHour, wakeMinute, MissionType.QR_CODE) }
+                        )
+                        MissionOptionChip(
+                            title = "Object Photo Hunt",
+                            subtitle = "30-item household pool, 1 random item on ring",
+                            icon = Icons.Filled.PhotoCamera,
+                            isSelected = missionType == MissionType.PHOTO_MISSION || missionType == MissionType.PHOTO_OBJECT,
+                            onSelect = { onAlarmConfigured(wakeHour, wakeMinute, MissionType.PHOTO_MISSION) }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    // Analog Clock Preview
+                    Text(
+                        text = "Wake-Up Time",
+                        style = typo.labelLarge.copy(
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.12f.sp,
+                            color = colors.textSecondary
+                        )
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    MorroAnalogClock(
+                        modifier = Modifier.padding(vertical = 8.dp),
+                        size = 200.dp
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = String.format(Locale.getDefault(), "%02d:%02d", wakeHour, wakeMinute),
+                        style = typo.displayLarge.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = colors.accentTactical
+                        )
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Configure button
+                    MorroPrimaryButton(
+                        text = "Configure Alarm & Mission",
+                        onClick = { showBuilderModal = true },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        )
+
+        // Alarm Builder Modal
+        if (showBuilderModal) {
+            AlarmBuilderModal(
+                initialHour = wakeHour,
+                initialMinute = wakeMinute,
+                onDismiss = { showBuilderModal = false },
+                onSaveAndArm = { h, m, mission ->
+                    onAlarmConfigured(h, m, mission)
+                    showBuilderModal = false
+                },
+                onOpenPrivacyPolicy = onOpenPrivacyPolicy
+            )
+        }
+    }
+}
+
+/** Mission Option Chip for selection. */
+@Composable
+private fun MissionOptionChip(
+    title: String,
+    subtitle: String,
+    icon: androidx.compose.material.icons.filled.Icon,
+    isSelected: Boolean,
+    onSelect: () -> Unit
+) {
+    val colors = morroColors()
+    val typo = morroTypography()
+    val shapes = morroShapes()
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                if (isSelected) colors.accentTactical.copy(alpha = 0.10f) else colors.surfaceVariant,
+                shapes.Card
+            )
+            .border(
+                if (isSelected) 2.dp else 1.dp,
+                if (isSelected) colors.accentTactical else colors.borderSubtle,
+                shapes.Card
+            )
+            .clip(shapes.Card)
+            .clickable(onClick = onSelect)
+            .padding(16.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.weight(1f)
             ) {
-                Text(
-                    text = "GRANT & CONTINUE",
-                    style = MaterialTheme.typography.headlineSmall.copy(
-                        letterSpacing = 1.sp,
-                        fontWeight = FontWeight.Bold
-                    ),
-                    color = Color.Black
-                )
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .background(
+                            if (isSelected) colors.accentTactical else colors.surfaceLow,
+                            RoundedCornerShape(12.dp)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = if (isSelected) Color.White else colors.textSecondary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = title,
+                        style = typo.titleMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = if (isSelected) colors.accentTactical else colors.textPrimary
+                        )
+                    )
+                    Text(
+                        text = subtitle,
+                        style = typo.bodyMedium.copy(color = colors.textSecondary)
+                    )
+                }
+            }
+
+            if (isSelected) {
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .background(colors.accentTactical, RoundedCornerShape(50)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Check,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
             }
         }
     }
 }
 
-/**
- * Screen 5: Commitment Summary
- *
- * Final confirmation screen with time, enemy, and protection summary.
- */
+/** Onboarding Footer — "100% offline • No accounts • Local storage only" */
 @Composable
-fun Screen5Summary(
+private fun OnboardingFooter() {
+    val colors = morroColors()
+    val typo = morroTypography()
+
+    Text(
+        text = "100% offline  •  No accounts  •  Local storage only",
+        style = typo.labelSmall.copy(
+            fontFamily = FontFamily.Monospace,
+            color = colors.textDisabled
+        ),
+        textAlign = TextAlign.Center,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 24.dp)
+    )
+}
+
+/** Happy Ghost Placebo Loader (Between Mission Selection and Contract) — 2.5s auto-advance. */
+@Composable
+private fun ScreenPlaceboLoader(onNext: () -> Unit) {
+    LaunchedEffect(Unit) {
+        delay(2500)
+        onNext()
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(morroColors().canvas)
+            .padding(24.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(130.dp)
+                    .background(Color.Transparent),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.fillMaxSize(),
+                    color = morroColors().accentTactical,
+                    strokeWidth = 2.dp
+                )
+                Box(modifier = Modifier.background(Color.Transparent)) {
+                    MorroGhostMascot(
+                        modifier = Modifier.size(80.dp, 100.dp),
+                        happy = true
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(36.dp))
+
+            Text(
+                text = "Personalizing your wake-up protocol...",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = morroColors().textPrimary,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = "Calibrating mission gates for your habits",
+                fontSize = 13.sp,
+                color = morroColors().textSecondary,
+                textAlign = TextAlign.Center
+            )
+        }
+    }
+}
+
+/** Contract Screen: Sad ghost mascot, countdown to execution, mission badge, privacy link. */
+@Composable
+private fun ScreenContract(
     wakeHour: Int,
     wakeMinute: Int,
-    enemy: String,
-    protection: String,
+    target: String,
+    missionType: MissionType,
+    onOpenPrivacyPolicy: () -> Unit,
     onStartTomorrow: () -> Unit
 ) {
+    val sleepCountdown = remember(wakeHour, wakeMinute) {
+        val now = Calendar.getInstance()
+        val alarm = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, wakeHour)
+            set(Calendar.MINUTE, wakeMinute)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+            if (before(now)) add(Calendar.DAY_OF_YEAR, 1)
+        }
+        val diff = alarm.timeInMillis - now.timeInMillis
+        val hours = diff / (1000 * 60 * 60)
+        val minutes = (diff / (1000 * 60)) % 60
+        when {
+            hours > 0 -> "$hours hours and $minutes minutes"
+            minutes > 0 -> "$minutes minutes"
+            else -> "Less than a minute"
+        }
+    }
+
+    val colors = morroColors()
+    val typo = morroTypography()
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 24.dp, vertical = 16.dp)
             .verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceBetween
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(24.dp)
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.fillMaxWidth()
         ) {
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
-            Text(
-                text = "Contract Sealed",
-                style = MaterialTheme.typography.headlineLarge.copy(color = MorroTokens.TextPrimary)
-            )
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(Color(0xFF0A0A0F))
-                    .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(16.dp))
-                    .padding(20.dp)
-            ) {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    SummaryRow(label = "Execution Time", value = String.format(Locale.getDefault(), "%02d:%02d", wakeHour, wakeMinute))
-                    SummaryRow(label = "Morning Enemy", value = enemy)
-                    SummaryRow(label = "Protecting", value = protection)
-                }
+            // Sad Ghost Mascot on transparent wrapper
+            Box(modifier = Modifier.background(Color.Transparent)) {
+                MorroGhostMascot(modifier = Modifier.size(80.dp, 100.dp), happy = false)
             }
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Start,
-                verticalAlignment = Alignment.CenterVertically
+            Text(
+                text = "You have $sleepCountdown of sleep left.",
+                style = typo.headlineMedium.copy(
+                    color = colors.textPrimary,
+                    lineHeight = 32.sp
+                ),
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = "The contract is sealed. Tomorrow begins on schedule.",
+                style = typo.bodyMedium,
+                color = colors.textSecondary,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(28.dp))
+
+            // Bold highlighted Mission badge
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(colors.surfaceVariant, shapes.Card)
+                    .border(1.5.dp, colors.accentTactical, shapes.Card)
+                    .padding(20.dp)
             ) {
-                Box(modifier = Modifier.size(6.dp).background(MorroTokens.AccentPrimary))
-                Spacer(modifier = Modifier.width(8.dp))
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "ACTIVE MISSION",
+                        fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace,
+                        color = colors.textSecondary,
+                        letterSpacing = 1.5.sp
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "MISSION: ${target.uppercase()} • ${missionType.name.replace('_', ' ')}",
+                        style = typo.headlineSmall.copy(
+                            color = colors.accentTactical,
+                            fontWeight = FontWeight.Bold
+                        ),
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // Privacy Policy link
+            TextButton(onClick = onOpenPrivacyPolicy) {
                 Text(
-                    text = "MORRO ARMED",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MorroTokens.AccentPrimary
+                    text = "Privacy Policy",
+                    style = typo.bodyMedium.copy(
+                        textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline
+                    ),
+                    color = colors.accentTactical
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
         Column(
             modifier = Modifier
@@ -696,48 +936,11 @@ fun Screen5Summary(
                 .navigationBarsPadding()
                 .padding(bottom = 20.dp)
         ) {
-            Button(
+            MorroPrimaryButton(
+                text = "START TOMORROW",
                 onClick = onStartTomorrow,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
-                    .clip(MorroTokens.buttonShape),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MorroTokens.AccentPrimary,
-                    contentColor = Color.Black
-                )
-            ) {
-                Text(
-                    text = "START TOMORROW",
-                    style = MaterialTheme.typography.headlineSmall.copy(
-                        letterSpacing = 1.sp,
-                        fontWeight = FontWeight.Bold
-                    ),
-                    color = Color.Black
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun SummaryRow(label: String, value: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelLarge,
-            color = MorroTokens.TextSecondary
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.headlineSmall.copy(
-                color = MorroTokens.TextPrimary,
-                fontWeight = FontWeight.Bold
+                modifier = Modifier.fillMaxWidth()
             )
-        )
+        }
     }
 }

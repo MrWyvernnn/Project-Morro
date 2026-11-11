@@ -8,6 +8,9 @@
 
     <!-- Record the user's own voice memo (runtime permission) -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.DISABLE_KEYGUARD" />
 
     <!-- Notification permission (runtime on API 33+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -26,6 +29,10 @@
 
     <!-- Request exemption from battery optimizations to prevent OS from killing alarms -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <!-- Camera for QR/Barcode and Photo Object missions -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
 
     <application
         android:allowBackup="false"
@@ -51,6 +58,12 @@
             android:exported="false"
             android:theme="@style/Theme.Morro" />
 
+        <!-- Battery optimization whitelist debug activity -->
+        <activity
+            android:name=".BatteryOptimizationDebugActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Morro" />
+
         <!-- Alarm firing activity (full-screen over lock screen) -->
         <activity
             android:name=".AlarmActivity"
@@ -61,10 +74,20 @@
             android:launchMode="singleTask"
             android:excludeFromRecents="true" />
 
+        <activity-alias
+            android:name=".AlarmRingingActivity"
+            android:targetActivity=".AlarmActivity"
+            android:exported="false" />
+
         <!-- Alarm receiver -->
         <receiver
             android:name=".AlarmReceiver"
-            android:exported="false" />
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.morro.alarm.ACTION_TRIGGER_ALARM" />
+                <action android:name="com.morro.alarm.ACTION_TEST_ALARM" />
+            </intent-filter>
+        </receiver>
 
         <!-- Boot receiver to reschedule alarms -->
         <receiver
@@ -74,6 +97,12 @@
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
+
+        <!-- Foreground service to keep alarm alive with wake-lock -->
+        <service
+            android:name=".AlarmForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
 
     </application>
 

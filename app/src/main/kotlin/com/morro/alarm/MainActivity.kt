@@ -1,10 +1,11 @@
 package com.morro.alarm
 
-import android.Manifest
+import android.app.AlarmManager
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
-import android.content.pm.PackageManager
+import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -13,346 +14,99 @@ import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.*
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.morro.alarm.ui.theme.MorroColors
+import com.morro.alarm.mission.MissionPrefs
+import com.morro.alarm.mission.MissionType
+import com.morro.alarm.ui.components.AlarmBuilderModal
+import com.morro.alarm.ui.components.MorroAnalogClock
+import com.morro.alarm.ui.components.MorroPrivacyPolicySheet
 import com.morro.alarm.ui.theme.MorroTheme
+import com.morro.alarm.ui.theme.morroColors
+import com.morro.alarm.ui.theme.morroTypography
+import com.morro.alarm.ui.theme.morroShapes
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
-import kotlinx.coroutines.delay
 
-/**
- * MainActivity: Production Cyber-Defense Home Screen for Morro.
- *
- * Strict Rules Enforced:
- * - Root background: AmoledBlack (Color(0xFF000000))
- * - Card surfaces: MidnightBlue (Color(0xFF0A0A0F))
- * - Primary actions: ElectricCyan (Color(0xFF00F0FF))
- * - Alerting/Missing: AlertOrange (Color(0xFFFF4500))
- * - NO glassmorphism, NO glow shadows, NO gradients, NO emojis.
- */
 class MainActivity : ComponentActivity() {
-
-    private var isRecording by mutableStateOf(MemoRecorder.isCurrentlyRecording())
-    private var recordingCountdown by mutableStateOf(15)
-    private var hasTempRecorded by mutableStateOf(false)
-    private var isPlayingPreview by mutableStateOf(MemoPlayer.isPlaying())
-    private var permissionsGranted by mutableStateOf(false)
-    private var shouldNavigateAfterPermissions by mutableStateOf(false)
-
-    private val permissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { results ->
-        val audioGranted = results[Manifest.permission.RECORD_AUDIO] == true || hasRecordAudioPermission()
-        permissionsGranted = audioGranted
-        shouldNavigateAfterPermissions = audioGranted
-        if (audioGranted) {
-            startRecording()
-        } else {
-            Toast.makeText(this, "Microphone permission required to record commitments.", Toast.LENGTH_LONG).show()
-        }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        hasTempRecorded = MemoStorage.hasTempMemo(this)
 
         setContent {
             MorroTheme {
-                var showExactAlarmRationale by remember { mutableStateOf(false) }
+                // Orphan temp cleanup MUST run after Compose context is live.
+                // Capture context at composable level, then use in LaunchedEffect.
+                val context = LocalContext.current
+                LaunchedEffect(Unit) {
+                    try {
+                        if (!MorroAudioRecorder.isRecording() && MemoStorage.hasTempMemo(context)) {
+                            MemoStorage.clearTemp(context)
+                            Log.d("MainActivity", "Cleaned up orphan temp recording file on cold start")
+                        }
+                    } catch (e: Exception) {
+                        Log.w("MainActivity", "Error cleaning orphan temp file", e)
+                    }
+                }
 
                 val prefs = remember { getSharedPreferences("morro_prefs", Context.MODE_PRIVATE) }
-                var hasOnboarded by remember { mutableStateOf(prefs.getBoolean("has_onboarded", false)) }
-
-                LaunchedEffect(shouldNavigateAfterPermissions) {
-                    if (shouldNavigateAfterPermissions && !hasOnboarded) {
-                        delay(300)
-                        prefs.edit().putBoolean("has_onboarded", true).commit()
-                        hasOnboarded = true
-                    }
-                }
+                var hasOnboarded by remember { mutableStateOf(prefs.getBoolean("onboarding_completed", false)) }
 
                 if (!hasOnboarded) {
-                    OnboardingScreen(
-                        onComplete = {
-                            prefs.edit().putBoolean("has_onboarded", true).commit()
-                            hasOnboarded = true
-                        },
-                        onRequestPermissions = {
-                            val permissions = mutableListOf(Manifest.permission.RECORD_AUDIO)
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                permissions.add(Manifest.permission.POST_NOTIFICATIONS)
-                            }
-                            permissionLauncher.launch(permissions.toTypedArray())
-
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !AlarmScheduler.canScheduleExactAlarms(this@MainActivity)) {
-                                try {
-                                    val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
-                                        data = Uri.parse("package:$packageName")
-                                    }
-                                    startActivity(intent)
-                                } catch (e: Exception) {
-                                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                        data = Uri.parse("package:$packageName")
-                                    }
-                                    startActivity(intent)
-                                }
-                            }
-                        }
-                    )
+                    // Launch the full 4-step OnboardingActivity instead of inline screen
+                    val intent = Intent(this@MainActivity, OnboardingActivity::class.java).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                    }
+                    startActivity(intent)
+                    finish()
                 } else {
-                    LaunchedEffect(Unit) {
-                        isRecording = MemoRecorder.isRecording()
-                        isPlayingPreview = MemoPlayer.isPlaying()
-                        hasTempRecorded = MemoStorage.hasTempMemo(this@MainActivity)
-                    }
-
-                    if (showExactAlarmRationale) {
-                        AlertDialog(
-                            onDismissRequest = { showExactAlarmRationale = false },
-                            confirmButton = {
-                                TextButton(
-                                    onClick = {
-                                        showExactAlarmRationale = false
-                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                                            try {
-                                                val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
-                                                    data = Uri.parse("package:$packageName")
-                                                }
-                                                startActivity(intent)
-                                            } catch (e: Exception) {
-                                                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                                    data = Uri.parse("package:$packageName")
-                                                }
-                                                startActivity(intent)
-                                            }
-                                        }
-                                    }
-                                ) {
-                                    Text(
-                                        text = "OPEN SETTINGS",
-                                        color = MorroColors.ElectricCyan,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            },
-                            dismissButton = {
-                                TextButton(onClick = { showExactAlarmRationale = false }) {
-                                    Text(
-                                        text = "CANCEL",
-                                        color = MorroColors.WhiteSecondary
-                                    )
-                                }
-                            },
-                            containerColor = MorroColors.MidnightBlue,
-                            title = {
-                                Text(
-                                    text = "Exact Alarm Permission Required",
-                                    color = MorroColors.WhitePrimary,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            },
-                            text = {
-                                Text(
-                                    text = "Morro requires permission to schedule exact alarms so your wake-up call fires at the exact minute scheduled, even in deep sleep.",
-                                    color = MorroColors.WhiteSecondary
-                                )
-                            }
-                        )
-                    }
-
-                    MainAlarmScreen(
-                        context = this@MainActivity,
-                        isRecording = isRecording,
-                        recordingCountdown = recordingCountdown,
-                        hasTempRecorded = hasTempRecorded,
-                        isPlayingPreview = isPlayingPreview,
-                        onTimeSaved = { hour, minute ->
-                            if (!AlarmScheduler.canScheduleExactAlarms(this@MainActivity)) {
-                                showExactAlarmRationale = true
-                            } else {
-                                val scheduled = AlarmScheduler.scheduleDailyAlarm(this@MainActivity, hour, minute)
-                                if (scheduled) {
-                                    val formatted = AlarmScheduler.getFormattedTime(this@MainActivity)
-                                        ?: String.format(Locale.getDefault(), "%02d:%02d", hour, minute)
-                                    Toast.makeText(this@MainActivity, "Wake-up alarm set for $formatted", Toast.LENGTH_SHORT).show()
-                                } else {
-                                    showExactAlarmRationale = true
-                                }
-                            }
-                        },
-                        onCancelAlarm = {
-                            AlarmScheduler.cancelAlarm(this@MainActivity)
-                            Toast.makeText(this@MainActivity, "Alarm canceled", Toast.LENGTH_SHORT).show()
-                        },
-                        onStartRecording = { startRecording() },
-                        onStopRecording = { stopRecording() },
-                        onCancelRecording = { cancelRecording() },
-                        onPlayPreview = { playPreview() },
-                        onSaveMemo = { saveMemo() },
-                        onTickCountdown = {
-                            if (recordingCountdown > 0) {
-                                recordingCountdown -= 1
-                            }
-                            if (recordingCountdown <= 0) {
-                                stopRecording()
-                            }
-                        }
-                    )
+                    MainAlarmScreen(context = this@MainActivity)
                 }
             }
-        }
-    }
-
-    override fun onResume() {
-        super.onResume()
-        isRecording = MemoRecorder.isRecording()
-        isPlayingPreview = MemoPlayer.isPlaying()
-        hasTempRecorded = MemoStorage.hasTempMemo(this)
-    }
-
-    fun requestRecordAudioPermission() {
-        if (ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.RECORD_AUDIO
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            permissionLauncher.launch(arrayOf(Manifest.permission.RECORD_AUDIO))
-        }
-    }
-
-    fun hasRecordAudioPermission(): Boolean {
-        return ContextCompat.checkSelfPermission(
-            this,
-            Manifest.permission.RECORD_AUDIO
-        ) == PackageManager.PERMISSION_GRANTED
-    }
-
-    private fun startRecording() {
-        if (!hasRecordAudioPermission()) {
-            requestRecordAudioPermission()
-            return
-        }
-        isRecording = true
-        recordingCountdown = 15
-        hasTempRecorded = false
-
-        MemoRecorder.startRecording(
-            this,
-            onError = { err ->
-                Log.e("Morro", "Recording error: $err")
-                Toast.makeText(this, "Recording error: $err", Toast.LENGTH_SHORT).show()
-                isRecording = false
-            },
-            onMaxDurationReached = {
-                recordingCountdown = 0
-                stopRecording()
-            }
-        )
-    }
-
-    private fun stopRecording() {
-        val stopped = MemoRecorder.stopRecording(this)
-        isRecording = false
-        hasTempRecorded = stopped && MemoStorage.hasTempMemo(this)
-    }
-
-    private fun cancelRecording() {
-        MemoRecorder.cancelRecording(this)
-        isRecording = false
-        recordingCountdown = 15
-        hasTempRecorded = false
-        isPlayingPreview = false
-    }
-
-    private fun playPreview() {
-        isPlayingPreview = true
-        MemoPlayer.startPlayback(
-            this,
-            MemoStorage.getTempPath(this),
-            onCompletion = { isPlayingPreview = false },
-            onError = { err ->
-                isPlayingPreview = false
-                Toast.makeText(this, "Playback error: $err", Toast.LENGTH_SHORT).show()
-            }
-        )
-    }
-
-    private fun saveMemo() {
-        val success = MemoStorage.saveMemo(this)
-        if (success) {
-            isRecording = false
-            recordingCountdown = 15
-            hasTempRecorded = false
-            isPlayingPreview = false
-            Toast.makeText(this, "Commitment saved.", Toast.LENGTH_SHORT).show()
-        } else {
-            Toast.makeText(this, "Recording was too short or empty.", Toast.LENGTH_SHORT).show()
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainAlarmScreen(
-    context: Context,
-    isRecording: Boolean,
-    recordingCountdown: Int,
-    hasTempRecorded: Boolean,
-    isPlayingPreview: Boolean,
-    onTimeSaved: (Int, Int) -> Unit,
-    onCancelAlarm: () -> Unit,
-    onStartRecording: () -> Unit,
-    onStopRecording: () -> Unit,
-    onCancelRecording: () -> Unit,
-    onPlayPreview: () -> Unit,
-    onSaveMemo: () -> Unit,
-    onTickCountdown: () -> Unit
-) {
+fun MainAlarmScreen(context: Context) {
     val prefs = remember { context.getSharedPreferences("morro_prefs", Context.MODE_PRIVATE) }
     var prefsUpdateTrigger by remember { mutableIntStateOf(0) }
 
-    // Re-read state on lifecycle resume
+    val audioManager = remember { context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager }
+    var alarmVolume by remember { mutableIntStateOf(audioManager?.getStreamVolume(AudioManager.STREAM_ALARM) ?: 1) }
+
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 prefsUpdateTrigger++
+                alarmVolume = audioManager?.getStreamVolume(AudioManager.STREAM_ALARM) ?: 1
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-        }
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     DisposableEffect(prefs) {
@@ -360,513 +114,326 @@ fun MainAlarmScreen(
             prefsUpdateTrigger++
         }
         prefs.registerOnSharedPreferenceChangeListener(listener)
-        onDispose {
-            prefs.unregisterOnSharedPreferenceChangeListener(listener)
-        }
+        onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }
 
-    LaunchedEffect(isRecording) {
-        if (isRecording) {
-            while (isRecording && recordingCountdown > 0) {
-                delay(1000)
-                onTickCountdown()
-            }
-            if (isRecording && recordingCountdown <= 0) {
-                MemoRecorder.stopRecording(context)
-                onStopRecording()
-            }
-        }
+    val savedAlarm = remember(prefsUpdateTrigger) {
+        AlarmScheduler.getSavedAlarmTime(context)
     }
-
-    var currentTimeStr by remember {
-        val fmt = SimpleDateFormat("HH:mm", Locale.getDefault())
-        mutableStateOf(fmt.format(Date()))
-    }
-    var refreshTick by remember { mutableIntStateOf(0) }
-    LaunchedEffect(Unit) {
-        val fmt = SimpleDateFormat("HH:mm", Locale.getDefault())
-        while (true) {
-            delay(1000)
-            currentTimeStr = fmt.format(Date())
-            refreshTick++
-        }
-    }
-
-    val savedAlarm = remember(refreshTick, prefsUpdateTrigger) {
-        AlarmScheduler.getSavedAlarmTime(context) ?: Pair(6, 30)
-    }
-    val alarmTime = remember(refreshTick, prefsUpdateTrigger) {
+    val alarmTime = remember(prefsUpdateTrigger) {
         AlarmScheduler.getNextAlarmTime(context)
     }
     val hasActiveAlarm = alarmTime != null && alarmTime > System.currentTimeMillis()
 
-    val countdownStr = remember(alarmTime, refreshTick, prefsUpdateTrigger) {
-        if (hasActiveAlarm) {
-            val diffMillis = maxOf(0, alarmTime - System.currentTimeMillis())
-            val hours = diffMillis / (1000 * 60 * 60)
-            val minutes = (diffMillis / (1000 * 60)) % 60
-            if (hours > 0) "ARMED: $hours hr $minutes min" else "ARMED: $minutes min"
-        } else {
-            "DISARMED"
-        }
+    var showAlarmBuilder by remember { mutableStateOf(false) }
+    var showPrivacyPolicy by remember { mutableStateOf(false) }
+
+    val missionType = remember(prefsUpdateTrigger) { MissionPrefs.getMissionType(context) }
+    val photoItems = remember(prefsUpdateTrigger) { MissionPrefs.getSelectedPhotoItems(context) }
+
+    val missionBadgeText = when (missionType) {
+        MissionType.VOICE_COMMITMENT, MissionType.VOICE_MEMO -> "VOICE MEMO"
+        MissionType.QR_CODE, MissionType.QR_BARCODE -> "QR CODE"
+        MissionType.PHOTO_MISSION, MissionType.PHOTO_OBJECT -> "PHOTO MISSION (${photoItems.size} items)"
     }
 
-    val hasRecordedMemo = remember(refreshTick, prefsUpdateTrigger) {
-        MemoStorage.hasSavedMemo(context)
-    }
+    val colors = morroColors()
+    val typo = morroTypography()
+    val shapes = morroShapes()
 
-    val displayCalendar = Calendar.getInstance().apply {
-        set(Calendar.HOUR_OF_DAY, savedAlarm.first)
-        set(Calendar.MINUTE, savedAlarm.second)
-    }
-    val timeOnlyFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
-    val timeDigits = timeOnlyFormat.format(displayCalendar.time)
-
-    var showBottomSheet by remember { mutableStateOf(false) }
-    val bottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    var selectedTime by remember { mutableStateOf(savedAlarm) }
-
-    LaunchedEffect(savedAlarm, prefsUpdateTrigger) {
-        selectedTime = savedAlarm
-    }
-
-    if (showBottomSheet) {
-        ModalBottomSheet(
-            onDismissRequest = { showBottomSheet = false },
-            sheetState = bottomSheetState,
-            containerColor = MorroColors.MidnightBlue,
-            contentColor = MorroColors.WhitePrimary,
-            dragHandle = {
-                Box(
-                    modifier = Modifier
-                        .padding(vertical = 12.dp)
-                        .width(40.dp)
-                        .height(4.dp)
-                        .background(MorroColors.WhiteSecondary.copy(alpha = 0.2f), RoundedCornerShape(2.dp))
-                )
-            }
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp)
-                    .padding(bottom = 32.dp)
-                    .navigationBarsPadding(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "SET WAKE-UP TIME",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MorroColors.ElectricCyan,
-                    letterSpacing = 2.sp
-                )
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        IconButton(
-                            onClick = {
-                                selectedTime = selectedTime.copy(first = (selectedTime.first + 1) % 24)
-                            },
-                            modifier = Modifier.size(40.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.KeyboardArrowUp,
-                                contentDescription = "Increment hour",
-                                tint = MorroColors.ElectricCyan,
-                                modifier = Modifier.size(28.dp)
-                            )
-                        }
-                        Text(
-                            text = String.format(Locale.getDefault(), "%02d", selectedTime.first),
-                            fontSize = 64.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MorroColors.WhitePrimary
-                        )
-                        IconButton(
-                            onClick = {
-                                selectedTime = selectedTime.copy(first = (selectedTime.first + 23) % 24)
-                            },
-                            modifier = Modifier.size(40.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.KeyboardArrowDown,
-                                contentDescription = "Decrement hour",
-                                tint = MorroColors.ElectricCyan,
-                                modifier = Modifier.size(28.dp)
-                            )
-                        }
-                    }
-
-                    Text(
-                        text = ":",
-                        fontSize = 64.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MorroColors.WhitePrimary,
-                        modifier = Modifier.padding(horizontal = 12.dp)
-                    )
-
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        IconButton(
-                            onClick = {
-                                selectedTime = selectedTime.copy(second = (selectedTime.second + 1) % 60)
-                            },
-                            modifier = Modifier.size(40.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.KeyboardArrowUp,
-                                contentDescription = "Increment minute",
-                                tint = MorroColors.ElectricCyan,
-                                modifier = Modifier.size(28.dp)
-                            )
-                        }
-                        Text(
-                            text = String.format(Locale.getDefault(), "%02d", selectedTime.second),
-                            fontSize = 64.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MorroColors.WhitePrimary
-                        )
-                        IconButton(
-                            onClick = {
-                                selectedTime = selectedTime.copy(second = (selectedTime.second + 59) % 60)
-                            },
-                            modifier = Modifier.size(40.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.KeyboardArrowDown,
-                                contentDescription = "Decrement minute",
-                                tint = MorroColors.ElectricCyan,
-                                modifier = Modifier.size(28.dp)
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(32.dp))
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(MorroColors.ElectricCyan, RoundedCornerShape(16.dp))
-                        .clip(RoundedCornerShape(16.dp))
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null
-                        ) {
-                            showBottomSheet = false
-                            onTimeSaved(selectedTime.first, selectedTime.second)
-                        }
-                        .padding(vertical = 18.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "CONFIRM WAKE TIME",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MorroColors.AmoledBlack,
-                        letterSpacing = 1.sp
-                    )
-                }
-            }
-        }
+    // Digital time readout
+    val digitalTime = remember(prefsUpdateTrigger) {
+        val cal = Calendar.getInstance()
+        val dayFormat = SimpleDateFormat("EEE, MMM d", Locale.getDefault())
+        val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+        "${dayFormat.format(cal.time).uppercase()} • ${timeFormat.format(cal.time)}"
     }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MorroColors.AmoledBlack)
+            .background(colors.canvas)
             .statusBarsPadding()
             .navigationBarsPadding()
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 24.dp, vertical = 24.dp)
-                .verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Top
         ) {
+            // Top Bar: "MORRO" top-left + "Privacy" top-right
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "MORRO DEFENSE",
-                    fontSize = 13.sp,
+                    text = "MORRO",
+                    fontSize = 14.sp,
+                    fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold,
-                    color = MorroColors.WhiteSecondary,
-                    letterSpacing = 3.sp
+                    color = colors.textPrimary,
+                    letterSpacing = 4.sp
                 )
-                Text(
-                    text = currentTimeStr,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MorroColors.WhiteSecondary
-                )
-            }
-
-            Spacer(modifier = Modifier.height(36.dp))
-
-            // Time & Armed Status Card
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(MorroColors.MidnightBlue, RoundedCornerShape(20.dp))
-                    .border(
-                        1.5.dp,
-                        if (hasActiveAlarm) MorroColors.ElectricCyan.copy(alpha = 0.4f) else MorroColors.WhiteSecondary.copy(alpha = 0.1f),
-                        RoundedCornerShape(20.dp)
-                    )
-                    .clip(RoundedCornerShape(20.dp))
-                    .clickable { showBottomSheet = true }
-                    .padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "SCHEDULED TARGET",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MorroColors.WhiteSecondary,
-                    letterSpacing = 2.sp
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    text = timeDigits,
-                    fontSize = 72.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MorroColors.WhitePrimary,
-                    letterSpacing = (-2).sp
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .background(
-                                color = if (hasActiveAlarm) MorroColors.ElectricCyan else MorroColors.AlertOrange,
-                                shape = CircleShape
-                            )
-                    )
+                TextButton(onClick = { showPrivacyPolicy = true }) {
                     Text(
-                        text = countdownStr,
+                        text = "Privacy",
                         fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (hasActiveAlarm) MorroColors.ElectricCyan else MorroColors.AlertOrange,
-                        letterSpacing = 1.sp
+                        fontFamily = FontFamily.Monospace,
+                        color = colors.accentTactical
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // Status Card
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(MorroColors.MidnightBlue, RoundedCornerShape(20.dp))
-                    .border(
-                        1.5.dp,
-                        if (hasRecordedMemo) MorroColors.ElectricCyan.copy(alpha = 0.3f) else MorroColors.AlertOrange.copy(alpha = 0.3f),
-                        RoundedCornerShape(20.dp)
-                    )
-                    .clip(RoundedCornerShape(20.dp))
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+            // 3.1 Zero Alarm Volume Warning Card (Warn, Don't Auto-Change)
+            if (alarmVolume == 0) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF261805), RoundedCornerShape(16.dp))
+                        .border(1.5.dp, Color(0xFFFF6D00), RoundedCornerShape(16.dp))
+                        .padding(16.dp)
                 ) {
-                    Text(
-                        text = "COMMITMENT STATUS",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MorroColors.WhiteSecondary,
-                        letterSpacing = 1.5.sp
-                    )
-                    Text(
-                        text = if (hasRecordedMemo) "RECORDED" else "NOT RECORDED YET",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (hasRecordedMemo) MorroColors.ElectricCyan else MorroColors.AlertOrange,
-                        letterSpacing = 1.sp
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.VolumeOff,
+                            contentDescription = "Alarm Volume Off",
+                            tint = Color(0xFFFF9800),
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = "Alarm volume is off — your commitment will play silently.",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFFFF9800),
+                            lineHeight = 18.sp
+                        )
+                    }
                 }
-                Text(
-                    text = if (hasRecordedMemo) {
-                        "Voice clip locked. Plays in full before alarm dismissal."
-                    } else {
-                        "Not recorded yet. Fallback to prior clip active."
-                    },
-                    fontSize = 13.sp,
-                    color = MorroColors.WhiteSecondary,
-                    lineHeight = 18.sp
-                )
+                Spacer(modifier = Modifier.height(16.dp))
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            // Center Focus: The Analog Clock component
+            MorroAnalogClock(size = 280.dp)
 
-            // Slice 2a Audio Harness Controls
-            MemoAudioHarness(
-                isRecording = isRecording,
-                recordingCountdown = recordingCountdown,
-                hasTempRecorded = hasTempRecorded,
-                isPlayingPreview = isPlayingPreview,
-                hasRecordedMemo = hasRecordedMemo,
-                onStartRecording = onStartRecording,
-                onStopRecording = onStopRecording,
-                onCancelRecording = onCancelRecording,
-                onPlayPreview = onPlayPreview,
-                onSaveMemo = onSaveMemo
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Digital Readout: "WED, NOV 11 • 15:14:03"
+            Text(
+                text = digitalTime,
+                style = typo.bodyMedium.copy(
+                    fontFamily = FontFamily.Monospace,
+                    color = colors.textSecondary
+                ),
+                textAlign = TextAlign.Center
             )
 
             Spacer(modifier = Modifier.height(32.dp))
+
+            // Instruction Box: Full-width rounded box with 1dp AccentTactical border
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.Transparent, RoundedCornerShape(16.dp))
+                    .border(1.dp, colors.accentTactical, RoundedCornerShape(16.dp))
+                    .padding(20.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "Tap + to configure your wake-up alarm & mission",
+                    fontSize = 13.sp,
+                    color = colors.textSecondary,
+                    textAlign = TextAlign.Center
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Summary Card (when alarm is set)
+            if (savedAlarm != null && hasActiveAlarm) {
+                val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+                val cal = Calendar.getInstance().apply {
+                    set(Calendar.HOUR_OF_DAY, savedAlarm.first)
+                    set(Calendar.MINUTE, savedAlarm.second)
+                }
+                val timeStr = timeFormat.format(cal.time)
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(colors.surface, shapes.Card)
+                        .border(1.dp, colors.borderActive, shapes.Card)
+                        .padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "SCHEDULED TARGET",
+                        fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        color = colors.textSecondary,
+                        letterSpacing = 2.sp
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = timeStr,
+                        fontSize = 48.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = colors.textPrimary
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .background(colors.accentTactical, CircleShape)
+                            )
+                            Text(
+                                text = missionBadgeText,
+                                fontSize = 11.sp,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold,
+                                color = colors.accentTactical
+                            )
+                        }
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Switch(
+                                checked = hasActiveAlarm,
+                                onCheckedChange = { armed ->
+                                    if (armed) {
+                                        AlarmScheduler.scheduleDailyAlarm(context, savedAlarm.first, savedAlarm.second)
+                                    } else {
+                                        AlarmScheduler.cancelAlarm(context)
+                                    }
+                                    prefsUpdateTrigger++
+                                },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = Color.Black,
+                                    checkedTrackColor = colors.accentTactical,
+                                    uncheckedThumbColor = colors.textSecondary,
+                                    uncheckedTrackColor = colors.surfaceLow
+                                )
+                            )
+
+                            if (BuildConfig.DEBUG) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .border(1.dp, colors.accentTactical.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                                        .background(colors.surfaceLow)
+                                        .clickable { scheduleTestAlarmIn5Seconds(context) }
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Text(
+                                        text = "TEST 5S",
+                                        fontSize = 10.sp,
+                                        fontFamily = FontFamily.Monospace,
+                                        fontWeight = FontWeight.Bold,
+                                        color = colors.accentTactical
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Bottom-Right Floating Action Button (+ Button) - anchored with 16dp padding
+        FloatingActionButton(
+            onClick = { showAlarmBuilder = true },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(16.dp)
+                .size(64.dp),
+            containerColor = colors.accentTactical,
+            contentColor = Color.Black,
+            shape = RoundedCornerShape(18.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Add,
+                contentDescription = "Configure Alarm",
+                modifier = Modifier.size(32.dp)
+            )
+        }
+
+        if (showAlarmBuilder) {
+            val initialHour = savedAlarm?.first ?: 7
+            val initialMinute = savedAlarm?.second ?: 0
+            AlarmBuilderModal(
+                initialHour = initialHour,
+                initialMinute = initialMinute,
+                onDismiss = { showAlarmBuilder = false },
+                onSaveAndArm = { hour, minute, _ ->
+                    showAlarmBuilder = false
+                    Toast.makeText(context, "Alarm armed for %02d:%02d".format(hour, minute), Toast.LENGTH_SHORT).show()
+                    prefsUpdateTrigger++
+                },
+                onOpenPrivacyPolicy = {
+                    showAlarmBuilder = false
+                    showPrivacyPolicy = true
+                }
+            )
+        }
+
+        if (showPrivacyPolicy) {
+            MorroPrivacyPolicySheet(
+                onDismiss = { showPrivacyPolicy = false }
+            )
         }
     }
 }
 
-/**
- * Cyber-Defense restyled Slice 2a Voice Memo Audio Harness
- */
-@Composable
-fun MemoAudioHarness(
-    isRecording: Boolean,
-    recordingCountdown: Int,
-    hasTempRecorded: Boolean,
-    isPlayingPreview: Boolean,
-    hasRecordedMemo: Boolean,
-    onStartRecording: () -> Unit,
-    onStopRecording: () -> Unit,
-    onCancelRecording: () -> Unit,
-    onPlayPreview: () -> Unit,
-    onSaveMemo: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MorroColors.MidnightBlue, RoundedCornerShape(20.dp))
-            .border(1.5.dp, MorroColors.WhiteSecondary.copy(alpha = 0.1f), RoundedCornerShape(20.dp))
-            .padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        Text(
-            text = "AUDIO GATE HARNESS",
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold,
-            color = MorroColors.WhiteSecondary,
-            letterSpacing = 1.5.sp
-        )
+fun scheduleTestAlarmIn5Seconds(context: Context) {
+    if (!BuildConfig.DEBUG) return
+    val triggerAt = System.currentTimeMillis() + 5_000L
+    val intent = Intent(context, AlarmReceiver::class.java).apply {
+        action = "com.morro.alarm.ACTION_TEST_ALARM"
+        putExtra("is_test_alarm", true)
+    }
+    val pendingIntent = PendingIntent.getBroadcast(
+        context,
+        9999,
+        intent,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+    val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) return
 
-        when {
-            isRecording -> {
-                Text(
-                    text = "RECORDING: ${recordingCountdown}s",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MorroColors.AlertOrange
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Button(
-                        onClick = onStopRecording,
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MorroColors.AlertOrange,
-                            contentColor = MorroColors.WhitePrimary
-                        ),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text("Stop", fontWeight = FontWeight.Bold)
-                    }
-                    OutlinedButton(
-                        onClick = onCancelRecording,
-                        modifier = Modifier.weight(1f),
-                        border = BorderStroke(1.dp, MorroColors.WhiteSecondary.copy(alpha = 0.3f)),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = MorroColors.WhiteSecondary
-                        ),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text("Cancel")
-                    }
-                }
-            }
+    val showIntent = Intent(context, MainActivity::class.java).apply {
+        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+    }
+    val showPendingIntent = PendingIntent.getActivity(
+        context,
+        0,
+        showIntent,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
 
-            hasTempRecorded -> {
-                Text(
-                    text = if (isPlayingPreview) "Playing preview..." else "Temporary recording ready",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MorroColors.ElectricCyan
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Button(
-                        onClick = onPlayPreview,
-                        enabled = !isPlayingPreview,
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MorroColors.MidnightBlue,
-                            contentColor = MorroColors.WhitePrimary
-                        ),
-                        border = BorderStroke(1.dp, MorroColors.WhiteSecondary.copy(alpha = 0.3f)),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text("Preview")
-                    }
-                    Button(
-                        onClick = onSaveMemo,
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MorroColors.ElectricCyan,
-                            contentColor = MorroColors.AmoledBlack
-                        ),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text("Save", fontWeight = FontWeight.Bold)
-                    }
-                }
-                TextButton(
-                    onClick = onCancelRecording,
-                    modifier = Modifier.align(Alignment.CenterHorizontally)
-                ) {
-                    Text(
-                        "Discard & re-record",
-                        color = MorroColors.WhiteSecondary.copy(alpha = 0.6f),
-                        fontSize = 12.sp
-                    )
-                }
-            }
-
-            else -> {
-                Button(
-                    onClick = onStartRecording,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MorroColors.ElectricCyan,
-                        contentColor = MorroColors.AmoledBlack
-                    ),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text(
-                        "Record Commitment (15s)",
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-        }
+    try {
+        alarmManager.setAlarmClock(AlarmManager.AlarmClockInfo(triggerAt, showPendingIntent), pendingIntent)
+        Toast.makeText(context, "Test alarm armed — firing in 5 seconds", Toast.LENGTH_SHORT).show()
+    } catch (e: Exception) {
+        Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
     }
 }

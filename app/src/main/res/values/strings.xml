@@ -4,4 +4,5 @@
     <string name="fire_alarm_button">Fire Alarm in 1 Minute</string>
     <string name="alarm_firing">ALARM FIRING</string>
     <string name="dismiss">Dismiss</string>
+    <string name="target_affirmation">I am executing my plan today.</string>
 </resources>

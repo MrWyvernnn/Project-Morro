@@ -29,20 +29,23 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.morro.alarm.ui.theme.MorroTokens
+import com.morro.alarm.ui.theme.MorroTheme
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * OnboardingActivity: Strict first-run onboarding wizard.
+ * OnboardingActivity: Strict 4-step onboarding wizard.
  *
- * Enforces the core requirements of Slice 3:
- *   1. The Permission Waterfall (POST_NOTIFICATIONS, RECORD_AUDIO, SCHEDULE_EXACT_ALARM).
- *   2. OEM Battery Hardening (ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).
- *   3. The First Promise (recording the initial 15-second commitment memo via MemoStorage).
+ * State Machine:
+ *   Step 1: Request POST_NOTIFICATIONS and RECORD_AUDIO.
+ *   Step 2: Request SCHEDULE_EXACT_ALARM via ACTION_REQUEST_SCHEDULE_EXACT_ALARM.
+ *   Step 3: Trigger Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS for our package.
+ *   Step 4: Force the user to record their first 15-second memo using MemoRecorder and save it to MemoStorage.
  *
- * Users cannot access MainActivity until this flow is completed.
+ * Upon Step 4 completion, saves is_onboarding_complete = true in SharedPreferences and navigates to MainActivity.
  */
 class OnboardingActivity : ComponentActivity() {
 
@@ -60,19 +63,17 @@ class OnboardingActivity : ComponentActivity() {
 
     private val TAG = "OnboardingActivity"
 
-    /** Steps of the onboarding wizard */
+    /** Strict 4-step onboarding state machine */
     enum class Step {
-        NOTIFICATIONS,
-        MICROPHONE,
-        EXACT_ALARMS,
-        BATTERY_HARDENING,
-        FIRST_PROMISE
+        PERMISSIONS,       // Step 1: POST_NOTIFICATIONS & RECORD_AUDIO
+        EXACT_ALARMS,      // Step 2: SCHEDULE_EXACT_ALARM
+        BATTERY_HARDENING, // Step 3: IGNORE_BATTERY_OPTIMIZATIONS
+        FIRST_PROMISE      // Step 4: First 15s commitment memo
     }
 
-    // Wizard navigation state
-    private var currentStep by mutableStateOf(Step.NOTIFICATIONS)
+    private var currentStep by mutableStateOf(Step.PERMISSIONS)
 
-    // Permission and system state tracked in Compose
+    // System & Permission states
     private var hasNotificationPermission by mutableStateOf(false)
     private var hasAudioPermission by mutableStateOf(false)
     private var hasExactAlarmPermission by mutableStateOf(false)
@@ -84,21 +85,12 @@ class OnboardingActivity : ComponentActivity() {
     private var hasTempRecorded by mutableStateOf(false)
     private var isPlayingPreview by mutableStateOf(false)
 
-    // Permission launchers
-    private val notificationLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        hasNotificationPermission = isGranted
-        if (isGranted) {
-            advanceToNextStep()
-        }
-    }
-
-    private val audioLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        hasAudioPermission = isGranted
-        if (isGranted) {
+    // Permission launchers for Step 1
+    private val multiplePermissionsLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        updateSystemStates()
+        if (hasRequiredPermissions()) {
             advanceToNextStep()
         }
     }
@@ -106,26 +98,13 @@ class OnboardingActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         updateSystemStates()
-
-        // Auto-advance to the first uncompleted step
         determineInitialStep()
 
         setContent {
-            MaterialTheme(
-                colorScheme = darkColorScheme(
-                    primary = Color(0xFFFF9E1B),   // Warm Amber
-                    secondary = Color(0xFFE65100), // Muted Orange
-                    background = Color(0xFF000000),// AMOLED Black
-                    surface = Color(0xFF1A1200),   // Dark Amber Surface
-                    onPrimary = Color.Black,
-                    onSecondary = Color.Black,
-                    onBackground = Color(0xFFFFE0B2), // Warm Cream
-                    onSurface = Color(0xFFFFCC80)
-                )
-            ) {
+            MorroTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = Color(0xFF000000)
+                    color = MorroTokens.CanvasRoot
                 ) {
                     OnboardingScreen(
                         currentStep = currentStep,
@@ -137,8 +116,7 @@ class OnboardingActivity : ComponentActivity() {
                         recordingCountdown = recordingCountdown,
                         hasTempRecorded = hasTempRecorded,
                         isPlayingPreview = isPlayingPreview,
-                        onRequestNotification = { requestNotificationPermission() },
-                        onRequestAudio = { requestAudioPermission() },
+                        onRequestPermissions = { requestStep1Permissions() },
                         onRequestExactAlarm = { requestExactAlarmPermission() },
                         onRequestIgnoreBattery = { requestIgnoreBatteryOptimizations() },
                         onStartRecording = { startFirstPromiseRecording() },
@@ -156,36 +134,30 @@ class OnboardingActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        // Re-check permissions and battery status when returning from system dialogs/settings
         updateSystemStates()
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        MemoPlayer.stopPlayback()
-        if (MemoRecorder.isRecording()) {
-            MemoRecorder.cancelRecording(this)
-        }
+        MemoPlayer.release()
+        MemoRecorder.release()
     }
 
     private fun updateSystemStates() {
-        // Notification permission check (API 33+)
         hasNotificationPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             ContextCompat.checkSelfPermission(
                 this,
                 android.Manifest.permission.POST_NOTIFICATIONS
             ) == PackageManager.PERMISSION_GRANTED
         } else {
-            true // Auto-granted on API < 33
+            true
         }
 
-        // Microphone permission check
         hasAudioPermission = ContextCompat.checkSelfPermission(
             this,
             android.Manifest.permission.RECORD_AUDIO
         ) == PackageManager.PERMISSION_GRANTED
 
-        // Exact alarm check (API 31+)
         hasExactAlarmPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
             alarmManager.canScheduleExactAlarms()
@@ -193,18 +165,19 @@ class OnboardingActivity : ComponentActivity() {
             true
         }
 
-        // Battery optimization exemption check (API 23+)
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
         isBatteryOptimizationsIgnored = powerManager.isIgnoringBatteryOptimizations(packageName)
 
-        // Check uncommitted temp memo status
         hasTempRecorded = MemoStorage.hasTempMemo(this)
+    }
+
+    private fun hasRequiredPermissions(): Boolean {
+        return hasNotificationPermission && hasAudioPermission
     }
 
     private fun determineInitialStep() {
         currentStep = when {
-            !hasNotificationPermission -> Step.NOTIFICATIONS
-            !hasAudioPermission -> Step.MICROPHONE
+            !hasRequiredPermissions() -> Step.PERMISSIONS
             !hasExactAlarmPermission -> Step.EXACT_ALARMS
             !isBatteryOptimizationsIgnored -> Step.BATTERY_HARDENING
             else -> Step.FIRST_PROMISE
@@ -213,25 +186,27 @@ class OnboardingActivity : ComponentActivity() {
 
     private fun advanceToNextStep() {
         currentStep = when (currentStep) {
-            Step.NOTIFICATIONS -> Step.MICROPHONE
-            Step.MICROPHONE -> Step.EXACT_ALARMS
+            Step.PERMISSIONS -> Step.EXACT_ALARMS
             Step.EXACT_ALARMS -> Step.BATTERY_HARDENING
             Step.BATTERY_HARDENING -> Step.FIRST_PROMISE
             Step.FIRST_PROMISE -> Step.FIRST_PROMISE
         }
     }
 
-    private fun requestNotificationPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            notificationLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+    private fun requestStep1Permissions() {
+        val permissionsToRequest = mutableListOf<String>()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !hasNotificationPermission) {
+            permissionsToRequest.add(android.Manifest.permission.POST_NOTIFICATIONS)
+        }
+        if (!hasAudioPermission) {
+            permissionsToRequest.add(android.Manifest.permission.RECORD_AUDIO)
+        }
+
+        if (permissionsToRequest.isNotEmpty()) {
+            multiplePermissionsLauncher.launch(permissionsToRequest.toTypedArray())
         } else {
-            hasNotificationPermission = true
             advanceToNextStep()
         }
-    }
-
-    private fun requestAudioPermission() {
-        audioLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
     }
 
     private fun requestExactAlarmPermission() {
@@ -242,7 +217,7 @@ class OnboardingActivity : ComponentActivity() {
                 }
                 startActivity(intent)
             } catch (e: Exception) {
-                Log.w(TAG, "Failed to launch exact alarm settings directly: ${e.message}")
+                Log.w(TAG, "Failed to launch exact alarm settings: ${e.message}")
                 openAppSettings()
             }
         } else {
@@ -260,7 +235,6 @@ class OnboardingActivity : ComponentActivity() {
         } catch (e: Exception) {
             Log.w(TAG, "Direct battery optimization intent failed: ${e.message}")
             try {
-                // Fallback to system battery optimization settings
                 val fallbackIntent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
                 startActivity(fallbackIntent)
             } catch (e2: Exception) {
@@ -278,8 +252,8 @@ class OnboardingActivity : ComponentActivity() {
 
     private fun startFirstPromiseRecording() {
         if (!hasAudioPermission) {
-            Toast.makeText(this, "Microphone permission is required to record.", Toast.LENGTH_SHORT).show()
-            currentStep = Step.MICROPHONE
+            Toast.makeText(this, "Microphone permission is required.", Toast.LENGTH_SHORT).show()
+            currentStep = Step.PERMISSIONS
             return
         }
 
@@ -292,17 +266,17 @@ class OnboardingActivity : ComponentActivity() {
             onError = { err ->
                 Log.e(TAG, "First promise recording error: $err")
                 Toast.makeText(this, "Recording error: $err", Toast.LENGTH_SHORT).show()
-                isRecording = false
+                isRecording = MemoRecorder.isRecording()
             },
             onMaxDurationReached = {
                 Log.d(TAG, "First promise recording 15s cap reached")
-                isRecording = false
+                isRecording = MemoRecorder.isRecording()
                 hasTempRecorded = true
             }
         )
 
         lifecycleScope.launch {
-            while (isRecording && recordingCountdown > 0) {
+            while (MemoRecorder.isRecording() && recordingCountdown > 0) {
                 delay(1000)
                 if (!isRecording) break
                 recordingCountdown--
@@ -350,15 +324,16 @@ class OnboardingActivity : ComponentActivity() {
 
         val saved = MemoStorage.saveMemo(this)
         if (saved) {
-            // Mark onboarding completed in preferences
+            // Synchronous commit: MainActivity.isOnboardingComplete() reads this flag
+            // immediately after we launch MainActivity; it must be on disk before the
+            // Intent fires.
             getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 .edit()
                 .putBoolean(KEY_ONBOARDING_COMPLETED, true)
-                .apply()
+                .commit()
 
             Toast.makeText(this, "First promise recorded!", Toast.LENGTH_SHORT).show()
 
-            // Navigate to MainActivity and clear onboarding from backstack
             val mainIntent = Intent(this, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
             }
@@ -372,11 +347,9 @@ class OnboardingActivity : ComponentActivity() {
     @Deprecated("Deprecated in Java")
     @Suppress("DEPRECATION", "MissingSuperCall")
     override fun onBackPressed() {
-        // Allow going back to a previous onboarding step, or exit app if on first step
         when (currentStep) {
-            Step.NOTIFICATIONS -> finish()
-            Step.MICROPHONE -> currentStep = Step.NOTIFICATIONS
-            Step.EXACT_ALARMS -> currentStep = Step.MICROPHONE
+            Step.PERMISSIONS -> finish()
+            Step.EXACT_ALARMS -> currentStep = Step.PERMISSIONS
             Step.BATTERY_HARDENING -> currentStep = Step.EXACT_ALARMS
             Step.FIRST_PROMISE -> currentStep = Step.BATTERY_HARDENING
         }
@@ -394,8 +367,7 @@ fun OnboardingScreen(
     recordingCountdown: Int,
     hasTempRecorded: Boolean,
     isPlayingPreview: Boolean,
-    onRequestNotification: () -> Unit,
-    onRequestAudio: () -> Unit,
+    onRequestPermissions: () -> Unit,
     onRequestExactAlarm: () -> Unit,
     onRequestIgnoreBattery: () -> Unit,
     onStartRecording: () -> Unit,
@@ -416,7 +388,6 @@ fun OnboardingScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceBetween
     ) {
-        // Header Section
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.fillMaxWidth()
@@ -438,13 +409,11 @@ fun OnboardingScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Step Progress Indicator
             StepProgressBar(currentStep = currentStep)
         }
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Step Content Card
         AnimatedContent(
             targetState = currentStep,
             label = "StepTransition"
@@ -462,18 +431,11 @@ fun OnboardingScreen(
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     when (step) {
-                        OnboardingActivity.Step.NOTIFICATIONS -> {
-                            StepNotificationContent(
-                                isGranted = hasNotificationPermission,
-                                onRequest = onRequestNotification,
-                                onNext = onNextStep,
-                                onOpenSettings = onOpenAppSettings
-                            )
-                        }
-                        OnboardingActivity.Step.MICROPHONE -> {
-                            StepMicrophoneContent(
-                                isGranted = hasAudioPermission,
-                                onRequest = onRequestAudio,
+                        OnboardingActivity.Step.PERMISSIONS -> {
+                            StepPermissionsContent(
+                                hasNotification = hasNotificationPermission,
+                                hasAudio = hasAudioPermission,
+                                onRequest = onRequestPermissions,
                                 onNext = onNextStep,
                                 onOpenSettings = onOpenAppSettings
                             )
@@ -512,7 +474,6 @@ fun OnboardingScreen(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Footer Note
         Text(
             text = "100% offline • No accounts • Local storage only",
             style = MaterialTheme.typography.labelSmall,
@@ -546,24 +507,27 @@ fun StepProgressBar(currentStep: OnboardingActivity.Step) {
 }
 
 // -------------------------------------------------------------
-// STEP 1: NOTIFICATIONS
+// STEP 1: PERMISSIONS (Notifications & Microphone)
 // -------------------------------------------------------------
 @Composable
-fun StepNotificationContent(
-    isGranted: Boolean,
+fun StepPermissionsContent(
+    hasNotification: Boolean,
+    hasAudio: Boolean,
     onRequest: () -> Unit,
     onNext: () -> Unit,
     onOpenSettings: () -> Unit
 ) {
+    val bothGranted = hasNotification && hasAudio
+
     Text(
-        text = "1. Notifications",
+        text = "1. Required Permissions",
         style = MaterialTheme.typography.titleLarge,
         color = Color(0xFFFF9E1B),
         fontWeight = FontWeight.SemiBold
     )
 
     Text(
-        text = "Morro wakes you with a full-screen alarm over your lock screen. Android requires notification access to display this window and alert you when it's time to wake.",
+        text = "Morro requires two permissions to function:\n\n• Notifications: To display full-screen alarm alerts over your lock screen.\n• Microphone: To record your daily commitment memos.",
         style = MaterialTheme.typography.bodyMedium,
         color = Color(0xFFFFCC80),
         textAlign = TextAlign.Center
@@ -571,9 +535,9 @@ fun StepNotificationContent(
 
     Spacer(modifier = Modifier.height(8.dp))
 
-    if (isGranted) {
+    if (bothGranted) {
         Text(
-            text = "✓ Notification access granted",
+            text = "✓ Notifications & Microphone granted",
             style = MaterialTheme.typography.bodyMedium,
             color = Color(0xFF4CAF50),
             fontWeight = FontWeight.Bold
@@ -583,7 +547,7 @@ fun StepNotificationContent(
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9E1B), contentColor = Color.Black),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text("Next: Microphone")
+            Text("Next: Exact Timing")
         }
     } else {
         Button(
@@ -591,7 +555,7 @@ fun StepNotificationContent(
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9E1B), contentColor = Color.Black),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text("Allow Notifications")
+            Text("Grant Permissions")
         }
 
         OutlinedButton(
@@ -605,66 +569,7 @@ fun StepNotificationContent(
 }
 
 // -------------------------------------------------------------
-// STEP 2: MICROPHONE
-// -------------------------------------------------------------
-@Composable
-fun StepMicrophoneContent(
-    isGranted: Boolean,
-    onRequest: () -> Unit,
-    onNext: () -> Unit,
-    onOpenSettings: () -> Unit
-) {
-    Text(
-        text = "2. Microphone Access",
-        style = MaterialTheme.typography.titleLarge,
-        color = Color(0xFFFF9E1B),
-        fontWeight = FontWeight.SemiBold
-    )
-
-    Text(
-        text = "Morro requires microphone permission to record your daily 15-second commitments. Your audio never leaves this device — there are zero network calls and no cloud storage.",
-        style = MaterialTheme.typography.bodyMedium,
-        color = Color(0xFFFFCC80),
-        textAlign = TextAlign.Center
-    )
-
-    Spacer(modifier = Modifier.height(8.dp))
-
-    if (isGranted) {
-        Text(
-            text = "✓ Microphone access granted",
-            style = MaterialTheme.typography.bodyMedium,
-            color = Color(0xFF4CAF50),
-            fontWeight = FontWeight.Bold
-        )
-        Button(
-            onClick = onNext,
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9E1B), contentColor = Color.Black),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Next: Exact Alarms")
-        }
-    } else {
-        Button(
-            onClick = onRequest,
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9E1B), contentColor = Color.Black),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Allow Microphone")
-        }
-
-        OutlinedButton(
-            onClick = onOpenSettings,
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFFFB74D)),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Open App Settings")
-        }
-    }
-}
-
-// -------------------------------------------------------------
-// STEP 3: EXACT ALARMS
+// STEP 2: EXACT ALARMS
 // -------------------------------------------------------------
 @Composable
 fun StepExactAlarmContent(
@@ -673,7 +578,7 @@ fun StepExactAlarmContent(
     onNext: () -> Unit
 ) {
     Text(
-        text = "3. Exact Timing",
+        text = "2. Exact Timing",
         style = MaterialTheme.typography.titleLarge,
         color = Color(0xFFFF9E1B),
         fontWeight = FontWeight.SemiBold
@@ -714,7 +619,7 @@ fun StepExactAlarmContent(
 }
 
 // -------------------------------------------------------------
-// STEP 4: BATTERY HARDENING (CRITICAL)
+// STEP 3: BATTERY HARDENING
 // -------------------------------------------------------------
 @Composable
 fun StepBatteryContent(
@@ -723,7 +628,7 @@ fun StepBatteryContent(
     onNext: () -> Unit
 ) {
     Text(
-        text = "4. OEM Battery Hardening",
+        text = "3. OEM Battery Hardening",
         style = MaterialTheme.typography.titleLarge,
         color = Color(0xFFFF9E1B),
         fontWeight = FontWeight.SemiBold
@@ -775,7 +680,7 @@ fun StepBatteryContent(
 }
 
 // -------------------------------------------------------------
-// STEP 5: THE FIRST PROMISE
+// STEP 4: THE FIRST PROMISE
 // -------------------------------------------------------------
 @Composable
 fun StepFirstPromiseContent(
@@ -790,7 +695,7 @@ fun StepFirstPromiseContent(
     onSave: () -> Unit
 ) {
     Text(
-        text = "5. Your First Promise",
+        text = "4. Your First Promise",
         style = MaterialTheme.typography.titleLarge,
         color = Color(0xFFFF9E1B),
         fontWeight = FontWeight.SemiBold

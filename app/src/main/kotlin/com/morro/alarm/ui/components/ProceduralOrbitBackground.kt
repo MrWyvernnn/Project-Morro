@@ -12,6 +12,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.unit.dp
+import com.morro.alarm.ui.theme.morroColors
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.PI
@@ -28,6 +29,7 @@ import kotlin.math.PI
  */
 @Composable
 fun ProceduralOrbitBackground(modifier: Modifier = Modifier) {
+    val colors = morroColors()
     val infiniteTransition = rememberInfiniteTransition(label = "orbitAnimation")
 
     // Slow rotation: 18-second loop
@@ -57,10 +59,10 @@ fun ProceduralOrbitBackground(modifier: Modifier = Modifier) {
         val centerY = size.height / 2.2f
 
         // Draw concentric orbital rings
-        drawOrbitalRings(centerX, centerY, rotationDegrees, alpha)
+        drawOrbitalRings(centerX, centerY, rotationDegrees, alpha, colors)
 
         // Draw orbiting particle dots
-        drawOrbitingParticles(centerX, centerY, rotationDegrees, alpha)
+        drawOrbitingParticles(centerX, centerY, rotationDegrees, alpha, colors)
     }
 }
 
@@ -68,9 +70,11 @@ private fun DrawScope.drawOrbitalRings(
     centerX: Float,
     centerY: Float,
     rotationDegrees: Float,
-    alpha: Float
+    alpha: Float,
+    colors: com.morro.alarm.ui.theme.MorroColorPalette
 ) {
-    val orbitColor = Color.White.copy(alpha = alpha * 0.05f) // Subtle warm white orbits
+    // Use AccentTactical with very low alpha for subtle warm orbits on light canvas
+    val orbitColor = colors.accentTactical.copy(alpha = alpha * 0.05f)
 
     // Ring 1: Large outer ring
     drawOrbit(
@@ -98,9 +102,6 @@ private fun DrawScope.drawOrbitalRings(
         strokeColor = orbitColor.copy(alpha = alpha * 0.10f),
         rotation = rotationDegrees * 1.2f
     )
-
-    // Deep void core: subtle pulsing circle at center (no glow)
-    // Removed to keep it minimal
 }
 
 private fun DrawScope.drawOrbit(
@@ -137,9 +138,11 @@ private fun DrawScope.drawOrbitingParticles(
     centerX: Float,
     centerY: Float,
     rotationDegrees: Float,
-    alpha: Float
+    alpha: Float,
+    colors: com.morro.alarm.ui.theme.MorroColorPalette
 ) {
-    val particleColor = Color(0xFF00F0FF).copy(alpha = alpha * 0.8f)
+    // Use AccentBubbly for orbiting particles (glow only)
+    val particleColor = colors.accentBubbly.copy(alpha = alpha * 0.8f)
     val particleRadius = 3.dp.toPx()
 
     // Particle 1: Outer ring orbit

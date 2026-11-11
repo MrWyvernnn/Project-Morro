@@ -14,9 +14,13 @@ class BootReceiver : BroadcastReceiver() {
         if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
             val nextAlarmTime = AlarmScheduler.getNextAlarmTime(context)
 
-            // Only reschedule if alarm exists and is in the future
+            // Reschedule future alarm, or recalculate next occurrence from saved time
             if (nextAlarmTime != null && nextAlarmTime > System.currentTimeMillis()) {
                 AlarmScheduler.scheduleAlarm(context, nextAlarmTime)
+            } else {
+                AlarmScheduler.getSavedAlarmTime(context)?.let { (hour, minute) ->
+                    AlarmScheduler.scheduleDailyAlarm(context, hour, minute)
+                }
             }
         }
     }

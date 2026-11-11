@@ -13,7 +13,7 @@ No new type definitions. Uses existing `String` paths, `SharedPreferences`, and 
    - Singleton `object MemoStorage`
    - Constants: `PREFS_NAME = "morro_prefs"`, `KEY_LATEST_MEMO_PATH = "latest_memo_path"`, `FILENAME_LATEST = "latest_memo.m4a"`, `FILENAME_TEMP = "temp_memo.m4a"`
    - `fun getLatestMemoPath(context: Context): String?`
-   - `fun saveMemo(context: Context): Boolean` — atomic replace: delete latest, then temp.renameTo(latest), store path in prefs
+   - `fun saveMemo(context: Context): Boolean` — single-operation replacement using java.nio.file.Files.move with StandardCopyOption.REPLACE_EXISTING without deleting latest first, and synchronous .commit()
    - `fun clearTemp(context: Context)` — deletes temp_memo.m4a if exists
    - `fun hasSavedMemo(context: Context): Boolean`
 
@@ -22,7 +22,7 @@ No new type definitions. Uses existing `String` paths, `SharedPreferences`, and 
    - Constants: `MAX_DURATION_MS = 15_000`, `OUTPUT_FORMAT = MediaRecorder.OutputFormat.MPEG_4`, `AUDIO_ENCODER = MediaRecorder.AudioEncoder.AAC`, `AUDIO_SOURCE = MediaRecorder.AudioSource.MIC`
    - `fun startRecording(context: Context, onError: (String) -> Unit, onMaxDurationReached: () -> Unit)`
    - `fun stopRecording(context: Context): Boolean`
-   - `fun cancelRecording(context: Context)` — calls `MemoStorage.clearTemp(context)`
+   - `fun cancelRecording(context: Context)` — calls .stop(), .release(), and nullifies the MediaRecorder before clearing the temp file via `MemoStorage.clearTemp(context)`
    - `fun isRecording(): Boolean`
 
 3. **`app/src/main/kotlin/com/morro/alarm/MemoPlayer.kt`**
@@ -38,7 +38,7 @@ No new type definitions. Uses existing `String` paths, `SharedPreferences`, and 
 
 5. **`app/src/main/kotlin/com/morro/alarm/MainActivity.kt`**
    - Add `ActivityResultContracts.RequestPermission()` launcher for `RECORD_AUDIO`
-   - Add `requestRecordAudioPermission()` called in `onCreate`
+   - Add `requestRecordAudioPermission()` called strictly on first Record button tap, never in `onCreate`
    - Replace `MainScreen` with test harness Composable containing:
      - Record button (starts recording, shows countdown 15→0)
      - Stop button (stops early, enables Preview/Re-record/Save)
@@ -60,7 +60,7 @@ No new type definitions. Uses existing `String` paths, `SharedPreferences`, and 
 | Function | Signature | Purpose |
 |----------|-----------|---------|
 | `getLatestMemoPath` | `fun getLatestMemoPath(context: Context): String?` | Retrieve saved memo path from prefs; validate file exists |
-| `saveMemo` | `fun saveMemo(context: Context): Boolean` | Atomic replace temp→latest; update prefs |
+| `saveMemo` | `fun saveMemo(context: Context): Boolean` | Single-operation replacement (NIO Files.move with REPLACE_EXISTING); synchronous .commit() |
 | `clearTemp` | `fun clearTemp(context: Context)` | Delete temp file on cancel/error |
 | `hasSavedMemo` | `fun hasSavedMemo(context: Context): Boolean` | Quick existence check |
 
@@ -69,7 +69,7 @@ No new type definitions. Uses existing `String` paths, `SharedPreferences`, and 
 |----------|-----------|---------|
 | `startRecording` | `fun startRecording(context: Context, onError: (String) -> Unit, onMaxDurationReached: () -> Unit)` | Begin recording to temp file; auto-stop at 15s |
 | `stopRecording` | `fun stopRecording(context: Context): Boolean` | Stop cleanly; return success |
-| `cancelRecording` | `fun cancelRecording(context: Context)` | Abort without saving; clean up temp |
+| `cancelRecording` | `fun cancelRecording(context: Context)` | Stop, release, and nullify recorder before clearing temp file |
 | `isRecording` | `fun isRecording(): Boolean` | State query |
 
 ### MemoPlayer
@@ -82,7 +82,7 @@ No new type definitions. Uses existing `String` paths, `SharedPreferences`, and 
 ### MainActivity (new/modified)
 | Function | Signature | Purpose |
 |----------|-----------|---------|
-| `requestRecordAudioPermission` | `private fun requestRecordAudioPermission()` | Runtime permission request with rationale |
+| `requestRecordAudioPermission` | `private fun requestRecordAudioPermission()` | Runtime permission request with rationale; called only on first Record button tap, never in onCreate |
 | `MainScreen` | `@Composable fun MainScreen(...)` | Replaced with test harness UI |
 
 ## Classes
@@ -105,7 +105,7 @@ No new type definitions. Uses existing `String` paths, `SharedPreferences`, and 
 ## Testing
 - **Manual verification on device** (per CLAUDE.md: "Test on my real Android phone. Never declare an alarm feature working from an emulator run alone.")
 - Test scenarios:
-  1. Grant RECORD_AUDIO permission → Record 5s → Stop → Preview plays → Save → Verify `latest_memo.m4a` exists in app files dir
+  1. On first Record tap, grant RECORD_AUDIO permission → Record 5s → Stop → Preview plays → Save → Verify `latest_memo.m4a` exists in app files dir
   2. Record → Cancel → Verify `latest_memo.m4a` unchanged (not deleted)
   3. Record full 15s → Auto-stop → Preview → Save
   4. Record → Stop → Re-record → Verify temp replaced

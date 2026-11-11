@@ -3,8 +3,11 @@ package com.morro.alarm
 import android.content.Context
 import android.media.AudioAttributes
 import android.media.MediaPlayer
+import android.os.PowerManager
 import android.util.Log
 import java.io.File
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * MemoPlayer: Plays a recorded memo clip.
@@ -16,7 +19,7 @@ import java.io.File
  * Playback is deliberately linear: there is no seek and no skip. The clip runs
  * to the end and then reports completion, which is what the alarm gate needs.
  *
- * Uses prepareAsync() with OnPreparedListener for robust startup on all devices.
+ * Uses non-blocking prepareAsync() with OnPreparedListener to prevent UI thread lockups.
  */
 object MemoPlayer {
 
@@ -36,18 +39,39 @@ object MemoPlayer {
     private var pendingError: ((String) -> Unit)? = null
 
     /**
+     * Reactive state flow for playback state. Compose can collect this via
+     * `collectAsStateWithLifecycle()` so UI survives rotation and stays in sync
+     * with the active hardware state even after the Activity is recreated.
+     */
+    private val _isPlayingFlow = MutableStateFlow(false)
+    val isPlayingFlow: kotlinx.coroutines.flow.StateFlow<Boolean> = _isPlayingFlow.asStateFlow()
+
+    /**
+     * Syncs the internal playing state with the reactive flow.
+     * Called whenever MediaPlayer is created or released.
+     */
+    private fun syncPlayingFlow() {
+        _isPlayingFlow.value = try {
+            mediaPlayer?.isPlaying == true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /**
      * Plays the clip at [filePath] to the end.
      *
      * @param onCompletion called when the clip finishes on its own.
      * @param onError called with a human-readable reason if playback fails.
      */
+    @Synchronized
     fun startPlayback(
         context: Context,
         filePath: String,
         onCompletion: () -> Unit,
         onError: (String) -> Unit
     ) {
-        stopPlayback()
+        stopAndReleasePlayer()
 
         val file = File(filePath)
         if (!file.exists() || file.length() == 0L) {
@@ -61,59 +85,71 @@ object MemoPlayer {
         try {
             mediaPlayer = MediaPlayer().apply {
                 setAudioAttributes(audioAttributes)
+                setWakeMode(context.applicationContext, PowerManager.PARTIAL_WAKE_LOCK)
                 setDataSource(file.absolutePath)
                 setOnCompletionListener {
                     Log.d(TAG, "Playback completed")
                     val completion = pendingCompletion
-                    releasePlayer()
+                    stopAndReleasePlayer()
                     completion?.invoke()
                 }
                 setOnErrorListener { _, what, extra ->
                     Log.w(TAG, "MediaPlayer error what=$what extra=$extra")
                     val error = pendingError
-                    releasePlayer()
+                    stopAndReleasePlayer()
                     error?.invoke("Playback failed (code $what)")
                     true
                 }
-                setOnPreparedListener {
-                    Log.d(TAG, "MediaPlayer prepared, starting playback")
-                    start()
+                setOnPreparedListener { mp ->
+                    Log.d(TAG, "MediaPlayer prepared asynchronously, starting playback")
+                    try {
+                        mp.start()
+                        syncPlayingFlow()
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error starting MediaPlayer on prepared", e)
+                        stopAndReleasePlayer()
+                        onError("Could not start playback: ${e.message}")
+                    }
                 }
                 prepareAsync()
             }
-            Log.d(TAG, "Prepared async for memo: $filePath")
+            Log.d(TAG, "prepareAsync called for memo: $filePath")
         } catch (e: Exception) {
             Log.e(TAG, "Could not start playback", e)
-            releasePlayer()
+            stopAndReleasePlayer()
             onError(e.message ?: "Could not play memo")
         }
     }
 
     /** Stops playback and releases the player. Safe to call repeatedly. */
-    fun stopPlayback() {
+    @Synchronized
+    fun stopAndReleasePlayer() {
         pendingCompletion = null
         pendingError = null
         try {
-            mediaPlayer?.apply {
-                if (isPlaying) stop()
-                release()
+            mediaPlayer?.let { player ->
+                try {
+                    if (player.isPlaying) player.stop()
+                } catch (ignored: Exception) {}
+                player.reset()
+                player.release()
             }
         } catch (e: Exception) {
-            Log.w(TAG, "Error stopping playback", e)
-            try { mediaPlayer?.release() } catch (_: Exception) { }
+            Log.w(TAG, "Error stopping and releasing player", e)
         }
         mediaPlayer = null
+        syncPlayingFlow()
     }
 
-    /** True while a clip is playing. */
-    fun isPlaying(): Boolean = mediaPlayer?.isPlaying == true
+    fun stopPlayback() = stopAndReleasePlayer()
 
-    private fun releasePlayer() {
-        try {
-            mediaPlayer?.release()
-        } catch (e: Exception) {
-            Log.w(TAG, "Error releasing MediaPlayer", e)
-        }
-        mediaPlayer = null
+    /** Releases the underlying MediaPlayer and nullifies the instance. */
+    fun release() = stopAndReleasePlayer()
+
+    /** True while a clip is playing. */
+    fun isPlaying(): Boolean = try {
+        mediaPlayer?.isPlaying == true
+    } catch (e: Exception) {
+        false
     }
 }
