@@ -628,15 +628,21 @@ private fun ScreenMissionAndClockHub(
 
         // Alarm Builder Modal
         if (showBuilderModal) {
-            AlarmBuilderModal(
-                initialHour = wakeHour,
-                initialMinute = wakeMinute,
+            AlarmBuilderSheet(
+                isVisible = showBuilderModal,
                 onDismiss = { showBuilderModal = false },
-                onSaveAndArm = { h, m, mission ->
-                    onAlarmConfigured(h, m, mission)
-                    showBuilderModal = false
-                },
-                onOpenPrivacyPolicy = onOpenPrivacyPolicy
+                fabCenter = Offset(0f, 0f),
+                content = {
+                    AlarmBuilderSheetContent(
+                        initialHour = wakeHour,
+                        initialMinute = wakeMinute,
+                        onDismiss = { showBuilderModal = false },
+                        onSave = { hour, minute, mission ->
+                            onAlarmConfigured(hour, minute, mission)
+                            showBuilderModal = false
+                        }
+                    )
+                }
             )
         }
     }
