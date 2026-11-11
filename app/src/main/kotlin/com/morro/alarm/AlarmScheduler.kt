@@ -35,6 +35,15 @@ object AlarmScheduler {
     const val KEY_ALARM_MINUTE = "alarm_minute"
     private const val ALARM_REQUEST_CODE = 1001
 
+    /** Single guarded write for the alarm time prefs, with a mounted check. */
+    private val alarmTimePrefs: SharedPreferences
+        get() = try {
+            context.getSharedPreferences("morro_prefs", Context.MODE_PRIVATE)
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not open alarm time prefs", e)
+            throw e
+        }
+
     /** The type of wake-up mission the user has selected */
     enum class MissionType {
         MATH,
@@ -91,11 +100,10 @@ object AlarmScheduler {
         // If setAlarmClock() failed (e.g. exact alarm permission revoked),
         // reading these prefs would falsely show the alarm as "armed" when it isn't.
         if (scheduled) {
-            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                .edit()
+            alarmTimePrefs.edit()
                 .putInt(KEY_ALARM_HOUR, hour)
                 .putInt(KEY_ALARM_MINUTE, minute)
-                .commit()
+                .apply()
         }
         return scheduled
     }
@@ -201,25 +209,17 @@ object AlarmScheduler {
     }
 
     private fun savePrefs(context: Context, timeMillis: Long) {
+        val fmt = SimpleDateFormat("h:mm a", Locale.getDefault())
+        val formatted = fmt.format(Date(timeMillis))
         try {
             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 .edit()
                 .putLong(KEY_NEXT_ALARM_TIME, timeMillis)
-                .putString(KEY_NEXT_ALARM_FORMATTED, format)
+                .putString(KEY_NEXT_ALARM_FORMATTED, formatted)
                 .commit()
         } catch (e: Exception) {
             Log.w(TAG, "Failed to persist alarm prefs", e)
         }
-    }
-        val fmt = SimpleDateFormat("h:mm a", Locale.getDefault())
-        val formatted = fmt.format(Date(timeMillis))
-        // Synchronous commit: BootReceiver and RescheduleReceiver read this on reboot,
-        // so the value must be durable before the caller returns.
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit()
-            .putLong(KEY_NEXT_ALARM_TIME, timeMillis)
-            .putString(KEY_NEXT_ALARM_FORMATTED, formatted)
-            .commit()
     }
 
     private fun clearPrefs(context: Context) {
