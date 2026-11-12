@@ -1221,9 +1221,9 @@ private fun PhotoTargetSheet(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    items(PhotoTargetPool.ALL_ITEMS) { itemName ->
-                        val isSelected = localSelectedItems.contains(itemName)
-                        val emoji = itemEmojiMap[itemName] ?: "📦"
+                    items(PhotoTargetPool.ITEMS) { item ->
+                        val isSelected = localSelectedItems.contains(item.id)
+                        val emoji = itemEmojiMap[item.displayName] ?: "📦"
 
                         Box(
                             modifier = Modifier
@@ -1241,9 +1241,9 @@ private fun PhotoTargetSheet(
                                 .clip(RoundedCornerShape(16.dp))
                                 .clickable {
                                     localSelectedItems = if (isSelected) {
-                                        localSelectedItems - itemName
+                                        localSelectedItems - item.id
                                     } else {
-                                        localSelectedItems + itemName
+                                        localSelectedItems + item.id
                                     }
                                 }
                                 .padding(12.dp)
@@ -1268,7 +1268,7 @@ private fun PhotoTargetSheet(
                                     }
                                     Spacer(modifier = Modifier.width(10.dp))
                                     Text(
-                                        text = itemName,
+                                        text = item.displayName,
                                         style = typo.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                                         color = if (isSelected) colors.textPrimary else colors.textSecondary,
                                         maxLines = 2,
@@ -1345,7 +1345,7 @@ private fun FilterPillsRow(
         item {
             FilterChip(
                 selected = false,
-                onClick = { onSelectionChange(PhotoTargetPool.COMMON_10_ITEMS.toSet()) },
+                onClick = { onSelectionChange(PhotoTargetPool.COMMON_10_IDS.toSet()) },
                 label = { Text("✨ Common 10", style = typo.labelLarge) },
                 colors = FilterChipDefaults.filterChipColors(
                     containerColor = colors.surfaceLow,
@@ -1357,7 +1357,7 @@ private fun FilterPillsRow(
         item {
             FilterChip(
                 selected = false,
-                onClick = { onSelectionChange(PhotoTargetPool.ALL_ITEMS.toSet()) },
+                onClick = { onSelectionChange(PhotoTargetPool.ITEMS.map { it.id }.toSet()) },
                 label = { Text("Select All 30", style = typo.labelLarge) },
                 colors = FilterChipDefaults.filterChipColors(
                     containerColor = colors.surfaceLow,
@@ -1369,7 +1369,7 @@ private fun FilterPillsRow(
         item {
             FilterChip(
                 selected = false,
-                onClick = { onSelectionChange(setOf("Toothbrush", "Sink / Faucet", "Mirror", "Towel", "Scissors")) },
+                onClick = { onSelectionChange(setOf("toothbrush", "sink", "mirror", "towel", "scissors")) },
                 label = { Text("Bathroom", style = typo.labelLarge) },
                 colors = FilterChipDefaults.filterChipColors(
                     containerColor = colors.surfaceLow,
@@ -1381,7 +1381,7 @@ private fun FilterPillsRow(
         item {
             FilterChip(
                 selected = false,
-                onClick = { onSelectionChange(setOf("Keyboard", "Computer Mouse", "Monitor / TV", "Laptop", "Remote Control", "Headphones / Earbuds", "Desk / Table", "Pen / Pencil", "Lamp / Light")) },
+                onClick = { onSelectionChange(setOf("keyboard", "mouse", "monitor", "laptop", "remote", "headphones", "desk", "pen", "lamp")) },
                 label = { Text("Desk & Tech", style = typo.labelLarge) },
                 colors = FilterChipDefaults.filterChipColors(
                     containerColor = colors.surfaceLow,
@@ -1393,7 +1393,7 @@ private fun FilterPillsRow(
         item {
             FilterChip(
                 selected = false,
-                onClick = { onSelectionChange(setOf("Cup / Mug", "Water Bottle", "Spoon", "Fork")) },
+                onClick = { onSelectionChange(setOf("cup", "bottle", "spoon", "fork")) },
                 label = { Text("Kitchen", style = typo.labelLarge) },
                 colors = FilterChipDefaults.filterChipColors(
                     containerColor = colors.surfaceLow,
