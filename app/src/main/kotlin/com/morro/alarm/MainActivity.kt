@@ -30,8 +30,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
@@ -40,6 +42,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.morro.alarm.mission.MissionPrefs
 import com.morro.alarm.mission.MissionType
 import com.morro.alarm.ui.components.AlarmBuilderSheet
+import com.morro.alarm.ui.components.AlarmBuilderSheetContent
 import com.morro.alarm.ui.components.MorroAnalogClock
 import com.morro.alarm.ui.components.MorroPrivacyPolicySheet
 import com.morro.alarm.ui.theme.MorroTheme
@@ -381,17 +384,20 @@ fun MainAlarmScreen(context: Context) {
             val initialHour = savedAlarm?.first ?: 7
             val initialMinute = savedAlarm?.second ?: 0
             AlarmBuilderSheet(
-                initialHour = savedAlarm?.first ?: 7,
-                initialMinute = savedAlarm?.second ?: 0,
+                isVisible = showAlarmBuilder,
                 onDismiss = { showAlarmBuilder = false },
-                onSaveAndArm = { hour, minute, _ ->
-                    showAlarmBuilder = false
-                    Toast.makeText(context, "Alarm armed for %02d:%02d".format(hour, minute), Toast.LENGTH_SHORT).show()
-                    prefsUpdateTrigger++
-                },
-                onOpenPrivacyPolicy = {
-                    showAlarmBuilder = false
-                    showPrivacyPolicy = true
+                fabCenter = Offset(0f, 0f),
+                content = {
+                    AlarmBuilderSheetContent(
+                        initialHour = initialHour,
+                        initialMinute = initialMinute,
+                        onDismiss = { showAlarmBuilder = false },
+                        onSave = { hour, minute, _ ->
+                            showAlarmBuilder = false
+                            Toast.makeText(context, "Alarm armed for %02d:%02d".format(hour, minute), Toast.LENGTH_SHORT).show()
+                            prefsUpdateTrigger++
+                        }
+                    )
                 }
             )
         }

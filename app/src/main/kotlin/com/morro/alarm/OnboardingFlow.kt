@@ -14,12 +14,17 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -28,7 +33,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.morro.alarm.mission.MissionPrefs
 import com.morro.alarm.mission.MissionType
+import com.morro.alarm.ui.components.AlarmBuilderSheet
+import com.morro.alarm.ui.components.AlarmBuilderSheetContent
 import com.morro.alarm.ui.components.MorroAnalogClock
+import com.morro.alarm.ui.components.MorroCard
 import com.morro.alarm.ui.components.MorroGhostMascot
 import com.morro.alarm.ui.components.MorroPrimaryButton
 import com.morro.alarm.ui.components.MorroPrivacyPolicySheet
@@ -653,7 +661,7 @@ private fun ScreenMissionAndClockHub(
 private fun MissionOptionChip(
     title: String,
     subtitle: String,
-    icon: androidx.compose.material.icons.filled.Icon,
+    icon: ImageVector,
     isSelected: Boolean,
     onSelect: () -> Unit
 ) {
@@ -845,6 +853,7 @@ private fun ScreenContract(
         }
     }
 
+    val shapes = morroShapes()
     val colors = morroColors()
     val typo = morroTypography()
 
