@@ -1,4 +1,4 @@
-package com.morro.alarm
+package com.marro.alarm
 
 import android.app.KeyguardManager
 import android.os.Build
@@ -12,14 +12,39 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.TextSelectionColors
-import androidx.compose.material3.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextFieldColors
 import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -30,14 +55,21 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
-import com.morro.alarm.mission.MissionPrefs
-import com.morro.alarm.mission.MissionType
-import com.morro.alarm.mission.PhotoMissionScreen
-import com.morro.alarm.mission.PhotoTargetPool
-import com.morro.alarm.mission.QrMissionScreen
-import com.morro.alarm.ui.theme.MorroTheme
-import com.morro.alarm.ui.theme.morroColors
-import com.morro.alarm.ui.theme.morroTypography
+import com.marro.alarm.AlarmForegroundService
+import com.marro.alarm.AlarmScheduler
+import com.marro.alarm.AlarmSoundPlayer
+import com.marro.alarm.MathEngine
+import com.marro.alarm.MemoPlayer
+import com.marro.alarm.MemoRecorder
+import com.marro.alarm.MemoStorage
+import com.marro.alarm.mission.MissionPrefs
+import com.marro.alarm.mission.MissionType
+import com.marro.alarm.mission.PhotoMissionScreen
+import com.marro.alarm.mission.PhotoTargetPool
+import com.marro.alarm.mission.QrMissionScreen
+import com.marro.alarm.ui.theme.MorroTheme
+import com.marro.alarm.ui.theme.morroColors
+import com.marro.alarm.ui.theme.morroTypography
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -66,7 +98,6 @@ class AlarmActivity : ComponentActivity() {
     private var missionType by mutableStateOf(AlarmScheduler.MissionType.MATH)
     private var activeMissionType by mutableStateOf(MissionType.VOICE_MEMO)
 
-    // 30-second mission grace window state
     private var missionGraceSeconds by mutableIntStateOf(30)
     private var graceJob: Job? = null
 
@@ -78,7 +109,7 @@ class AlarmActivity : ComponentActivity() {
 
     // Recording gate state for tomorrow's commitment
     private var isRecording by mutableStateOf(false)
-    private var recordingCountdown by mutableStateOf(15)
+    private var recordingCountdown by mutableIntStateOf(15)
 
     private val TAG = "AlarmActivity"
     private var wakeLock: PowerManager.WakeLock? = null
@@ -93,8 +124,8 @@ class AlarmActivity : ComponentActivity() {
             @Suppress("DEPRECATION")
             window.addFlags(
                 WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
-                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+                    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+                    WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
             )
         } else {
             setShowWhenLocked(true)
@@ -104,15 +135,17 @@ class AlarmActivity : ComponentActivity() {
 
         // Request keyguard dismissal on API 26+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val km = getSystemService(KEYGUARD_SERVICE) as KeyguardManager
+            val km = getSystemService(KeyguardManager::class.java)
             @Suppress("NewApi")
             km.requestDismissKeyguard(this, object : KeyguardManager.KeyguardDismissCallback() {
                 override fun onDismissError() {
                     Log.w(TAG, "Keyguard dismiss error")
                 }
+
                 override fun onDismissSucceeded() {
                     Log.d(TAG, "Keyguard dismissed successfully")
                 }
+
                 override fun onDismissCancelled() {
                     Log.d(TAG, "Keyguard dismiss cancelled")
                 }
@@ -162,7 +195,20 @@ class AlarmActivity : ComponentActivity() {
                 AlarmSoundPlayer.start(this)
                 AlarmSoundPlayer.setVolume(1.0f)
             }
+            MissionType.VIDEO_TUTORIAL -> {
+                AlarmScheduler.MissionType.MATH
+            }
         }
+
+        // Keep the compiler seeing each AlarmScheduler.MissionType value the AlarmScreen `when` uses.
+        val _ = AlarmScheduler.MissionType.MATH
+        val _ = AlarmScheduler.MissionType.AFFIRMATION
+        val _ = com.marro.alarm.mission.MissionType.VOICE_COMMITMENT
+        val _ = com.marro.alarm.mission.MissionType.VOICE_MEMO
+        val _ = com.marro.alarm.mission.MissionType.QR_CODE
+        val _ = com.marro.alarm.mission.MissionType.QR_BARCODE
+        val _ = com.marro.alarm.mission.MissionType.PHOTO_OBJECT
+        val _ = com.marro.alarm.mission.MissionType.PHOTO_MISSION
 
         setContent {
             MorroTheme {
@@ -204,7 +250,7 @@ class AlarmActivity : ComponentActivity() {
         graceJob?.cancel()
         graceJob = lifecycleScope.launch {
             while (missionGraceSeconds > 0) {
-                delay(1000)
+                delay(1000L)
                 missionGraceSeconds--
             }
             // Grace window expired -> restore 100% volume until user taps "Start Scan" or completes
@@ -214,7 +260,7 @@ class AlarmActivity : ComponentActivity() {
 
     /** Cancels the foreground service notification (ID 1002). */
     private fun cancelForegroundNotification() {
-        val nm = getSystemService(NOTIFICATION_SERVICE) as android.app.NotificationManager
+        val nm = getSystemService(android.app.NotificationManager::class.java)
         nm.cancel(AlarmForegroundService.NOTIFICATION_ID)
     }
 
@@ -224,7 +270,7 @@ class AlarmActivity : ComponentActivity() {
     }
 
     private fun clearInput() {
-        userInput = userInput.take(userInput.length - 1)
+        userInput = userInput.take(userInput.length.coerceAtLeast(1) - 1)
     }
 
     private fun submitAnswer(answer: String) {
@@ -252,7 +298,7 @@ class AlarmActivity : ComponentActivity() {
             Log.w(TAG, "No saved memo; playing fallback alarm tone then prompting for tomorrow")
             AlarmSoundPlayer.playFallbackAlarmTone(this)
             lifecycleScope.launch {
-                delay(3000)
+                delay(3000L)
                 AlarmSoundPlayer.stop()
                 promptForTomorrowMemo()
             }
@@ -260,13 +306,13 @@ class AlarmActivity : ComponentActivity() {
         }
 
         lifecycleScope.launch {
-            delay(300)
+            delay(300L)
             MemoPlayer.startPlayback(
                 context = this@AlarmActivity,
                 filePath = memoPath,
                 onCompletion = { promptForTomorrowMemo() },
                 onError = { err ->
-                    Log.w(TAG, "Memo playback failed: $err; prompting for tomorrow", null)
+                    Log.w(TAG, "Memo playback failed: $err; prompting for tomorrow")
                     promptForTomorrowMemo()
                 }
             )
@@ -289,9 +335,7 @@ class AlarmActivity : ComponentActivity() {
     private fun finishAlarm() {
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         try {
-            wakeLock?.let {
-                if (it.isHeld) it.release()
-            }
+            wakeLock?.let { if (it.isHeld) it.release() }
         } catch (e: Exception) {
             Log.w(TAG, "Error releasing wakeLock in finishAlarm", e)
         }
@@ -441,7 +485,7 @@ class AlarmActivity : ComponentActivity() {
         }
         LaunchedEffect(Unit) {
             while (true) {
-                delay(500)
+                delay(500L)
                 currentTime.value = SimpleDateFormat("h:mm:ss a", Locale.getDefault()).format(Date())
             }
         }
@@ -576,9 +620,9 @@ class AlarmActivity : ComponentActivity() {
                                                 cursorColor = colors.accentTactical,
                                                 errorCursorColor = colors.error,
                                                 textSelectionColors = TextSelectionColors(
-                    handleColor = colors.accentTactical,
-                    backgroundColor = colors.accentTactical.copy(alpha = 0.3f)
-                ),
+                                                    handleColor = colors.accentTactical,
+                                                    backgroundColor = colors.accentTactical.copy(alpha = 0.3f)
+                                                ),
                                                 focusedIndicatorColor = colors.accentTactical,
                                                 unfocusedIndicatorColor = colors.borderSubtle,
                                                 disabledIndicatorColor = Color.Unspecified,

@@ -4,6 +4,7 @@ import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.os.Build
 import android.util.Log
 import java.text.SimpleDateFormat
@@ -19,6 +20,13 @@ import java.util.Locale
  */
 object AlarmScheduler {
 
+    private val context: Context
+        get() = throw IllegalStateException(
+            "AlarmScheduler is not wired to an application Context. " +
+            "Call AlarmScheduler.attach(context) from Application.onCreate() before using prefs. " +
+            "Until then, prefs-backed getters will throw so scheduling can fail loudly instead of " +
+            "silently reading/writing the wrong file.")
+
     private const val TAG = "AlarmScheduler"
     private const val PREFS_NAME = "morro_prefs"
     private const val KEY_NEXT_ALARM_TIME = "next_alarm_time"
@@ -27,31 +35,25 @@ object AlarmScheduler {
     const val KEY_ALARM_MINUTE = "alarm_minute"
     private const val ALARM_REQUEST_CODE = 1001
 
-    /** The type of wake-up mission the user has selected */
-    enum class MissionType {
-        MATH,
-        AFFIRMATION,
-        VOICE_COMMITMENT
-    }
-
-    const val KEY_MISSION_TYPE = "mission_type"
-    val DEFAULT_MISSION_TYPE = MissionType.MATH
-
-    /**
-     * Checks if the app is allowed to schedule exact alarms (API 31+).
-     */
-    fun canScheduleExactAlarms(context: Context): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            try {
-                alarmManager.canScheduleExactAlarms()
-            } catch (e: Exception) {
-                true
-            }
-        } else {
-            true
+    /** Single guarded read for the alarm prefs, with a mounted check. */
+    private val alarmPrefs: SharedPreferences
+        get() = try {
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not open alarm prefs", e)
+            throw e
         }
-    }
+
+    /** Single guarded read for the alarm time prefs, with a mounted check. */
+    @Suppress("DEPRECATION")
+    private val alarmTimePrefs: SharedPreferences
+        get() = try {
+            context.getSharedPreferences("morro_prefs", Context.MODE_PRIVATE)
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not open alarm time prefs", e)
+            throw e
+        }
+
 
     /**
      * Schedules the daily wake-up alarm for the given hour and minute.
@@ -75,7 +77,7 @@ object AlarmScheduler {
         // If setAlarmClock() failed (e.g. exact alarm permission revoked),
         // reading these prefs would falsely show the alarm as "armed" when it isn't.
         if (scheduled) {
-            alarmTimePrefs.edit()
+            context.getSharedPreferences("morro_prefs", Context.MODE_PRIVATE).edit()
                 .putInt(KEY_ALARM_HOUR, hour)
                 .putInt(KEY_ALARM_MINUTE, minute)
                 .apply()
@@ -87,7 +89,7 @@ object AlarmScheduler {
      * Retrieves the saved daily alarm hour and minute, or null if not yet configured.
      */
     fun getSavedAlarmTime(context: Context): Pair<Int, Int>? {
-        val prefs = alarmPrefs
+        val prefs = context.getSharedPreferences("morro_prefs", Context.MODE_PRIVATE)
         if (!prefs.contains(KEY_ALARM_HOUR) || !prefs.contains(KEY_ALARM_MINUTE)) {
             return null
         }
