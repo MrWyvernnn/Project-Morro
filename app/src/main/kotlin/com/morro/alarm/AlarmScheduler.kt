@@ -23,26 +23,9 @@ object AlarmScheduler {
     private const val PREFS_NAME = "morro_prefs"
     private const val KEY_NEXT_ALARM_TIME = "next_alarm_time"
     private const val KEY_NEXT_ALARM_FORMATTED = "next_alarm_formatted"
-
-    private val alarmPrefs: SharedPreferences
-        get() = try {
-            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        } catch (e: Exception) {
-            Log.w(TAG, "Could not open alarm prefs", e)
-            throw e
-        }
     const val KEY_ALARM_HOUR = "alarm_hour"
     const val KEY_ALARM_MINUTE = "alarm_minute"
     private const val ALARM_REQUEST_CODE = 1001
-
-    /** Single guarded write for the alarm time prefs, with a mounted check. */
-    private val alarmTimePrefs: SharedPreferences
-        get() = try {
-            context.getSharedPreferences("morro_prefs", Context.MODE_PRIVATE)
-        } catch (e: Exception) {
-            Log.w(TAG, "Could not open alarm time prefs", e)
-            throw e
-        }
 
     /** The type of wake-up mission the user has selected */
     enum class MissionType {
@@ -75,14 +58,6 @@ object AlarmScheduler {
      * Calculates the next occurrence (today if time is in future, else tomorrow).
      * Saves the hour and minute in SharedPreferences.
      */
-    private val alarmPrefs: SharedPreferences
-        get() = try {
-            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        } catch (e: Exception) {
-            Log.w(TAG, "Could not open alarm prefs", e)
-            throw e
-        }
-
     fun scheduleDailyAlarm(context: Context, hour: Int, minute: Int): Boolean {
         val now = Calendar.getInstance()
         val targetCal = Calendar.getInstance().apply {
