@@ -1,4 +1,4 @@
-package com.marro.alarm
+package com.morro.alarm
 
 import android.app.KeyguardManager
 import android.os.Build
@@ -14,9 +14,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -35,7 +33,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextFieldColors
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -55,27 +52,20 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
-import com.marro.alarm.AlarmForegroundService
-import com.marro.alarm.AlarmScheduler
-import com.marro.alarm.AlarmSoundPlayer
-import com.marro.alarm.MathEngine
-import com.marro.alarm.MemoPlayer
-import com.marro.alarm.MemoRecorder
-import com.marro.alarm.MemoStorage
-import com.marro.alarm.mission.MissionPrefs
-import com.marro.alarm.mission.MissionType
-import com.marro.alarm.mission.PhotoMissionScreen
-import com.marro.alarm.mission.PhotoTargetPool
-import com.marro.alarm.mission.QrMissionScreen
-import com.marro.alarm.ui.theme.MorroTheme
-import com.marro.alarm.ui.theme.morroColors
-import com.marro.alarm.ui.theme.morroTypography
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
+import com.morro.alarm.mission.MissionPrefs
+import com.morro.alarm.mission.MissionType
+import com.morro.alarm.mission.PhotoMissionScreen
+import com.morro.alarm.mission.PhotoTargetPool
+import com.morro.alarm.mission.QrMissionScreen
+import com.morro.alarm.ui.theme.MorroTheme
+import com.morro.alarm.ui.theme.morroColors
+import com.morro.alarm.ui.theme.morroTypography
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * AlarmActivity: Full-screen alarm that runs the wake-up verification gates:
@@ -195,20 +185,7 @@ class AlarmActivity : ComponentActivity() {
                 AlarmSoundPlayer.start(this)
                 AlarmSoundPlayer.setVolume(1.0f)
             }
-            MissionType.VIDEO_TUTORIAL -> {
-                AlarmScheduler.MissionType.MATH
-            }
         }
-
-        // Keep the compiler seeing each AlarmScheduler.MissionType value the AlarmScreen `when` uses.
-        val _ = AlarmScheduler.MissionType.MATH
-        val _ = AlarmScheduler.MissionType.AFFIRMATION
-        val _ = com.marro.alarm.mission.MissionType.VOICE_COMMITMENT
-        val _ = com.marro.alarm.mission.MissionType.VOICE_MEMO
-        val _ = com.marro.alarm.mission.MissionType.QR_CODE
-        val _ = com.marro.alarm.mission.MissionType.QR_BARCODE
-        val _ = com.marro.alarm.mission.MissionType.PHOTO_OBJECT
-        val _ = com.marro.alarm.mission.MissionType.PHOTO_MISSION
 
         setContent {
             MorroTheme {
@@ -608,7 +585,7 @@ class AlarmActivity : ComponentActivity() {
                                             placeholder = { Text("Enter answer", color = colors.textDisabled) },
                                             singleLine = true,
                                             shape = RoundedCornerShape(4.dp),
-                                            colors = TextFieldColors(
+                                            colors = TextFieldDefaults.colors(
                                                 focusedTextColor = colors.textPrimary,
                                                 unfocusedTextColor = colors.textPrimary,
                                                 disabledTextColor = colors.textDisabled,
@@ -619,7 +596,7 @@ class AlarmActivity : ComponentActivity() {
                                                 errorContainerColor = Color.Unspecified,
                                                 cursorColor = colors.accentTactical,
                                                 errorCursorColor = colors.error,
-                                                textSelectionColors = TextSelectionColors(
+                                                selectionColors = TextSelectionColors(
                                                     handleColor = colors.accentTactical,
                                                     backgroundColor = colors.accentTactical.copy(alpha = 0.3f)
                                                 ),
@@ -691,7 +668,7 @@ class AlarmActivity : ComponentActivity() {
                                     )
                                 }
                             }
-                            AlarmScheduler.MissionType.AFFIRMATION -> {
+                            AlarmScheduler.MissionType.AFFIRMATION, AlarmScheduler.MissionType.VOICE_COMMITMENT -> {
                                 AffirmationGate(
                                     onSuccess = onPuzzleSolved,
                                     onSnooze = onSnooze

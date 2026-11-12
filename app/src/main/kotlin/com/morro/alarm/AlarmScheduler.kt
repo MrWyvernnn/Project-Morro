@@ -20,6 +20,13 @@ import java.util.Locale
  */
 object AlarmScheduler {
 
+    /** Puzzle gate used to dismiss an armed alarm. */
+    enum class MissionType {
+        MATH,
+        AFFIRMATION,
+        VOICE_COMMITMENT
+    }
+
     private val context: Context
         get() = throw IllegalStateException(
             "AlarmScheduler is not wired to an application Context. " +
