@@ -1,23 +1,20 @@
 package com.morro.alarm.ui.components
 
+import android.Manifest
 import android.app.TimePickerDialog
 import android.content.Context
-import android.Manifest
 import android.os.SystemClock
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.StartOffset
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.AnimationVector1D
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.AnimatedVisibility
-
+import androidx.compose.animation.core.StartOffset
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -33,15 +30,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -51,27 +46,8 @@ import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material3.Icon
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.StartOffset
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.AnimationVector1D
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
-
-import androidx.compose.foundation.background
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.AnimationVector1D
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -79,7 +55,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -93,9 +68,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -103,27 +79,17 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.graphics.Color
 import com.morro.alarm.MemoPlayer
 import com.morro.alarm.MemoRecorder
 import com.morro.alarm.MemoStorage
 import com.morro.alarm.mission.MissionPrefs
 import com.morro.alarm.mission.MissionType
 import com.morro.alarm.mission.PhotoTargetPool
-import com.morro.alarm.ui.theme.MorroShapes
-import com.morro.alarm.ui.theme.MorroSpring
 import com.morro.alarm.ui.theme.morroColors
 import com.morro.alarm.ui.theme.morroShapes
 import com.morro.alarm.ui.theme.morroTypography
-import com.morro.alarm.ui.theme.rememberMorroSpring
-import com.morro.alarm.ui.theme.springToAlpha
-import com.morro.alarm.ui.theme.springToColor
-import com.morro.alarm.ui.theme.springToDp
-import com.morro.alarm.ui.theme.springToScale
-import kotlinx.coroutines.delay
 import java.util.Locale
+import kotlinx.coroutines.delay
 
 // ─── Voice Commitment States ─────────────────────────────────────────────────
 enum class VoiceState {
@@ -159,20 +125,14 @@ fun AlarmBuilderSheet(
 
     if (!isVisible) return
 
-    // Single spring for sheet enter/exit (Momentum spec: damping 0.82, response 0.32s)
-    val spring = rememberMorroSpring(
-        initialValue = 0f,
-        spec = MorroSpring.FloatSpringMomentum
+    val progress by animateFloatAsState(
+        targetValue = if (isVisible) 1f else 0f,
+        animationSpec = spring(dampingRatio = 0.82f, stiffness = 300f),
+        label = "sheetProgress"
     )
-
-    LaunchedEffect(isVisible) {
-        spring.animateTo(if (isVisible) 1f else 0f)
-    }
-
-    // Derived sheet values
-    val sheetScale = springToScale(spring, 0.1f, 1f)
-    val sheetAlpha = springToAlpha(spring, 0f, 0.92f) // 92% alpha
-    val sheetElevation = springToDp(spring, 0.dp, 8.dp)
+    val sheetScale = 0.1f + (progress * 0.9f)
+    val sheetAlpha = progress * 0.92f
+    val sheetElevation = (progress * 8f).dp
 
     // Surface at 92% alpha — NO backdrop-filter blur (not HW-accelerated on all OEMs)
     val sheetBackground = colors.surface.copy(alpha = sheetAlpha)
@@ -197,7 +157,7 @@ fun AlarmBuilderSheet(
                 scaleX = sheetScale
                 scaleY = sheetScale
                 alpha = sheetAlpha
-                shadowElevation = sheetElevation.value
+                shadowElevation = sheetElevation.toPx()
                 transformOrigin = TransformOrigin(
                     fabCenter.x,
                     fabCenter.y
@@ -583,7 +543,7 @@ private fun TimePickerCard(
 private fun MorroOptionChip(
     title: String,
     subtitle: String,
-    icon: androidx.compose.material.icons.filled.Icon,
+    icon: ImageVector,
     isSelected: Boolean,
     onSelect: () -> Unit,
     showExpanded: Boolean = false,
