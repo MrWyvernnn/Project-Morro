@@ -27,13 +27,6 @@ object AlarmScheduler {
         VOICE_COMMITMENT
     }
 
-    private val context: Context
-        get() = throw IllegalStateException(
-            "AlarmScheduler is not wired to an application Context. " +
-            "Call AlarmScheduler.attach(context) from Application.onCreate() before using prefs. " +
-            "Until then, prefs-backed getters will throw so scheduling can fail loudly instead of " +
-            "silently reading/writing the wrong file.")
-
     private const val TAG = "AlarmScheduler"
     private const val PREFS_NAME = "morro_prefs"
     private const val KEY_NEXT_ALARM_TIME = "next_alarm_time"
@@ -41,26 +34,6 @@ object AlarmScheduler {
     const val KEY_ALARM_HOUR = "alarm_hour"
     const val KEY_ALARM_MINUTE = "alarm_minute"
     private const val ALARM_REQUEST_CODE = 1001
-
-    /** Single guarded read for the alarm prefs, with a mounted check. */
-    private val alarmPrefs: SharedPreferences
-        get() = try {
-            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        } catch (e: Exception) {
-            Log.w(TAG, "Could not open alarm prefs", e)
-            throw e
-        }
-
-    /** Single guarded read for the alarm time prefs, with a mounted check. */
-    @Suppress("DEPRECATION")
-    private val alarmTimePrefs: SharedPreferences
-        get() = try {
-            context.getSharedPreferences("morro_prefs", Context.MODE_PRIVATE)
-        } catch (e: Exception) {
-            Log.w(TAG, "Could not open alarm time prefs", e)
-            throw e
-        }
-
 
     /**
      * Schedules the daily wake-up alarm for the given hour and minute.
