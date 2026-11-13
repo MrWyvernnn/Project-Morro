@@ -56,6 +56,18 @@ class AlarmReceiver : BroadcastReceiver() {
             if (!serviceStarted) {
                 Log.w(TAG, "Foreground service failed to start; alarm may not launch on Android 14+")
             }
+            // Safety net: attempt a direct startActivity() even when the foreground
+            // service started, in case the full-screen intent notification isn't
+            // enough to bring AlarmActivity to front on this device.
+            try {
+                val intent = Intent(context, com.morro.alarm.AlarmActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                }
+                context.startActivity(intent)
+            } catch (e: Exception) {
+                Log.w(TAG, "Direct startActivity() fallback failed: ${e.message}")
+            }
         } catch (e: Exception) {
             // Never fail silently: log the failure. UI-state is not touched here because
             // this is a broadcast receiver; the notification (if posted) carries the user

@@ -165,6 +165,8 @@ class AlarmActivity : ComponentActivity() {
         missionType = when (configuredMission) {
             MissionType.VOICE_COMMITMENT, MissionType.VOICE_MEMO -> AlarmScheduler.MissionType.MATH
             MissionType.QR_BARCODE, MissionType.QR_CODE, MissionType.PHOTO_OBJECT, MissionType.PHOTO_MISSION -> AlarmScheduler.MissionType.AFFIRMATION
+            MissionType.QR_CODE -> AlarmScheduler.MissionType.AFFIRMATION
+            MissionType.PHOTO_MISSION -> AlarmScheduler.MissionType.AFFIRMATION
             else -> AlarmScheduler.MissionType.MATH
         }
 
@@ -563,7 +565,10 @@ class AlarmActivity : ComponentActivity() {
                         Spacer(modifier = Modifier.height(32.dp))
 
                         when (missionType) {
-                            AlarmScheduler.MissionType.MATH -> {
+                            AlarmScheduler.MissionType.MATH,
+                            AlarmScheduler.MissionType.QR_CODE,
+                            AlarmScheduler.MissionType.PHOTO_MISSION,
+                            AlarmScheduler.MissionType.AFFIRMATION -> {
                                 currentQuestion?.let { question ->
                                     Column(
                                         modifier = Modifier.fillMaxWidth(),

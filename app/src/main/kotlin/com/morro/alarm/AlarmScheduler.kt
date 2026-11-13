@@ -24,7 +24,9 @@ object AlarmScheduler {
     enum class MissionType {
         MATH,
         AFFIRMATION,
-        VOICE_COMMITMENT
+        VOICE_COMMITMENT,
+        QR_CODE,
+        PHOTO_MISSION
     }
 
     private const val TAG = "AlarmScheduler"
