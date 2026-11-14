@@ -8,6 +8,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.StartOffset
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
@@ -27,6 +28,9 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -39,6 +43,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Mic
@@ -66,6 +71,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
@@ -76,6 +82,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
@@ -85,10 +92,14 @@ import com.morro.alarm.MemoStorage
 import com.morro.alarm.mission.MissionPrefs
 import com.morro.alarm.mission.MissionType
 import com.morro.alarm.mission.PhotoTargetPool
+import com.morro.alarm.ui.theme.MorroGradients
+import com.morro.alarm.ui.theme.MorroSpring
 import com.morro.alarm.ui.theme.morroColors
+import com.morro.alarm.ui.theme.morroGradientBorder
 import com.morro.alarm.ui.theme.morroShapes
 import com.morro.alarm.ui.theme.morroTypography
 import java.util.Locale
+import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 
 // ─── Voice Commitment States ─────────────────────────────────────────────────
@@ -125,67 +136,53 @@ fun AlarmBuilderSheet(
 
     if (!isVisible) return
 
-    val progress by animateFloatAsState(
-        targetValue = if (isVisible) 1f else 0f,
-        animationSpec = spring(dampingRatio = 0.82f, stiffness = 300f),
-        label = "sheetProgress"
-    )
-    val sheetScale = 0.1f + (progress * 0.9f)
-    val sheetAlpha = progress * 0.92f
-    val sheetElevation = (progress * 8f).dp
+    // One Animatable drives the scrim, the lift and the fade, so the sheet is never half-visible.
+    val appear = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        appear.animateTo(1f, MorroSpring.FloatSpringMomentum)
+    }
+    val progress = appear.value
 
-    // Surface at 92% alpha — NO backdrop-filter blur (not HW-accelerated on all OEMs)
-    // Near-black sheet, so the mission cards read as panels floating on top of it.
-    val sheetBackground = colors.canvas.copy(alpha = 0.95f * progress)
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Scrim at 88% black: the dashboard clock and dock never read through the sheet.
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.88f * progress))
+                .clickable(onClick = onDismiss)
+        )
 
-    // Backdrop — tap to dismiss
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Transparent)
-            .clickable(onClick = onDismiss)
-            .zIndex(-1f)
-    )
-
-    // Sheet content
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(520.dp)
-            .clip(shapes.Sheet)
-            .background(sheetBackground)
-            .border(1.dp, colors.borderSubtle, shapes.Sheet)
-            .graphicsLayer {
-                scaleX = sheetScale
-                scaleY = sheetScale
-                alpha = sheetAlpha
-                shadowElevation = sheetElevation.toPx()
-                transformOrigin = TransformOrigin(
-                    fabCenter.x,
-                    fabCenter.y
-                )
-            }
-            .padding(bottom = 16.dp) // Safe area
-    ) {
         Column(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .fillMaxHeight(0.92f)
+                .offset {
+                    IntOffset(x = 0, y = ((1f - progress) * 80f * density).roundToInt())
+                }
+                .clip(shapes.Sheet)
+                .background(colors.surface)
+                .border(1.dp, colors.borderSubtle, shapes.Sheet)
+                .navigationBarsPadding()
+                .imePadding()
         ) {
-            // Drag handle
+            // Drag handle: a single 40dp line, with the air around it done by padding.
             Box(
                 modifier = Modifier
+                    .padding(top = 10.dp, bottom = 14.dp)
+                    .align(Alignment.CenterHorizontally)
                     .width(40.dp)
                     .height(4.dp)
-                    .background(colors.borderSubtle)
                     .clip(RoundedCornerShape(2.dp))
-                    .padding(top = 12.dp, bottom = 16.dp)
+                    .background(colors.borderSubtle)
             )
 
-            content()
+            Box(modifier = Modifier.weight(1f)) {
+                content()
+            }
         }
     }
 }
-
 /**
  * AlarmBuilderSheetContent — Complete alarm configuration content.
  * Includes time picker, mission selection, and mission-specific configuration.
@@ -302,42 +299,43 @@ fun AlarmBuilderSheetContent(
             .padding(horizontal = 24.dp)
             .verticalScroll(rememberScrollState())
     ) {
-        // ── Top Bar: "Configure Alarm" title with "X" close icon ──
+        // ── Header: what this sheet does, and the way out ──
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "Configure Alarm",
-                style = typo.headlineLarge.copy(
+            Column {
+                Text(
+                    text = "SET WAKE-UP",
+                    color = colors.textTertiary,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 10.sp,
+                    letterSpacing = 1.6.sp,
                     fontWeight = FontWeight.Bold
-                ),
-                color = colors.textPrimary
-            )
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "Your morning, armed.",
+                    style = typo.headlineMedium,
+                    color = colors.textPrimary
+                )
+            }
             IconButton(onClick = onDismiss) {
                 Icon(
                     imageVector = Icons.Filled.Close,
                     contentDescription = "Close",
                     tint = colors.textSecondary,
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.size(22.dp)
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Text(
-            text = "Choose your wake-up mission and set the time.",
-            style = typo.bodyMedium,
-            color = colors.textSecondary,
-            modifier = Modifier.padding(bottom = 24.dp)
-        )
+        Spacer(modifier = Modifier.height(20.dp))
 
         // ── Section 1: Wake-Up Time Card ──
-        // Label: "WAKE-UP TARGET"
         Text(
-            text = "WAKE-UP TARGET",
+            text = "WAKE-UP TIME",
             style = typo.labelLarge.copy(
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 0.12f.sp
@@ -441,6 +439,16 @@ fun AlarmBuilderSheetContent(
                     )
                 }
             )
+
+            // 4. Math puzzle — reserved. Not wired end to end, so it is shown honestly as SOON.
+            MorroOptionChip(
+                title = "Math Puzzle",
+                subtitle = "Wiring in progress — not part of this build",
+                icon = Icons.Filled.Calculate,
+                isSelected = false,
+                onSelect = {},
+                enabled = false
+            )
         }
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -475,7 +483,8 @@ fun AlarmBuilderSheetContent(
 }
 
 /**
- * TimePickerCard — Large time display with tap to open TimePickerDialog.
+ * TimePickerCard — one bento card: the wake-up time at display scale and a pill that says what to
+ * do with it. Tapping anywhere on the card opens the system time picker.
  */
 @Composable
 private fun TimePickerCard(
@@ -488,59 +497,58 @@ private fun TimePickerCard(
     val shapes = morroShapes()
     val context = LocalContext.current
 
-    MorroCard(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(shapes.Card)
+            .background(colors.surfaceElevated)
+            .morroGradientBorder(
+                shape = shapes.Card,
+                width = 1.dp,
+                brush = MorroGradients.horizontal(0.45f)
+            )
             .clickable {
                 TimePickerDialog(
                     context,
-                    { _, hourOfDay, minute ->
-                        onTimeChange(hourOfDay, minute)
-                    },
+                    { _, hourOfDay, minute -> onTimeChange(hourOfDay, minute) },
                     selectedHour,
                     selectedMinute,
                     true
                 ).show()
             }
-            .padding(vertical = 24.dp),
-        content = { contentModifier ->
-            Column(
-                modifier = contentModifier
-                    .padding(horizontal = 24.dp, vertical = 16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                // Center: Large time display
-                Text(
-                    text = String.format(Locale.getDefault(), "%02d:%02d", selectedHour, selectedMinute),
-                    style = typo.displayLarge.copy(
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = (-0.03f).sp
-                    ),
-                    color = colors.textPrimary
-                )
+            .padding(vertical = 26.dp, horizontal = 20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = String.format(Locale.getDefault(), "%02d:%02d", selectedHour, selectedMinute),
+            style = typo.displayHero.copy(fontSize = 64.sp, lineHeight = 68.sp),
+            color = colors.textPrimary
+        )
 
-                Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
-                // Bottom hint pill
-                Box(
-                    modifier = Modifier
-                        .background(colors.surfaceLow)
-                        .clip(RoundedCornerShape(50))
-                        .padding(horizontal = 12.dp, vertical = 4.dp)
-                ) {
-                    Text(
-                        text = "Tap to adjust time",
-                        style = typo.labelSmall,
-                        color = colors.textSecondary
-                    )
-                }
-            }
+        Box(
+            modifier = Modifier
+                .clip(shapes.Pill)
+                .background(colors.accentTactical.copy(alpha = 0.10f))
+                .morroGradientBorder(shapes.Pill, 1.dp, MorroGradients.horizontal(0.55f))
+                .padding(horizontal = 14.dp, vertical = 6.dp)
+        ) {
+            Text(
+                text = "TAP TO ADJUST TIME",
+                color = colors.accentTactical,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 10.sp,
+                letterSpacing = 1.2.sp,
+                fontWeight = FontWeight.Bold
+            )
         }
-    )
+    }
 }
 
 /**
- * MorroOptionChip — Mission selection chip with optional expanded content.
+ * MorroOptionChip — one mission. Selected takes the ribbon border, a pink icon and a pink check;
+ * a disabled mission says SOON and explains itself in the subtitle instead of pretending to work.
  */
 @Composable
 private fun MorroOptionChip(
@@ -551,32 +559,34 @@ private fun MorroOptionChip(
     onSelect: () -> Unit,
     showExpanded: Boolean = false,
     accent: Color = Color.Unspecified,
+    enabled: Boolean = true,
     expandedContent: @Composable (() -> Unit)? = null
 ) {
     val colors = morroColors()
     val typo = morroTypography()
     val shapes = morroShapes()
+    val accentColor = if (accent == Color.Unspecified) colors.accentBubbly else accent
 
-    val activeAccent = if (accent == Color.Unspecified) colors.accentTactical else accent
-
-    Column(
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        // Main chip
+    Column(modifier = Modifier.fillMaxWidth()) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(
-                    if (isSelected) activeAccent.copy(alpha = 0.12f) else colors.surfaceVariant,
-                    shapes.Card
-                )
-                .border(
-                    1.dp,
-                    if (isSelected) colors.borderActive else colors.borderSubtle,
-                    shapes.Card
-                )
                 .clip(shapes.Card)
-                .clickable(onClick = onSelect)
+                .background(if (isSelected) colors.surfaceElevated else colors.surfaceCard)
+                .then(
+                    if (isSelected) {
+                        Modifier.morroGradientBorder(shapes.Card, 1.dp)
+                    } else {
+                        Modifier.morroGradientBorder(
+                            shape = shapes.Card,
+                            width = 1.dp,
+                            brush = Brush.horizontalGradient(
+                                listOf(colors.borderSubtle, colors.borderSubtle)
+                            )
+                        )
+                    }
+                )
+                .clickable(enabled = enabled, onClick = onSelect)
                 .padding(16.dp)
         ) {
             Row(
@@ -586,14 +596,14 @@ private fun MorroOptionChip(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
                     modifier = Modifier.weight(1f)
                 ) {
                     Box(
                         modifier = Modifier
                             .size(44.dp)
                             .background(
-                                if (isSelected) activeAccent.copy(alpha = 0.18f) else colors.surfaceLow,
+                                if (isSelected) accentColor.copy(alpha = 0.16f) else colors.surfaceLow,
                                 RoundedCornerShape(12.dp)
                             ),
                         contentAlignment = Alignment.Center
@@ -601,53 +611,60 @@ private fun MorroOptionChip(
                         Icon(
                             imageVector = icon,
                             contentDescription = null,
-                            tint = if (isSelected) activeAccent else colors.textSecondary,
-                            modifier = Modifier.size(24.dp)
+                            tint = if (isSelected) accentColor else colors.textSecondary,
+                            modifier = Modifier.size(22.dp)
                         )
                     }
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(
                             text = title,
-                            style = typo.titleMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                color = colors.textPrimary
-                            )
+                            style = typo.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = if (enabled) colors.textPrimary else colors.textTertiary
                         )
                         Text(
                             text = subtitle,
-                            style = typo.bodyMedium.copy(color = colors.textSecondary)
+                            style = typo.bodyMedium.copy(fontSize = 12.sp, lineHeight = 17.sp),
+                            color = colors.textSecondary
                         )
                     }
                 }
 
-                if (isSelected) {
+                if (!enabled) {
+                    Text(
+                        text = "SOON",
+                        color = colors.textTertiary,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 9.sp,
+                        letterSpacing = 1.sp,
+                        modifier = Modifier
+                            .clip(shapes.Pill)
+                            .background(colors.surfaceLow)
+                            .padding(horizontal = 10.dp, vertical = 5.dp)
+                    )
+                } else if (isSelected) {
                     Box(
                         modifier = Modifier
                             .size(24.dp)
-                            .background(colors.accentTactical, RoundedCornerShape(50)),
+                            .background(accentColor, RoundedCornerShape(50)),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Check,
                             contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(16.dp)
+                            tint = Color.Black,
+                            modifier = Modifier.size(15.dp)
                         )
                     }
                 }
             }
         }
 
-        // Expanded content
-        if (showExpanded && expandedContent != null) {
+        if (showExpanded && enabled && expandedContent != null) {
             Spacer(modifier = Modifier.height(12.dp))
-            AnimatedVisibility(visible = showExpanded) {
-                MorroCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    content = { contentModifier ->
-                        expandedContent()
-                    }
-                )
+            AnimatedVisibility(visible = true) {
+                MorroCard(modifier = Modifier.fillMaxWidth()) {
+                    expandedContent()
+                }
             }
         }
     }
@@ -681,7 +698,7 @@ private fun VoiceExpandedContent(
             VoiceState.IDLE -> {
                 if (!hasSaved.value) {
                     Text(
-                        text = "Speak clearly: \"I am waking up at $wakeTimeStr tomorrow to protect my $missionTargetName. No excuses.\"",
+                        text = "Speak clearly: \"I am waking up at $wakeTimeStr tomorrow to protect my $missionTargetName.\"",
                         style = typo.bodyMedium,
                         color = colors.textSecondary,
                         lineHeight = 20.sp,
