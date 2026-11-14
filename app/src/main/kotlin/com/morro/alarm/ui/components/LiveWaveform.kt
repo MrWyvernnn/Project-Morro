@@ -18,7 +18,7 @@ import com.morro.alarm.ui.theme.morroColors
  *
  * Draws 8 concentric circles expanding outward from the center. A single `amplitude`
  * parameter (0.0–1.0) drives both color and stroke width:
- *   - Color: AccentTactical (#E85D2A) → AccentBubbly (#FF6B9D) → AccentBubblyDeep (#D63A6B)
+ *   - Color: AccentTactical (#E85D2A) → AccentBubbly (#FF6B9D) → AccentBubbly (#D63A6B)
  *   - Stroke width: 1dp → 4dp (mapped per-ring, outer rings thicker at high amplitude)
  *
  * All drawing is stateless — pass `amplitude` from your view model / state holder.

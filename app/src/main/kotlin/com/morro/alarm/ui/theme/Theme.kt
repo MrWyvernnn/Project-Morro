@@ -20,28 +20,29 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /**
- * Morro Design Tokens — "Bubbly Sunrise" Warm Light Mode
+ * Morro Design Tokens — Premium Dark AMOLED Identity
  *
  * Palette locked per Manifesto:
- * - Canvas: #FFF8F0 (warm white, 2% yellow / 1% red)
- * - Surface: #FFFFFF (pure white on warm canvas)
- * - SurfaceVariant: #FFF0E0 (4% warmer than Surface)
- * - TextPrimary: #1A1A2E (deep brown, 17:1 on Canvas — AAA)
- * - TextSecondary: #6B5B4F (warm brown, 6.2:1 on Canvas — AA)
- * - TextDisabled: #A89B8F (3.1:1 — never interactive)
- * - AccentTactical: #E85D2A (tactical orange — ONLY for ≥24sp/icons/focus/CTA)
- * - AccentBubbly: #FF6B9D (bubbly pink — GLOW ONLY, decorative, fails WCAG for text)
- * - AccentBubblyDeep: #D63A6B (pink for text/icons needing bubbly hue — 4.6:1 AA Large)
- * - BorderSubtle: #E8DCC8 (decorative, 1.8:1 — never semantic)
- * - BorderActive: #E85D2A (focus/armed — matches Tactical Orange)
- * - Success: #2E7D32 (AA Large)
- * - Error: #C62828 (AA Large)
+ * - Canvas: #000000 (pure black)
+ * - Surface: #12121A (elevated surface)
+ * - SurfaceVariant: #0A0A0F (warm black)
+ * - SurfaceLow: #0A0A0F (subtle variant)
+ * - TextPrimary: #FFFFFF (white)
+ * - TextSecondary: #B3FFFFFF (white at 70%)
+ * - TextDisabled: #80FFFFFF (white at 50%)
+ * - AccentTactical: #FF4500 (tactical orange — primary action, alarm emphasis, focus/CTA)
+ * - AccentBubbly: #FF6B9D (bubbly pink — GLOW ONLY, live/active/recording states)
+ * - BorderSubtle: #1FFFFFFF (very subtle white divider)
+ * - BorderActive: #FF4500 (focus/armed — matches Tactical Orange)
+ * - Success: #2E7D32 (positive/armed)
+ * - Error: #2E7D32 (kept non-alarming; not red)
  *
  * CRITICAL RULES:
  * - NO MaterialTheme color slots. Morro owns tokens via CompositionLocal.
- * - NO gray text — warm browns only.
- * - AccentBubbly (#FF6B9D) is GLOW ONLY — never text, never icons, never semantic.
- * - AccentTactical (#E85D2A) ONLY for ≥24sp / icons / focus rings / CTA fills.
+ * - NO light/cream theme.
+ * - AccentBubbly (#FF6B9D) is GLOW ONLY — never body text, never icons, never semantic.
+ * - AccentTactical (#FF4500) for primary action, alarm emphasis, focus rings, CTA fills.
+ * - Body text stays white/white-alpha. Never use pink or orange for long body text.
  */
 
 // ── Geometry ──────────────────────────────────────────────────────────────
@@ -56,37 +57,37 @@ object MorroShapes {
 // ── Colors ────────────────────────────────────────────────────────────────
 object MorroColors {
     // Canvas & surface layers
-    val Canvas        = Color(0xFFFFF8F0) // Root background — warm white
-    val Surface       = Color(0xFFFFFFFF) // Cards, panels — pure white
-    val SurfaceVariant = Color(0xFFFFF0E0) // Hover/selected — 4% warmer
-    val SurfaceLow    = Color(0xFFFFEBE0) // Subtle variant for chips, tags
+    val Canvas        = Color(0xFF000000) // Root background — pure black
+    val Surface       = Color(0xFF12121A) // Cards, panels — elevated surface
+    val SurfaceVariant = Color(0xFF0A0A0F) // Warm black
+    val SurfaceLow    = Color(0xFF0A0A0F) // Subtle variant for chips, tags
 
     // Typography colors
-    val TextPrimary   = Color(0xFF1A1A2E) // Deep brown — headlines, primary labels (17:1 AAA)
-    val TextSecondary = Color(0xFF6B5B4F) // Warm brown — body text (6.2:1 AA)
-    val TextDisabled  = Color(0xFFA89B8F) // Muted warm — disabled only (3.1:1)
+    val TextPrimary   = Color(0xFFFFFFFF) // White — headlines, primary labels
+    val TextSecondary = Color(0xFFB3FFFFFF) // White at 70% — body text
+    val TextDisabled  = Color(0xFF80FFFFFF) // White at 50% — disabled only
 
     // Accent system
-    val AccentTactical   = Color(0xFFE85D2A) // Tactical Orange — CTA, focus, icons ≥24sp
-    val AccentBubbly     = Color(0xFFFF6B9D) // Bubbly Pink — GLOW ONLY (waveform, burst, shimmer)
-    val AccentBubblyDeep = Color(0xFFD63A6B) // Bubbly Deep — text/icons needing pink hue (4.6:1 AA Large)
+    val AccentTactical   = Color(0xFFFF4500) // Tactical Orange — CTA, focus, icons ≥24sp, alarm emphasis
+    val AccentBubbly     = Color(0xFFFF6B9D) // Bubbly Pink — GLOW ONLY (waveform, burst, shimmer, live states)
+    val AccentBubblyDeep = Color(0xFF9C2D5E) // Deep pink — decorative waveform/depth only, not text or semantic
 
     // Borders
-    val BorderSubtle  = Color(0xFFE8DCC8) // Decorative dividers (1.8:1 — never semantic)
-    val BorderActive  = Color(0xFFE85D2A) // Focus/armed borders — matches Tactical Orange
+    val BorderSubtle  = Color(0xFF1FFFFFFF) // Very subtle white divider
+    val BorderActive  = Color(0xFFFF4500) // Focus/armed borders — matches Tactical Orange
 
     // Status
-    val Success = Color(0xFF2E7D32) // AA Large
-    val Error   = Color(0xFFC62828) // AA Large
+    val Success = Color(0xFF2E7D32) // Positive / armed
+    val Error   = Color(0xFF2E7D32) // Non-alarming; not red
 
     // Legacy aliases for gradual migration (DO NOT USE IN NEW CODE)
     @Suppress("DEPRECATION")
     @Deprecated("Use MorroColors.Canvas", ReplaceWith("MorroColors.Canvas"))
     val CanvasRoot = Canvas
     @Deprecated("Use MorroColors.Surface", ReplaceWith("MorroColors.Surface"))
-    val SurfaceDark = Color(0xFF0A0A0F)
+    val SurfaceDark = Surface
     @Deprecated("Use MorroColors.TextPrimary", ReplaceWith("MorroColors.TextPrimary"))
-    val TextPrimaryDark = Color(0xFFFFFFFF)
+    val TextPrimaryDark = TextPrimary
     @Deprecated("Use MorroColors.AccentTactical", ReplaceWith("MorroColors.AccentTactical"))
     val AccentPrimary = AccentTactical
     @Deprecated("Use MorroColors.BorderActive", ReplaceWith("MorroColors.BorderActive"))
@@ -203,7 +204,7 @@ internal val MaterialTypography = androidx.compose.material3.Typography(
 )
 
 // ── Material3 ColorScheme mapping ─────────────────────────────────────────
-internal val MaterialColorScheme = lightColorScheme(
+internal val MaterialColorScheme = androidx.compose.material3.darkColorScheme(
     background      = MorroColors.Canvas,
     surface         = MorroColors.Surface,
     surfaceVariant  = MorroColors.SurfaceVariant,
@@ -211,15 +212,15 @@ internal val MaterialColorScheme = lightColorScheme(
     onSurface       = MorroColors.TextPrimary,
     onSurfaceVariant = MorroColors.TextSecondary,
     primary         = MorroColors.AccentTactical,
-    onPrimary       = Color.White,
+    onPrimary       = Color.Black,
     primaryContainer = MorroColors.SurfaceVariant,
-    onPrimaryContainer = MorroColors.AccentTactical,
-    secondary       = MorroColors.AccentBubblyDeep,
-    onSecondary     = Color.White,
+    onPrimaryContainer = MorroColors.TextPrimary,
+    secondary       = MorroColors.AccentBubbly,
+    onSecondary     = Color.Black,
     secondaryContainer = MorroColors.SurfaceLow,
-    onSecondaryContainer = MorroColors.AccentBubblyDeep,
+    onSecondaryContainer = MorroColors.TextPrimary,
     tertiary        = MorroColors.AccentBubbly,
-    onTertiary      = Color.White,
+    onTertiary      = Color.Black,
     error           = MorroColors.Error,
     onError         = Color.White,
     outline         = MorroColors.BorderSubtle,
@@ -363,7 +364,7 @@ fun morroShapes(): MorroShapes {
 }
 
 /**
- * MorroTheme — applies the full "Bubbly Sunrise" design system via CompositionLocal.
+ * MorroTheme — applies the full premium dark AMOLED design system via CompositionLocal.
  * This REPLACES MaterialTheme entirely for colors/typography/shapes.
  */
 @Composable

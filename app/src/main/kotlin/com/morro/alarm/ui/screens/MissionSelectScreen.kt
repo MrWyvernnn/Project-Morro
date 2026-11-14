@@ -115,7 +115,7 @@ fun MissionSelectScreen(
                         tagLabel = "QR",
                         title = "QR / Barcode",
                         subtitle = "Scan to dismiss",
-                        accent = colors.accentBubblyDeep,
+                        accent = colors.accentBubbly,
                         onClick = onAlarmBuilder,
                         modifier = Modifier.weight(1f, fill = true)
                     )
