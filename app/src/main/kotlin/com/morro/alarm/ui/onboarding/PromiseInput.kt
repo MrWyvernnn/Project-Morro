@@ -1,5 +1,11 @@
 package com.morro.alarm.ui.onboarding
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
@@ -17,15 +24,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.morro.alarm.ui.theme.MorroColors
 
-/** The promise is one line a person can actually keep, so it stays deliberately short. */
+/** One line a person can actually keep, so it stays deliberately short. */
 const val MaxPromiseLength = 100
+
+/** The counter starts warning this many characters before the cap. */
+private const val CounterWarningMargin = 12
 
 /**
  * Free-text answer for the final question.
  *
- * The field is borderless on purpose: the surrounding card already draws the bezel, so the text,
- * the orange caret and the count are the only marks inside it. The caret is the accent so the one
- * warm signal on screen sits exactly where the person is typing.
+ * Borderless on purpose: the surrounding card is the bezel, so the text, the pink caret and the
+ * count are the only marks inside it. The counter turns pink and breathes when the person gets
+ * within 12 characters of the cap — a warning, not a scold.
  */
 @Composable
 fun PromiseInput(
@@ -40,20 +50,31 @@ fun PromiseInput(
         fontFamily = FontFamily.SansSerif,
         fontSize = 16.sp,
         lineHeight = 24.sp,
-        letterSpacing = 0.4.sp,
+        letterSpacing = 0.2.sp,
         fontWeight = FontWeight.Normal
     )
+
+    val nearLimit = value.length >= maxLength - CounterWarningMargin
+    val pulse = rememberInfiniteTransition(label = "counterPulse").animateFloat(
+        initialValue = 0.55f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 900, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "counterAlpha"
+    ).value
 
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         BasicTextField(
             value = value,
             onValueChange = { next ->
-                // Hard cap in the model, not just in the counter, so a paste cannot overshoot.
+                // Hard cap in the model, not just the counter, so a paste cannot overshoot.
                 if (next.length <= maxLength) onValueChange(next)
             },
             modifier = Modifier.fillMaxWidth(),
             textStyle = textStyle,
-            cursorBrush = SolidColor(MorroColors.AccentTactical),
+            cursorBrush = SolidColor(MorroColors.AccentBubbly),
             singleLine = false,
             decorationBox = { innerTextField ->
                 Box {
@@ -61,7 +82,7 @@ fun PromiseInput(
                         Text(
                             text = placeholder,
                             style = textStyle,
-                            color = MorroColors.TextDisabled
+                            color = MorroColors.TextTertiary
                         )
                     }
                     innerTextField()
@@ -72,7 +93,11 @@ fun PromiseInput(
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             Text(
                 text = "${value.length}/$maxLength",
-                color = MorroColors.TextDisabled,
+                color = if (nearLimit) {
+                    MorroColors.AccentBubbly.copy(alpha = pulse)
+                } else {
+                    MorroColors.TextTertiary
+                },
                 fontFamily = FontFamily.Monospace,
                 fontSize = 11.sp,
                 letterSpacing = 1.2.sp
