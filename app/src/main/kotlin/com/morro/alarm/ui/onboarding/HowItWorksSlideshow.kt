@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -35,6 +36,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -43,8 +45,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -52,6 +56,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.morro.alarm.ui.theme.MorroColors
+import com.morro.alarm.ui.theme.MorroGradients
+import com.morro.alarm.ui.theme.MorroShapes
+import com.morro.alarm.ui.theme.morroGradientBorder
 import kotlinx.coroutines.launch
 
 /**
@@ -243,6 +250,9 @@ fun HowItWorksSlideshow(
                 active = pagerState.currentPage
             )
 
+            // 28dp of air between the pagination and the button so they never crowd each other.
+            Spacer(modifier = Modifier.height(28.dp))
+
             // The button's slot is reserved from the first slide so nothing shifts when it appears.
             Box(
                 modifier = Modifier
@@ -255,25 +265,7 @@ fun HowItWorksSlideshow(
                     enter = fadeIn(animationSpec = tween(durationMillis = 220)),
                     exit = fadeOut(animationSpec = tween(durationMillis = 160))
                 ) {
-                    Button(
-                        onClick = { onFinished() },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 56.dp),
-                        shape = RoundedCornerShape(28.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = SlideTokens.accent,
-                            contentColor = SlideTokens.ground
-                        )
-                    ) {
-                        Text(
-                            text = "Get Started",
-                            fontFamily = FontFamily.SansSerif,
-                            fontSize = 16.sp,
-                            letterSpacing = 0.3.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
+                    GetStartedButton(onClick = { onFinished() })
                 }
             }
 
@@ -285,6 +277,72 @@ fun HowItWorksSlideshow(
     LaunchedEffect(pagerState.currentPage) {
         if (pagerState.currentPage > 0) {
             haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        }
+    }
+}
+
+/**
+ * The final action: 56dp, ribbon-filled, with a nested arrow disc (button-in-button) and a border
+ * that breathes between pink and orange so the CTA is alive without moving its layout. Black label
+ * because black on either end of the gradient measures 6.55:1 and 7.68:1.
+ */
+@Composable
+private fun GetStartedButton(onClick: () -> Unit) {
+    val shimmer by rememberInfiniteTransition(label = "getStartedShimmer").animateFloat(
+        initialValue = 0.35f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1_700, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "shimmerAlpha"
+    )
+
+    val interactionSource = remember { MutableInteractionSource() }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(56.dp)
+            .clip(MorroShapes.Button)
+            .background(MorroGradients.horizontal())
+            .morroGradientBorder(
+                shape = MorroShapes.Button,
+                width = 1.dp,
+                brush = MorroGradients.horizontal(shimmer)
+            )
+            .clickable(
+                interactionSource = interactionSource,
+                indication = ripple(color = Color.Black),
+                role = Role.Button,
+                onClick = onClick
+            )
+            .padding(start = 20.dp, end = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center
+    ) {
+        Text(
+            text = "Get Started",
+            color = Color.Black,
+            fontFamily = FontFamily.SansSerif,
+            fontSize = 16.sp,
+            letterSpacing = 0.3.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .clip(CircleShape)
+                .background(Color.Black.copy(alpha = 0.14f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "→",
+                color = Color.Black,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
+            )
         }
     }
 }
