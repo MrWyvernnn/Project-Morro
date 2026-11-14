@@ -82,7 +82,7 @@ fun PromiseInput(
                         Text(
                             text = placeholder,
                             style = textStyle,
-                            color = MorroColors.TextTertiary
+                            color = MorroColors.TextSecondary
                         )
                     }
                     innerTextField()
@@ -96,7 +96,7 @@ fun PromiseInput(
                 color = if (nearLimit) {
                     MorroColors.AccentBubbly.copy(alpha = pulse)
                 } else {
-                    MorroColors.TextTertiary
+                    MorroColors.TextSecondary
                 },
                 fontFamily = FontFamily.Monospace,
                 fontSize = 11.sp,

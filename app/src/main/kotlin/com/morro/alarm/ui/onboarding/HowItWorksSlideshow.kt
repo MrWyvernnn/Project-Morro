@@ -77,7 +77,7 @@ private object SlideTokens {
     val accent = MorroColors.AccentTactical
     val ink = MorroColors.TextPrimary
     val inkSecondary = MorroColors.TextSecondary
-    val inkTertiary = MorroColors.TextDisabled
+    val inkTertiary = MorroColors.TextSecondary
     val dotIdle = MorroColors.BorderSubtle
     val ground = MorroColors.Canvas
 }

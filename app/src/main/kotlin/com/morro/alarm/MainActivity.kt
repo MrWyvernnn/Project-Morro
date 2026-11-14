@@ -368,13 +368,32 @@ fun MainAlarmScreen(context: Context) {
                         initialHour = initialHour,
                         initialMinute = initialMinute,
                         onDismiss = { showAlarmBuilder = false },
-                        onSave = { hour, minute, _ ->
+                        onSave = { hour, minute, mission ->
                             showAlarmBuilder = false
-                            Toast.makeText(
-                                context,
-                                "Alarm armed for %02d:%02d".format(hour, minute),
-                                Toast.LENGTH_SHORT
-                            ).show()
+
+                            // Persist the mission the person picked, then arm the alarm.
+                            MissionPrefs.saveMission(
+                                context = context,
+                                missionType = mission,
+                                qrCode = MissionPrefs.getQrCode(context),
+                                photoItems = MissionPrefs.getSelectedPhotoItems(context)
+                            )
+
+                            val armed = AlarmScheduler.scheduleDailyAlarm(context, hour, minute)
+                            if (armed) {
+                                Toast.makeText(
+                                    context,
+                                    "Alarm armed for %02d:%02d".format(hour, minute),
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            } else {
+                                // Never fail silently: the likely cause is revoked exact-alarm access.
+                                Toast.makeText(
+                                    context,
+                                    "Exact alarm access is off — allow it in Settings to arm the alarm.",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
                             prefsUpdateTrigger++
                         }
                     )
@@ -450,7 +469,7 @@ private fun MissionDock(
                     fontFamily = FontFamily.Monospace,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
-                    color = if (armed) colors.warmYellow else colors.textTertiary
+                    color = if (armed) colors.warmYellow else colors.textSecondary
                 )
             }
         }
@@ -503,7 +522,7 @@ private fun MissionDock(
             Text(
                 text = "One time, one mission, one promise.",
                 fontSize = 12.sp,
-                color = colors.textTertiary
+                color = colors.textSecondary
             )
         }
 

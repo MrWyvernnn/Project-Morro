@@ -346,7 +346,7 @@ fun PermissionsScreen(
 
             Text(
                 text = "100% offline • no accounts • stored on this phone",
-                color = MorroColors.TextTertiary,
+                color = MorroColors.TextSecondary,
                 fontFamily = FontFamily.Monospace,
                 fontSize = 10.sp,
                 letterSpacing = 0.6.sp,
@@ -527,7 +527,7 @@ private fun SystemAccessCard(
 
         Text(
             text = "Optional, but phones that sleep hard can delay an alarm without them.",
-            color = MorroColors.TextTertiary,
+            color = MorroColors.TextSecondary,
             fontSize = 11.sp,
             lineHeight = 16.sp
         )

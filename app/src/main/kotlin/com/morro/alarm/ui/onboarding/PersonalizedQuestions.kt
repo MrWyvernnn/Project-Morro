@@ -278,7 +278,7 @@ fun PersonalizedQuestions(
                 TextButton(onClick = { finish() }) {
                     Text(
                         text = "SKIP",
-                        color = QuestionsTokens.inkMuted,
+                        color = QuestionsTokens.inkSecondary,
                         fontFamily = FontFamily.Monospace,
                         fontSize = 11.sp,
                         letterSpacing = 2.sp

@@ -632,7 +632,7 @@ private fun MorroOptionChip(
                 if (!enabled) {
                     Text(
                         text = "SOON",
-                        color = colors.textTertiary,
+                        color = colors.textSecondary,
                         fontFamily = FontFamily.Monospace,
                         fontSize = 9.sp,
                         letterSpacing = 1.sp,
