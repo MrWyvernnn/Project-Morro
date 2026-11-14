@@ -12,7 +12,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
@@ -109,12 +111,14 @@ fun MorroCard(
             // Focus ring drawn BEHIND the card (concentric, outside bounds at 18dp radius)
             .drawBehind {
                 if (animatedFocusRingAlpha > 0f) {
-                    val ringRadius = focusRingRadiusPx * animatedFocusRingScale
-                    val ringColor = colors.accentTactical.copy(alpha = animatedFocusRingAlpha)
-                    drawCircle(
-                        color = ringColor,
-                        center = Offset(size.width / 2f, size.height / 2f),
-                        radius = ringRadius,
+                    // Drawn just inside the clip. A circle centred on a wide card would sit outside
+                    // the card's own bounds and never be seen, so the ring follows the squarcle.
+                    val inset = 1.5f * density
+                    drawRoundRect(
+                        color = colors.accentTactical.copy(alpha = animatedFocusRingAlpha),
+                        topLeft = Offset(inset, inset),
+                        size = Size(size.width - inset * 2f, size.height - inset * 2f),
+                        cornerRadius = CornerRadius(cardRadiusPx - inset, cardRadiusPx - inset),
                         style = Stroke(width = focusRingStrokeWidthPx)
                     )
                 }
