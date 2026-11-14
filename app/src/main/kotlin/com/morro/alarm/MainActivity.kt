@@ -14,6 +14,11 @@ import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -23,6 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -50,6 +56,7 @@ import com.morro.alarm.ui.onboarding.HowItWorksSlideshow
 import com.morro.alarm.ui.onboarding.OnboardingGate
 import com.morro.alarm.ui.onboarding.PersonalizationStorage
 import com.morro.alarm.ui.onboarding.PersonalizedQuestions
+import com.morro.alarm.ui.onboarding.AmbientGlow
 import com.morro.alarm.ui.splash.MorroGhostSplash
 import com.morro.alarm.ui.theme.MorroTheme
 import com.morro.alarm.ui.theme.morroColors
@@ -199,6 +206,9 @@ fun MainAlarmScreen(context: Context) {
             .statusBarsPadding()
             .navigationBarsPadding()
     ) {
+        // Ambient light behind the clock, same technique as the questions screen.
+        AmbientGlow()
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -214,13 +224,20 @@ fun MainAlarmScreen(context: Context) {
             ) {
                 Text(
                     text = "MORRO",
-                    fontSize = 14.sp,
+                    fontSize = 18.sp,
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold,
                     color = colors.textPrimary,
-                    letterSpacing = 4.sp
+                    letterSpacing = 6.sp
                 )
                 TextButton(onClick = { showPrivacyPolicy = true }) {
+                    Icon(
+                        imageVector = Icons.Filled.Lock,
+                        contentDescription = null,
+                        tint = colors.accentTactical,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = "Privacy",
                         fontSize = 12.sp,
@@ -274,6 +291,7 @@ fun MainAlarmScreen(context: Context) {
             Text(
                 text = digitalTime,
                 style = typo.bodyMedium.copy(
+                    fontSize = 18.sp,
                     fontFamily = FontFamily.Monospace,
                     color = colors.textSecondary
                 ),
@@ -346,14 +364,14 @@ fun MainAlarmScreen(context: Context) {
                             Box(
                                 modifier = Modifier
                                     .size(8.dp)
-                                    .background(colors.accentTactical, CircleShape)
+                                    .background(colors.warmYellow, CircleShape)
                             )
                             Text(
                                 text = missionBadgeText,
                                 fontSize = 11.sp,
                                 fontFamily = FontFamily.Monospace,
                                 fontWeight = FontWeight.Bold,
-                                color = colors.accentTactical
+                                color = colors.warmYellow
                             )
                         }
 
@@ -373,7 +391,7 @@ fun MainAlarmScreen(context: Context) {
                                 },
                                 colors = SwitchDefaults.colors(
                                     checkedThumbColor = Color.Black,
-                                    checkedTrackColor = colors.accentTactical,
+                                    checkedTrackColor = colors.warmYellow,
                                     uncheckedThumbColor = colors.textSecondary,
                                     uncheckedTrackColor = colors.surfaceLow
                                 )
@@ -404,20 +422,36 @@ fun MainAlarmScreen(context: Context) {
         }
 
         // Bottom-Right Floating Action Button (+ Button) - anchored with 16dp padding
-        FloatingActionButton(
-            onClick = { showAlarmBuilder = true },
+        val fabInteraction = remember { MutableInteractionSource() }
+        val fabPressed by fabInteraction.collectIsPressedAsState()
+        val fabScale by animateFloatAsState(
+            targetValue = if (fabPressed) 0.94f else 1f,
+            animationSpec = spring(dampingRatio = 0.8f, stiffness = 700f),
+            label = "fabPress"
+        )
+        Box(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(16.dp)
-                .size(64.dp),
-            containerColor = colors.accentTactical,
-            contentColor = Color.Black,
-            shape = RoundedCornerShape(18.dp)
+                .size(64.dp)
+                .graphicsLayer {
+                    scaleX = fabScale
+                    scaleY = fabScale
+                }
+                .clip(RoundedCornerShape(16.dp))
+                .background(colors.accentTactical)
+                .clickable(
+                    interactionSource = fabInteraction,
+                    indication = ripple(),
+                    onClickLabel = "Configure alarm"
+                ) { showAlarmBuilder = true },
+            contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = Icons.Default.Add,
                 contentDescription = "Configure Alarm",
-                modifier = Modifier.size(32.dp)
+                tint = Color.Black,
+                modifier = Modifier.size(30.dp)
             )
         }
 

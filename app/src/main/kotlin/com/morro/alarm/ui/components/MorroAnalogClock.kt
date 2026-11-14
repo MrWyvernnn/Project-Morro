@@ -2,7 +2,6 @@ package com.morro.alarm.ui.components
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -10,17 +9,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.rotate
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.delay
 import com.morro.alarm.ui.theme.morroColors
-import com.morro.alarm.ui.theme.morroTypography
-import java.text.SimpleDateFormat
 import java.util.Calendar
-import java.util.Locale
 
 @Composable
 fun MorroAnalogClock(
@@ -29,16 +21,12 @@ fun MorroAnalogClock(
     calendar: Calendar = Calendar.getInstance()
 ) {
     val colors = morroColors()
-    val typo = morroTypography()
 
     val hour = calendar.get(Calendar.HOUR)
     val minute = calendar.get(Calendar.MINUTE)
     val second = calendar.get(Calendar.SECOND)
     val hourFloat = hour + minute / 60f
     val minuteFloat = minute + second / 60f
-
-    val dateFormat = remember { SimpleDateFormat("EEE, MMM d • HH:mm:ss", Locale.getDefault()) }
-    val dateStr = remember(calendar) { dateFormat.format(calendar.time).uppercase() }
 
     Column(
         modifier = modifier,
@@ -54,7 +42,7 @@ fun MorroAnalogClock(
 
                 // Dial background: Surface with border
                 drawCircle(
-                    color = colors.surface,
+                    color = Color.Black,
                     radius = radius,
                     center = center
                 )
@@ -88,7 +76,8 @@ fun MorroAnalogClock(
                     val endY = center.y + outerRadius * kotlin.math.sin(radAngle).toFloat()
 
                     val strokeWidth = if (isMajorHour) 3.dp.toPx() else if (isHour) 1.5.dp.toPx() else 1.dp.toPx()
-                    val tickColor = if (isHour) colors.textPrimary else colors.textDisabled
+                    val tickColor = if (isHour) colors.textSecondary.copy(alpha = 0.75f)
+                        else colors.textDisabled.copy(alpha = 0.55f)
 
                     if (!isHour) {
                         drawCircle(
@@ -154,15 +143,5 @@ fun MorroAnalogClock(
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Text(
-            text = dateStr,
-            fontFamily = FontFamily.Monospace,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Medium,
-            color = colors.textDisabled,
-            letterSpacing = 1.5.sp
-        )
     }
 }
