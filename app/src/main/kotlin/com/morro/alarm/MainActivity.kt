@@ -46,6 +46,8 @@ import com.morro.alarm.ui.components.AlarmBuilderSheet
 import com.morro.alarm.ui.components.AlarmBuilderSheetContent
 import com.morro.alarm.ui.components.MorroAnalogClock
 import com.morro.alarm.ui.components.MorroPrivacyPolicySheet
+import com.morro.alarm.ui.onboarding.PersonalizationStorage
+import com.morro.alarm.ui.onboarding.PersonalizedQuestions
 import com.morro.alarm.ui.splash.MorroGhostSplash
 import com.morro.alarm.ui.theme.MorroTheme
 import com.morro.alarm.ui.theme.morroColors
@@ -82,6 +84,9 @@ class MainActivity : ComponentActivity() {
 
                 // Show the ghost splash once at launch, then hand off to the existing app routing.
                 var splashDone by remember { mutableStateOf(false) }
+                var questionsDone by remember {
+                    mutableStateOf(PersonalizationStorage.isComplete(this@MainActivity))
+                }
                 if (!splashDone) {
                     MorroGhostSplash(
                         onDismiss = {
@@ -89,6 +94,9 @@ class MainActivity : ComponentActivity() {
                         },
                         modifier = Modifier.fillMaxSize()
                     )
+                } else if (!questionsDone) {
+                    // Prompt 3: five personalized questions before permissions or the dashboard.
+                    PersonalizedQuestions(onComplete = { questionsDone = true })
                 } else if (!hasOnboarded) {
                     // Launch the full 4-step OnboardingActivity instead of inline screen
                     val intent = Intent(this@MainActivity, OnboardingActivity::class.java).apply {
