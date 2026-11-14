@@ -1,5 +1,6 @@
 package com.morro.alarm
 
+import android.Manifest
 import android.app.AlarmManager
 import android.content.Context
 import android.content.Intent
@@ -14,39 +15,68 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.*
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.ripple
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.morro.alarm.ui.components.MorroGhostMascot
-import com.morro.alarm.ui.theme.MorroTheme
-import com.morro.alarm.ui.theme.morroColors
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
+import com.morro.alarm.ui.components.MorroPrimaryButton
+import com.morro.alarm.ui.onboarding.AmbientGlow
+import com.morro.alarm.ui.theme.MorroColors
+import com.morro.alarm.ui.theme.MorroGradients
+import com.morro.alarm.ui.theme.MorroShapes
+import com.morro.alarm.ui.theme.MorroTheme
+import com.morro.alarm.ui.theme.morroGradientBorder
 
 /**
- * OnboardingActivity: Strict 4-step onboarding wizard.
+ * Permissions onboarding — one screen, two rows, one optional hardening card.
  *
- * State Machine:
- *   Step 1: Request POST_NOTIFICATIONS and RECORD_AUDIO.
- *   Step 2: Request SCHEDULE_EXACT_ALARM via ACTION_REQUEST_SCHEDULE_EXACT_ALARM.
- *   Step 3: Trigger Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS for our package.
- *   Step 4: Force the user to record their first 15-second memo using MemoRecorder and save it to MemoStorage.
+ * The old four-step wizard is gone. Each row requests its own permission inline and flips to a
+ * pink "Granted" pill the moment the system returns. Battery optimisation and exact-alarm access
+ * live in a compact terminal card: they matter for reliability, so they are surfaced clearly, but
+ * they can never block the person from reaching the dashboard.
  *
- * Upon Step 4 completion, saves is_onboarding_complete = true in SharedPreferences and navigates to MainActivity.
+ * Writing `onboarding_completed` happens only on Continue, so a returning user who finished the
+ * intro earlier lands on this screen once and never again after that.
  */
 class OnboardingActivity : ComponentActivity() {
 
@@ -54,101 +84,69 @@ class OnboardingActivity : ComponentActivity() {
         const val PREFS_NAME = "morro_prefs"
         const val KEY_ONBOARDING_COMPLETED = "onboarding_completed"
 
-        /** Checks if onboarding is finished and a valid initial memo exists. */
+        /** True when permissions onboarding finished (the memo may still be recorded later). */
         fun isOnboardingComplete(context: Context): Boolean {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val completed = prefs.getBoolean(KEY_ONBOARDING_COMPLETED, false)
-            return completed && MemoStorage.hasSavedMemo(context)
+            return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .getBoolean(KEY_ONBOARDING_COMPLETED, false)
         }
     }
 
-    private val TAG = "OnboardingActivity"
+    private val tag = "OnboardingActivity"
 
-    /** Strict 4-step onboarding state machine */
-    enum class Step {
-        PERMISSIONS,       // Step 1: POST_NOTIFICATIONS & RECORD_AUDIO
-        EXACT_ALARMS,      // Step 2: SCHEDULE_EXACT_ALARM
-        BATTERY_HARDENING, // Step 3: IGNORE_BATTERY_OPTIMIZATIONS
-        FIRST_PROMISE      // Step 4: First 15s commitment memo
-    }
-
-    private var currentStep by mutableStateOf(Step.PERMISSIONS)
-
-    // System & Permission states
     private var hasNotificationPermission by mutableStateOf(false)
     private var hasAudioPermission by mutableStateOf(false)
     private var hasExactAlarmPermission by mutableStateOf(false)
-    private var isBatteryOptimizationsIgnored by mutableStateOf(false)
+    private var isBatteryIgnored by mutableStateOf(false)
+    private var notificationDenied by mutableStateOf(false)
+    private var audioDenied by mutableStateOf(false)
 
-    // First Promise recording state
-    private var isRecording by mutableStateOf(false)
-    private var recordingCountdown by mutableStateOf(15)
-    private var hasTempRecorded by mutableStateOf(false)
-    private var isPlayingPreview by mutableStateOf(false)
+    private val notificationLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        refreshSystemState()
+        notificationDenied = !granted && !hasNotificationPermission
+    }
 
-    // Permission launchers for Step 1
-    private val multiplePermissionsLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        updateSystemStates()
-        if (hasRequiredPermissions()) {
-            advanceToNextStep()
-        }
+    private val audioLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        refreshSystemState()
+        audioDenied = !granted && !hasAudioPermission
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        updateSystemStates()
-        determineInitialStep()
+        refreshSystemState()
 
         setContent {
             MorroTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = morroColors().canvas
-                ) {
-                    OnboardingScreen(
-                        currentStep = currentStep,
-                        hasNotificationPermission = hasNotificationPermission,
-                        hasAudioPermission = hasAudioPermission,
-                        hasExactAlarmPermission = hasExactAlarmPermission,
-                        isBatteryOptimizationsIgnored = isBatteryOptimizationsIgnored,
-                        isRecording = isRecording,
-                        recordingCountdown = recordingCountdown,
-                        hasTempRecorded = hasTempRecorded,
-                        isPlayingPreview = isPlayingPreview,
-                        onRequestPermissions = { requestStep1Permissions() },
-                        onRequestExactAlarm = { requestExactAlarmPermission() },
-                        onRequestIgnoreBattery = { requestIgnoreBatteryOptimizations() },
-                        onStartRecording = { startFirstPromiseRecording() },
-                        onStopRecording = { stopFirstPromiseRecording() },
-                        onCancelRecording = { cancelFirstPromiseRecording() },
-                        onPlayPreview = { playPreview() },
-                        onSavePromise = { saveFirstPromise() },
-                        onNextStep = { advanceToNextStep() },
-                        onOpenAppSettings = { openAppSettings() }
-                    )
-                }
+                PermissionsScreen(
+                    hasNotificationPermission = hasNotificationPermission,
+                    hasAudioPermission = hasAudioPermission,
+                    hasExactAlarmPermission = hasExactAlarmPermission,
+                    isBatteryIgnored = isBatteryIgnored,
+                    notificationDenied = notificationDenied,
+                    audioDenied = audioDenied,
+                    onRequestNotifications = { requestNotifications() },
+                    onRequestAudio = { audioLauncher.launch(Manifest.permission.RECORD_AUDIO) },
+                    onRequestExactAlarm = { requestExactAlarm() },
+                    onRequestBattery = { requestIgnoreBattery() },
+                    onContinue = { finishOnboarding() }
+                )
             }
         }
     }
 
     override fun onResume() {
         super.onResume()
-        updateSystemStates()
+        refreshSystemState()
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        MemoPlayer.release()
-        MemoRecorder.release()
-    }
-
-    private fun updateSystemStates() {
+    private fun refreshSystemState() {
         hasNotificationPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             ContextCompat.checkSelfPermission(
                 this,
-                android.Manifest.permission.POST_NOTIFICATIONS
+                Manifest.permission.POST_NOTIFICATIONS
             ) == PackageManager.PERMISSION_GRANTED
         } else {
             true
@@ -156,7 +154,7 @@ class OnboardingActivity : ComponentActivity() {
 
         hasAudioPermission = ContextCompat.checkSelfPermission(
             this,
-            android.Manifest.permission.RECORD_AUDIO
+            Manifest.permission.RECORD_AUDIO
         ) == PackageManager.PERMISSION_GRANTED
 
         hasExactAlarmPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -167,77 +165,45 @@ class OnboardingActivity : ComponentActivity() {
         }
 
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-        isBatteryOptimizationsIgnored = powerManager.isIgnoringBatteryOptimizations(packageName)
-
-        hasTempRecorded = MemoStorage.hasTempMemo(this)
+        isBatteryIgnored = powerManager.isIgnoringBatteryOptimizations(packageName)
     }
 
-    private fun hasRequiredPermissions(): Boolean {
-        return hasNotificationPermission && hasAudioPermission
-    }
-
-    private fun determineInitialStep() {
-        currentStep = when {
-            !hasRequiredPermissions() -> Step.PERMISSIONS
-            !hasExactAlarmPermission -> Step.EXACT_ALARMS
-            !isBatteryOptimizationsIgnored -> Step.BATTERY_HARDENING
-            else -> Step.FIRST_PROMISE
-        }
-    }
-
-    private fun advanceToNextStep() {
-        currentStep = when (currentStep) {
-            Step.PERMISSIONS -> Step.EXACT_ALARMS
-            Step.EXACT_ALARMS -> Step.BATTERY_HARDENING
-            Step.BATTERY_HARDENING -> Step.FIRST_PROMISE
-            Step.FIRST_PROMISE -> Step.FIRST_PROMISE
-        }
-    }
-
-    private fun requestStep1Permissions() {
-        val permissionsToRequest = mutableListOf<String>()
+    private fun requestNotifications() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !hasNotificationPermission) {
-            permissionsToRequest.add(android.Manifest.permission.POST_NOTIFICATIONS)
-        }
-        if (!hasAudioPermission) {
-            permissionsToRequest.add(android.Manifest.permission.RECORD_AUDIO)
-        }
-
-        if (permissionsToRequest.isNotEmpty()) {
-            multiplePermissionsLauncher.launch(permissionsToRequest.toTypedArray())
+            notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         } else {
-            advanceToNextStep()
+            Toast.makeText(this, "Notifications are already allowed.", Toast.LENGTH_SHORT).show()
         }
     }
 
-    private fun requestExactAlarmPermission() {
+    private fun requestExactAlarm() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             try {
-                val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
-                    data = Uri.parse("package:$packageName")
-                }
-                startActivity(intent)
+                startActivity(
+                    Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                        data = Uri.parse("package:$packageName")
+                    }
+                )
             } catch (e: Exception) {
-                Log.w(TAG, "Failed to launch exact alarm settings: ${e.message}")
+                Log.w(tag, "Exact alarm settings unavailable: ${e.message}")
                 openAppSettings()
             }
         } else {
             hasExactAlarmPermission = true
-            advanceToNextStep()
         }
     }
 
-    private fun requestIgnoreBatteryOptimizations() {
+    private fun requestIgnoreBattery() {
         try {
-            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                data = Uri.parse("package:$packageName")
-            }
-            startActivity(intent)
+            startActivity(
+                Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                    data = Uri.parse("package:$packageName")
+                }
+            )
         } catch (e: Exception) {
-            Log.w(TAG, "Direct battery optimization intent failed: ${e.message}")
+            Log.w(tag, "Battery exemption intent failed: ${e.message}")
             try {
-                val fallbackIntent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
-                startActivity(fallbackIntent)
+                startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
             } catch (e2: Exception) {
                 openAppSettings()
             }
@@ -245,577 +211,348 @@ class OnboardingActivity : ComponentActivity() {
     }
 
     private fun openAppSettings() {
-        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-            data = Uri.parse("package:$packageName")
-        }
-        startActivity(intent)
-    }
-
-    private fun startFirstPromiseRecording() {
-        if (!hasAudioPermission) {
-            Toast.makeText(this, "Microphone permission is required.", Toast.LENGTH_SHORT).show()
-            currentStep = Step.PERMISSIONS
-            return
-        }
-
-        isRecording = true
-        recordingCountdown = 15
-        hasTempRecorded = false
-
-        MemoRecorder.startRecording(
-            this,
-            onError = { err ->
-                Log.e(TAG, "First promise recording error: $err")
-                Toast.makeText(this, "Recording error: $err", Toast.LENGTH_SHORT).show()
-                isRecording = MemoRecorder.isRecording()
-            },
-            onMaxDurationReached = {
-                Log.d(TAG, "First promise recording 15s cap reached")
-                isRecording = MemoRecorder.isRecording()
-                hasTempRecorded = true
-            }
-        )
-
-        lifecycleScope.launch {
-            while (MemoRecorder.isRecording() && recordingCountdown > 0) {
-                delay(1000)
-                if (!isRecording) break
-                recordingCountdown--
-            }
-            if (isRecording) {
-                stopFirstPromiseRecording()
-            }
-        }
-    }
-
-    private fun stopFirstPromiseRecording() {
-        isRecording = false
-        val success = MemoRecorder.stopRecording(this)
-        hasTempRecorded = success
-        if (!success) {
-            Toast.makeText(this, "Recording was too short. Speak your promise and tap Stop.", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun cancelFirstPromiseRecording() {
-        isRecording = false
-        MemoPlayer.stopPlayback()
-        isPlayingPreview = false
-        MemoRecorder.cancelRecording(this)
-        hasTempRecorded = false
-    }
-
-    private fun playPreview() {
-        val tempPath = MemoStorage.getTempPath(this)
-        isPlayingPreview = true
-        MemoPlayer.startPlayback(
-            this,
-            tempPath,
-            onCompletion = { isPlayingPreview = false },
-            onError = { err ->
-                isPlayingPreview = false
-                Toast.makeText(this, "Playback error: $err", Toast.LENGTH_SHORT).show()
+        startActivity(
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.parse("package:$packageName")
             }
         )
     }
 
-    private fun saveFirstPromise() {
-        MemoPlayer.stopPlayback()
-        isPlayingPreview = false
+    /** Continue works regardless of what was granted; the dashboard explains anything missing. */
+    private fun finishOnboarding() {
+        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_ONBOARDING_COMPLETED, true)
+            .commit()
 
-        val saved = MemoStorage.saveMemo(this)
-        if (saved) {
-            // Synchronous commit: MainActivity.isOnboardingComplete() reads this flag
-            // immediately after we launch MainActivity; it must be on disk before the
-            // Intent fires.
-            getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                .edit()
-                .putBoolean(KEY_ONBOARDING_COMPLETED, true)
-                .commit()
-
-            Toast.makeText(this, "First promise recorded!", Toast.LENGTH_SHORT).show()
-
-            val mainIntent = Intent(this, MainActivity::class.java).apply {
+        startActivity(
+            Intent(this, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
             }
-            startActivity(mainIntent)
-            finish()
-        } else {
-            Toast.makeText(this, "Please record a valid promise before proceeding.", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    @Deprecated("Deprecated in Java")
-    @Suppress("DEPRECATION", "MissingSuperCall")
-    override fun onBackPressed() {
-        when (currentStep) {
-            Step.PERMISSIONS -> finish()
-            Step.EXACT_ALARMS -> currentStep = Step.PERMISSIONS
-            Step.BATTERY_HARDENING -> currentStep = Step.EXACT_ALARMS
-            Step.FIRST_PROMISE -> currentStep = Step.BATTERY_HARDENING
-        }
+        )
+        finish()
     }
 }
 
 @Composable
-fun OnboardingScreen(
-    currentStep: OnboardingActivity.Step,
+fun PermissionsScreen(
     hasNotificationPermission: Boolean,
     hasAudioPermission: Boolean,
     hasExactAlarmPermission: Boolean,
-    isBatteryOptimizationsIgnored: Boolean,
-    isRecording: Boolean,
-    recordingCountdown: Int,
-    hasTempRecorded: Boolean,
-    isPlayingPreview: Boolean,
-    onRequestPermissions: () -> Unit,
+    isBatteryIgnored: Boolean,
+    notificationDenied: Boolean,
+    audioDenied: Boolean,
+    onRequestNotifications: () -> Unit,
+    onRequestAudio: () -> Unit,
     onRequestExactAlarm: () -> Unit,
-    onRequestIgnoreBattery: () -> Unit,
-    onStartRecording: () -> Unit,
-    onStopRecording: () -> Unit,
-    onCancelRecording: () -> Unit,
-    onPlayPreview: () -> Unit,
-    onSavePromise: () -> Unit,
-    onNextStep: () -> Unit,
-    onOpenAppSettings: () -> Unit
+    onRequestBattery: () -> Unit,
+    onContinue: () -> Unit
 ) {
-    val scrollState = rememberScrollState()
+    Box(modifier = Modifier.fillMaxSize()) {
+        AmbientGlow()
 
-    val colors = morroColors()
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 24.dp, vertical = 32.dp)
-            .verticalScroll(scrollState),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.SpaceBetween
-    ) {
         Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.systemBars)
+                .padding(horizontal = 24.dp)
+                .verticalScroll(rememberScrollState())
         ) {
+            Spacer(modifier = Modifier.height(20.dp))
+
             Text(
-                text = "MORRO",
-                style = MaterialTheme.typography.headlineLarge.copy(
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 4.sp
-                ),
-                color = colors.accentTactical
+                text = "MORRO • ACCESS",
+                color = MorroColors.AccentTactical,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 11.sp,
+                letterSpacing = 2.2.sp,
+                fontWeight = FontWeight.Medium
             )
-            Spacer(modifier = Modifier.height(4.dp))
+
+            Spacer(modifier = Modifier.height(28.dp))
+
             Text(
-                text = "Commitment-Driven Wake-Up",
-                style = MaterialTheme.typography.bodyMedium,
-                color = colors.textSecondary
+                text = "Two quick permissions",
+                color = MorroColors.TextPrimary,
+                fontSize = 28.sp,
+                lineHeight = 34.sp,
+                letterSpacing = (-0.5).sp,
+                fontWeight = FontWeight.Bold
             )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = "One wakes you. One hears your promise.",
+                color = MorroColors.TextSecondary,
+                fontSize = 14.sp,
+                lineHeight = 20.sp
+            )
+
+            Spacer(modifier = Modifier.height(28.dp))
+
+            PermissionRow(
+                icon = Icons.Filled.Notifications,
+                title = "Notifications",
+                why = "Shows the alarm full-screen over your lock screen.",
+                granted = hasNotificationPermission,
+                onAllow = onRequestNotifications
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            PermissionRow(
+                icon = Icons.Filled.Mic,
+                title = "Microphone",
+                why = "Records the promise Morro plays back each morning.",
+                granted = hasAudioPermission,
+                onAllow = onRequestAudio
+            )
+
+            if (notificationDenied || audioDenied) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = if (notificationDenied && audioDenied) {
+                        "Both were declined. Morro will still open; you can allow them in Settings whenever you're ready."
+                    } else if (notificationDenied) {
+                        "Notifications were declined. Without them the alarm can't take over the screen."
+                    } else {
+                        "The microphone was declined. Without it Morro can't record a promise."
+                    },
+                    color = MorroColors.TextSecondary,
+                    fontSize = 12.sp,
+                    lineHeight = 18.sp
+                )
+            }
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            StepProgressBar(currentStep = currentStep, colors = colors)
+            SystemAccessCard(
+                hasExactAlarmPermission = hasExactAlarmPermission,
+                isBatteryIgnored = isBatteryIgnored,
+                onRequestExactAlarm = onRequestExactAlarm,
+                onRequestBattery = onRequestBattery
+            )
+
+            Spacer(modifier = Modifier.height(28.dp))
+
+            MorroPrimaryButton(
+                text = "Continue",
+                onClick = onContinue,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Text(
+                text = "100% offline • no accounts • stored on this phone",
+                color = MorroColors.TextTertiary,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 10.sp,
+                letterSpacing = 0.6.sp,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(28.dp))
+        }
+    }
+}
+
+/** One permission, one row: icon badge, what it does, and its live status on the right. */
+@Composable
+private fun PermissionRow(
+    icon: ImageVector,
+    title: String,
+    why: String,
+    granted: Boolean,
+    onAllow: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MorroShapes.Card)
+            .background(MorroColors.SurfaceCard)
+            .morroGradientBorder(
+                shape = MorroShapes.Card,
+                width = 1.dp,
+                brush = MorroGradients.horizontal(if (granted) 0.85f else 0.35f)
+            )
+            .clickable(enabled = !granted, onClick = onAllow)
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(MorroColors.AccentTactical.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MorroColors.AccentTactical,
+                modifier = Modifier.size(20.dp)
+            )
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.width(14.dp))
 
-        AnimatedContent(
-            targetState = currentStep,
-            label = "StepTransition"
-        ) { step ->
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = colors.surface),
-                shape = RoundedCornerShape(16.dp)
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                color = MorroColors.TextPrimary,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = why,
+                color = MorroColors.TextSecondary,
+                fontSize = 12.sp,
+                lineHeight = 17.sp
+            )
+        }
+
+        Spacer(modifier = Modifier.width(10.dp))
+
+        if (granted) {
+            Row(
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .background(MorroColors.AccentBubbly.copy(alpha = 0.14f))
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    when (step) {
-                        OnboardingActivity.Step.PERMISSIONS -> {
-                            StepPermissionsContent(
-                                hasNotification = hasNotificationPermission,
-                                hasAudio = hasAudioPermission,
-                                onRequest = onRequestPermissions,
-                                onNext = onNextStep,
-                                onOpenSettings = onOpenAppSettings,
-                                colors = colors
-                            )
-                        }
-                        OnboardingActivity.Step.EXACT_ALARMS -> {
-                            StepExactAlarmContent(
-                                isGranted = hasExactAlarmPermission,
-                                onRequest = onRequestExactAlarm,
-                                onNext = onNextStep,
-                                colors = colors
-                            )
-                        }
-                        OnboardingActivity.Step.BATTERY_HARDENING -> {
-                            StepBatteryContent(
-                                isIgnored = isBatteryOptimizationsIgnored,
-                                onRequest = onRequestIgnoreBattery,
-                                onNext = onNextStep,
-                                colors = colors
-                            )
-                        }
-                        OnboardingActivity.Step.FIRST_PROMISE -> {
-                            StepFirstPromiseContent(
-                                isRecording = isRecording,
-                                countdown = recordingCountdown,
-                                hasRecorded = hasTempRecorded,
-                                isPlayingPreview = isPlayingPreview,
-                                onStart = onStartRecording,
-                                onStop = onStopRecording,
-                                onCancel = onCancelRecording,
-                                onPlay = onPlayPreview,
-                                onSave = onSavePromise,
-                                colors = colors
-                            )
-                        }
+                Icon(
+                    imageVector = Icons.Filled.Check,
+                    contentDescription = null,
+                    tint = MorroColors.AccentBubbly,
+                    modifier = Modifier.size(13.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "Granted",
+                    color = MorroColors.AccentBubbly,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        } else {
+            Text(
+                text = "Allow",
+                color = MorroColors.AccentTactical,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .border(1.dp, MorroColors.AccentTactical.copy(alpha = 0.6f), CircleShape)
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
+            )
+        }
+    }
+}
+
+/**
+ * Reliability actions, styled as a terminal readout rather than a blocking step. Both actions are
+ * optional and Continue never depends on them.
+ */
+@Composable
+private fun SystemAccessCard(
+    hasExactAlarmPermission: Boolean,
+    isBatteryIgnored: Boolean,
+    onRequestExactAlarm: () -> Unit,
+    onRequestBattery: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MorroShapes.Card)
+            .background(MorroColors.SurfaceCard)
+            .border(1.dp, MorroColors.BorderSubtle, MorroShapes.Card)
+            .padding(16.dp)
+    ) {
+        Text(
+            text = "SYSTEM CHECK",
+            color = MorroColors.TextTertiary,
+            fontFamily = FontFamily.Monospace,
+            fontSize = 10.sp,
+            letterSpacing = 1.4.sp,
+            fontWeight = FontWeight.Bold
+        )
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        TerminalLine(
+            label = "exact timing",
+            value = if (hasExactAlarmPermission) "ACTIVE" else "NEEDED",
+            ok = hasExactAlarmPermission
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        TerminalLine(
+            label = "battery",
+            value = if (isBatteryIgnored) "UNRESTRICTED" else "OPTIMISED",
+            ok = isBatteryIgnored
+        )
+
+        if (!hasExactAlarmPermission || !isBatteryIgnored) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (!hasExactAlarmPermission) {
+                    TextButton(onClick = onRequestExactAlarm) {
+                        Text(
+                            text = "Fix timing",
+                            color = MorroColors.AccentTactical,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+                if (!isBatteryIgnored) {
+                    TextButton(onClick = onRequestBattery) {
+                        Text(
+                            text = "Optimise battery",
+                            color = MorroColors.AccentTactical,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 11.sp
+                        )
                     }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(2.dp))
 
         Text(
-            text = "100% offline • No accounts • Local storage only",
-            style = MaterialTheme.typography.labelSmall,
-            color = colors.textDisabled,
-            textAlign = TextAlign.Center
+            text = "Optional, but phones that sleep hard can delay an alarm without them.",
+            color = MorroColors.TextTertiary,
+            fontSize = 11.sp,
+            lineHeight = 16.sp
         )
     }
 }
 
 @Composable
-fun StepProgressBar(currentStep: OnboardingActivity.Step, colors: com.morro.alarm.ui.theme.MorroColorPalette) {
-    val totalSteps = OnboardingActivity.Step.values().size
-    val currentIndex = currentStep.ordinal
-
+private fun TerminalLine(label: String, value: String, ok: Boolean) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        repeat(totalSteps) { index ->
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(4.dp)
-                    .background(
-                        color = if (index <= currentIndex) colors.accentTactical else colors.borderSubtle,
-                        shape = RoundedCornerShape(2.dp)
-                    )
-            )
-        }
-    }
-}
-
-// -------------------------------------------------------------
-// STEP 1: PERMISSIONS (Notifications & Microphone)
-// -------------------------------------------------------------
-@Composable
-fun StepPermissionsContent(
-    hasNotification: Boolean,
-    hasAudio: Boolean,
-    onRequest: () -> Unit,
-    onNext: () -> Unit,
-    onOpenSettings: () -> Unit,
-    colors: com.morro.alarm.ui.theme.MorroColorPalette
-) {
-    val bothGranted = hasNotification && hasAudio
-
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        // Friendly smiling ghost mascot centered, with subtle pink/orange ambient glow.
-        Box(
-            modifier = Modifier
-                .size(130.dp)
-                .background(colors.canvas.copy(alpha = 0f)),
-            contentAlignment = Alignment.Center
-        ) {
-            MorroGhostMascot(
-                modifier = Modifier.size(96.dp, 120.dp),
-                happy = true
-            )
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
         Text(
-            text = "1. Required Permissions",
-            style = MaterialTheme.typography.titleLarge,
-            color = colors.accentTactical,
-            fontWeight = FontWeight.SemiBold
+            text = "> $label",
+            color = MorroColors.TextSecondary,
+            fontFamily = FontFamily.Monospace,
+            fontSize = 11.sp
         )
-
         Text(
-            text = "Morro requires two permissions to function:\n\n• Notifications: To display full-screen alarm alerts over your lock screen.\n• Microphone: To record your daily commitment memos.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = colors.textSecondary,
-            textAlign = TextAlign.Center
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        if (bothGranted) {
-            Text(
-                text = "✓ Notifications & Microphone granted",
-                style = MaterialTheme.typography.bodyMedium,
-                color = colors.success,
-                fontWeight = FontWeight.Bold
-            )
-            Button(
-                onClick = onNext,
-                colors = ButtonDefaults.buttonColors(containerColor = colors.accentTactical, contentColor = Color.Black),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Next: Exact Timing")
-            }
-        } else {
-            Button(
-                onClick = onRequest,
-                colors = ButtonDefaults.buttonColors(containerColor = colors.accentTactical, contentColor = Color.Black),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Grant Permissions")
-            }
-
-            OutlinedButton(
-                onClick = onOpenSettings,
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.textSecondary),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Open App Settings")
-            }
-        }
-    }
-}
-
-// -------------------------------------------------------------
-// STEP 2: EXACT ALARMS
-// -------------------------------------------------------------
-@Composable
-fun StepExactAlarmContent(
-    isGranted: Boolean,
-    onRequest: () -> Unit,
-    onNext: () -> Unit,
-    colors: com.morro.alarm.ui.theme.MorroColorPalette
-) {
-    Text(
-        text = "2. Exact Timing",
-        style = MaterialTheme.typography.titleLarge,
-        color = colors.accentTactical,
-        fontWeight = FontWeight.SemiBold
-    )
-
-    Text(
-        text = "To preserve battery, Android delays ordinary timers by up to 15 minutes. Morro needs exact alarm permission to wake you at the precise minute you set.",
-        style = MaterialTheme.typography.bodyMedium,
-        color = colors.textSecondary,
-        textAlign = TextAlign.Center
-    )
-
-    Spacer(modifier = Modifier.height(8.dp))
-
-    if (isGranted) {
-        Text(
-            text = "✓ Exact timing enabled",
-            style = MaterialTheme.typography.bodyMedium,
-            color = colors.success,
+            text = value,
+            color = if (ok) MorroColors.AccentBubbly else MorroColors.AccentTactical,
+            fontFamily = FontFamily.Monospace,
+            fontSize = 11.sp,
             fontWeight = FontWeight.Bold
         )
-        Button(
-            onClick = onNext,
-            colors = ButtonDefaults.buttonColors(containerColor = colors.accentTactical, contentColor = Color.Black),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Next: Battery Hardening")
-        }
-    } else {
-        Button(
-            onClick = onRequest,
-            colors = ButtonDefaults.buttonColors(containerColor = colors.accentTactical, contentColor = Color.Black),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Allow Exact Alarms")
-        }
-    }
-}
-
-// -------------------------------------------------------------
-// STEP 3: BATTERY HARDENING
-// -------------------------------------------------------------
-@Composable
-fun StepBatteryContent(
-    isIgnored: Boolean,
-    onRequest: () -> Unit,
-    onNext: () -> Unit,
-    colors: com.morro.alarm.ui.theme.MorroColorPalette
-) {
-    Text(
-        text = "3. OEM Battery Hardening",
-        style = MaterialTheme.typography.titleLarge,
-        color = colors.accentTactical,
-        fontWeight = FontWeight.SemiBold
-    )
-
-    Text(
-        text = "Android and device manufacturers (Samsung, Xiaomi, Nothing, Pixel) aggressively terminate background alarms overnight to save power.\n\nTo ensure your alarm reliably fires while your phone is asleep, Morro must be exempted from battery optimizations.",
-        style = MaterialTheme.typography.bodyMedium,
-        color = colors.textSecondary,
-        textAlign = TextAlign.Center
-    )
-
-    Spacer(modifier = Modifier.height(8.dp))
-
-    if (isIgnored) {
-        Text(
-            text = "✓ Battery optimization disabled",
-            style = MaterialTheme.typography.bodyMedium,
-            color = colors.success,
-            fontWeight = FontWeight.Bold
-        )
-        Button(
-            onClick = onNext,
-            colors = ButtonDefaults.buttonColors(containerColor = colors.accentTactical, contentColor = Color.Black),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Next: Record First Promise")
-        }
-    } else {
-        Button(
-            onClick = onRequest,
-            colors = ButtonDefaults.buttonColors(containerColor = colors.error, contentColor = Color.White),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Disable Battery Optimization")
-        }
-
-        TextButton(
-            onClick = onNext,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                text = "Continue anyway (Not Recommended)",
-                color = colors.textDisabled,
-                style = MaterialTheme.typography.labelMedium
-            )
-        }
-    }
-}
-
-// -------------------------------------------------------------
-// STEP 4: THE FIRST PROMISE
-// -------------------------------------------------------------
-@Composable
-fun StepFirstPromiseContent(
-    isRecording: Boolean,
-    countdown: Int,
-    hasRecorded: Boolean,
-    isPlayingPreview: Boolean,
-    onStart: () -> Unit,
-    onStop: () -> Unit,
-    onCancel: () -> Unit,
-    onPlay: () -> Unit,
-    onSave: () -> Unit,
-    colors: com.morro.alarm.ui.theme.MorroColorPalette
-) {
-    Text(
-        text = "4. Your First Promise",
-        style = MaterialTheme.typography.titleLarge,
-        color = colors.accentTactical,
-        fontWeight = FontWeight.SemiBold
-    )
-
-    Text(
-        text = "Morro requires an existing commitment to play when tomorrow's alarm rings.\n\nSpeak out loud: what is the ONE thing you commit to doing tomorrow morning? (Max 15 seconds)",
-        style = MaterialTheme.typography.bodyMedium,
-        color = colors.textSecondary,
-        textAlign = TextAlign.Center
-    )
-
-    Spacer(modifier = Modifier.height(16.dp))
-
-    when {
-        isRecording -> {
-            Text(
-                text = "Recording: $countdown s",
-                style = MaterialTheme.typography.headlineMedium,
-                color = colors.accentTactical,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            Button(
-                onClick = onStop,
-                colors = ButtonDefaults.buttonColors(containerColor = colors.success, contentColor = Color.White),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Stop Recording")
-            }
-            OutlinedButton(
-                onClick = onCancel,
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.error),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Cancel")
-            }
-        }
-        hasRecorded -> {
-            Text(
-                text = if (isPlayingPreview) "Playing preview…" else "Commitment recorded",
-                style = MaterialTheme.typography.titleMedium,
-                color = colors.textSecondary
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Button(
-                    onClick = onPlay,
-                    enabled = !isPlayingPreview,
-                    colors = ButtonDefaults.buttonColors(containerColor = colors.accentTactical, contentColor = Color.Black),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("Preview")
-                }
-                OutlinedButton(
-                    onClick = onCancel,
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.textSecondary),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("Re-record")
-                }
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            Button(
-                onClick = onSave,
-                colors = ButtonDefaults.buttonColors(containerColor = colors.success, contentColor = Color.White),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Save & Enter Morro", fontWeight = FontWeight.Bold)
-            }
-        }
-        else -> {
-            Button(
-                onClick = onStart,
-                colors = ButtonDefaults.buttonColors(containerColor = colors.accentTactical, contentColor = Color.Black),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Start Recording (15s)")
-            }
-            Text(
-                text = "You must record your first promise to finish setup.",
-                style = MaterialTheme.typography.labelSmall,
-                color = colors.textDisabled,
-                textAlign = TextAlign.Center
-            )
-        }
     }
 }
