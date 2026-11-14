@@ -46,6 +46,8 @@ import com.morro.alarm.ui.components.AlarmBuilderSheet
 import com.morro.alarm.ui.components.AlarmBuilderSheetContent
 import com.morro.alarm.ui.components.MorroAnalogClock
 import com.morro.alarm.ui.components.MorroPrivacyPolicySheet
+import com.morro.alarm.ui.onboarding.HowItWorksSlideshow
+import com.morro.alarm.ui.onboarding.OnboardingGate
 import com.morro.alarm.ui.onboarding.PersonalizationStorage
 import com.morro.alarm.ui.onboarding.PersonalizedQuestions
 import com.morro.alarm.ui.splash.MorroGhostSplash
@@ -83,9 +85,12 @@ class MainActivity : ComponentActivity() {
                 var hasOnboarded by remember { mutableStateOf(prefs.getBoolean("onboarding_completed", false)) }
 
                 // Show the ghost splash once at launch, then hand off to the existing app routing.
-                var splashDone by remember { mutableStateOf(false) }
+                // Prompt 4 gate: once the intro is finished it never shows again.
+                val alreadyOnboarded = OnboardingGate.isComplete(this@MainActivity)
+                var splashDone by remember { mutableStateOf(alreadyOnboarded) }
+                var slideshowDone by remember { mutableStateOf(alreadyOnboarded) }
                 var questionsDone by remember {
-                    mutableStateOf(PersonalizationStorage.isComplete(this@MainActivity))
+                    mutableStateOf(alreadyOnboarded || PersonalizationStorage.isComplete(this@MainActivity))
                 }
                 if (!splashDone) {
                     MorroGhostSplash(
@@ -97,6 +102,14 @@ class MainActivity : ComponentActivity() {
                 } else if (!questionsDone) {
                     // Prompt 3: five personalized questions before permissions or the dashboard.
                     PersonalizedQuestions(onComplete = { questionsDone = true })
+                } else if (!slideshowDone) {
+                    // Prompt 4: three slides on how the loop works, then the rest of the flow.
+                    HowItWorksSlideshow(
+                        onFinished = {
+                            OnboardingGate.markComplete(this@MainActivity)
+                            slideshowDone = true
+                        }
+                    )
                 } else if (!hasOnboarded) {
                     // Launch the full 4-step OnboardingActivity instead of inline screen
                     val intent = Intent(this@MainActivity, OnboardingActivity::class.java).apply {
