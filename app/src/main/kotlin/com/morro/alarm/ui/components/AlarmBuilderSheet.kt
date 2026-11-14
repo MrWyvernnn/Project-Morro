@@ -135,7 +135,8 @@ fun AlarmBuilderSheet(
     val sheetElevation = (progress * 8f).dp
 
     // Surface at 92% alpha — NO backdrop-filter blur (not HW-accelerated on all OEMs)
-    val sheetBackground = colors.surface.copy(alpha = sheetAlpha)
+    // Near-black sheet, so the mission cards read as panels floating on top of it.
+    val sheetBackground = colors.canvas.copy(alpha = 0.95f * progress)
 
     // Backdrop — tap to dismiss
     Box(
@@ -153,6 +154,7 @@ fun AlarmBuilderSheet(
             .height(520.dp)
             .clip(shapes.Sheet)
             .background(sheetBackground)
+            .border(1.dp, colors.borderSubtle, shapes.Sheet)
             .graphicsLayer {
                 scaleX = sheetScale
                 scaleY = sheetScale
@@ -382,6 +384,7 @@ fun AlarmBuilderSheetContent(
                 title = "Voice Commitment",
                 subtitle = "15s personal commitment recorded in-app",
                 icon = Icons.Filled.Mic,
+                accent = colors.accentBubbly,
                 isSelected = selectedMission == MissionType.VOICE_COMMITMENT || selectedMission == MissionType.VOICE_MEMO,
                 onSelect = { selectedMission = MissionType.VOICE_COMMITMENT },
                 showExpanded = selectedMission == MissionType.VOICE_COMMITMENT || selectedMission == MissionType.VOICE_MEMO,
@@ -547,11 +550,14 @@ private fun MorroOptionChip(
     isSelected: Boolean,
     onSelect: () -> Unit,
     showExpanded: Boolean = false,
+    accent: Color = Color.Unspecified,
     expandedContent: @Composable (() -> Unit)? = null
 ) {
     val colors = morroColors()
     val typo = morroTypography()
     val shapes = morroShapes()
+
+    val activeAccent = if (accent == Color.Unspecified) colors.accentTactical else accent
 
     Column(
         modifier = Modifier.fillMaxWidth()
@@ -561,12 +567,12 @@ private fun MorroOptionChip(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(
-                    if (isSelected) colors.accentTactical.copy(alpha = 0.10f) else colors.surfaceVariant,
+                    if (isSelected) activeAccent.copy(alpha = 0.12f) else colors.surfaceVariant,
                     shapes.Card
                 )
                 .border(
-                    if (isSelected) 2.dp else 1.dp,
-                    if (isSelected) colors.accentTactical else colors.borderSubtle,
+                    1.dp,
+                    if (isSelected) colors.borderActive else colors.borderSubtle,
                     shapes.Card
                 )
                 .clip(shapes.Card)
@@ -587,7 +593,7 @@ private fun MorroOptionChip(
                         modifier = Modifier
                             .size(44.dp)
                             .background(
-                                if (isSelected) colors.accentTactical else colors.surfaceLow,
+                                if (isSelected) activeAccent.copy(alpha = 0.18f) else colors.surfaceLow,
                                 RoundedCornerShape(12.dp)
                             ),
                         contentAlignment = Alignment.Center
@@ -595,7 +601,7 @@ private fun MorroOptionChip(
                         Icon(
                             imageVector = icon,
                             contentDescription = null,
-                            tint = if (isSelected) Color.White else colors.textSecondary,
+                            tint = if (isSelected) activeAccent else colors.textSecondary,
                             modifier = Modifier.size(24.dp)
                         )
                     }
@@ -604,7 +610,7 @@ private fun MorroOptionChip(
                             text = title,
                             style = typo.titleMedium.copy(
                                 fontWeight = FontWeight.Bold,
-                                color = if (isSelected) colors.accentTactical else colors.textPrimary
+                                color = colors.textPrimary
                             )
                         )
                         Text(
