@@ -1,6 +1,13 @@
 package com.morro.alarm.ui.splash
 
 import android.provider.Settings
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -8,63 +15,54 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.morro.alarm.ui.components.bezierPoint
+import com.morro.alarm.ui.components.drawGhost
+import com.morro.alarm.ui.theme.MorroColors
+import com.morro.alarm.ui.theme.MorroSpring
 import kotlinx.coroutines.delay
-import kotlin.math.sin
 
-// Splash palette. Kept local so the splash never depends on theme internals.
-private val SplashCanvas = Color(0xFF000000)
-private val SplashBody = Color(0xFFFFF8F0)
-private val SplashEye = Color(0xFF17171C)
-private val SplashBlush = Color(0xFFFF6B9D)
-private val SplashHalo = Color(0xFFFFC94A)
-private val SplashTextPrimary = Color(0xFFFFFFFF)
-private val SplashTextSecondary = Color(0xFFB3FFFFFF)
-private val SplashGlowPink = Color(0xFFFF6B9D)
-private val SplashGlowOrange = Color(0xFFFF4500)
-
-private const val EntranceMillis = 600f
-private const val TextRevealMillis = 500f
-private const val FrameMillis = 16L
-private const val SplashHoldMillis = 2300L
-private const val ReducedMotionHoldMillis = 150L
+private const val SplashHoldMillis = 2_400L
+private const val ReducedHoldMillis = 200L
 
 /**
- * First-launch splash: an AMOLED-black stage with the Morro ghost mascot, the wordmark,
- * and the tagline. It dismisses itself after roughly 2.3s, or immediately on tap.
+ * The hero splash: a pink sun, an orange ribbon rising out of the bottom-left, a few grass blades
+ * on its edge, and the Morro ghost above them.
  *
- * Everything is drawn with Compose primitives - there are no image assets and no engine code
- * is touched. Back navigation and the alarm flow are unaffected: this composable only reports
- * that it is finished through [onDismiss].
+ * Everything is one Canvas scene drawn back to front, so the layers share a single coordinate
+ * space and the ribbon's grass can sit exactly on its edge. Motion is entrance-only (ghost rises
+ * 36dp on a momentum spring, text lands after it) plus two slow ambient loops — the ribbon glow
+ * breathing and the ghost's bob. Reduced motion collapses all of it to a static frame.
  */
 @Composable
 fun MorroGhostSplash(
@@ -72,11 +70,30 @@ fun MorroGhostSplash(
     modifier: Modifier = Modifier,
 ) {
     val reducedMotion = rememberReducedMotion()
-
-    var entrance by remember { mutableFloatStateOf(if (reducedMotion) 1f else 0f) }
-    var textReveal by remember { mutableFloatStateOf(if (reducedMotion) 1f else 0f) }
-    var floatOffset by remember { mutableFloatStateOf(0f) }
     var dismissed by remember { mutableStateOf(false) }
+
+    val entrance = remember { Animatable(if (reducedMotion) 1f else 0f) }
+    val textReveal = remember { Animatable(if (reducedMotion) 1f else 0f) }
+
+    val ambient = rememberInfiniteTransition(label = "splashAmbient")
+    val breathe by ambient.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 4_600, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "ribbonBreathe"
+    )
+    val bob by ambient.animateFloat(
+        initialValue = -1f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2_800, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "ghostBob"
+    )
 
     fun finish() {
         if (!dismissed) {
@@ -85,273 +102,226 @@ fun MorroGhostSplash(
         }
     }
 
-    // Entrance, then the text reveal. Both are eased with the same smooth curve.
     LaunchedEffect(Unit) {
-        if (reducedMotion) return@LaunchedEffect
-
-        runTimeline(EntranceMillis) { progress -> entrance = easeInOutCubic(progress) }
-        delay(320L)
-        runTimeline(TextRevealMillis) { progress -> textReveal = easeInOutCubic(progress) }
-    }
-
-    // Gentle idle float, skipped entirely when animations are turned off.
-    LaunchedEffect(Unit) {
-        if (reducedMotion) return@LaunchedEffect
-        var phase = 0f
-        while (true) {
-            floatOffset = sin(phase) * 4f
-            phase += 0.12f
-            delay(24L)
+        if (!reducedMotion) {
+            entrance.animateTo(1f, MorroSpring.FloatSpringMomentum)
+            delay(120L)
+            textReveal.animateTo(1f, tween(durationMillis = 420, easing = FastOutSlowInEasing))
         }
     }
 
-    // Auto-dismiss. Reduced motion collapses the hold to a short beat.
     LaunchedEffect(Unit) {
-        delay(if (reducedMotion) ReducedMotionHoldMillis else SplashHoldMillis)
+        delay(if (reducedMotion) ReducedHoldMillis else SplashHoldMillis)
         finish()
     }
+
+    val glowAlpha = if (reducedMotion) 0.16f else 0.10f + 0.08f * breathe
+    val ghostLift = if (reducedMotion) 0f else (1f - entrance.value) * 36f + bob * 4f
 
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(SplashCanvas)
+            .background(MorroColors.Canvas)
             .statusBarsPadding()
             .navigationBarsPadding(),
     ) {
-        // Ambient warmth behind the mascot, plus the glossy halo behind the wordmark.
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .drawBehind {
-                    drawRect(
-                        brush = Brush.radialGradient(
-                            colors = listOf(
-                                SplashGlowPink.copy(alpha = 0.10f * entrance),
-                                SplashGlowOrange.copy(alpha = 0.05f * entrance),
-                                Color.Transparent,
-                            ),
-                            center = Offset(size.width / 2f, size.height * 0.42f),
-                            radius = size.minDimension * 0.75f,
-                        ),
-                        size = size,
-                    )
-                },
-        )
-
-        // Tap anywhere to skip.
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .clickable(onClick = { finish() }),
-        )
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            drawStage(glowAlpha = glowAlpha)
+        }
 
         Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Spacer(modifier = Modifier.height(96.dp))
+            Spacer(modifier = Modifier.weight(0.14f))
 
             Canvas(
                 modifier = Modifier
-                    .size(196.dp, 216.dp)
-                    .offset(y = floatOffset.dp)
-                    .alpha(entrance),
+                    .size(220.dp, 244.dp)
+                    .offset(y = ghostLift.dp)
+                    .alpha(entrance.value.coerceIn(0f, 1f)),
             ) {
                 drawGhost(
                     canvasSize = size,
-                    scale = 0.90f + 0.10f * entrance,
-                    blinkProgress = 0f,
+                    centerYOffset = 0f,
+                    bodyColor = Color.White,
+                    eyeColor = MorroColors.AccentBubbly,
+                    happy = true
                 )
             }
 
-            Spacer(modifier = Modifier.height(36.dp))
+            Spacer(modifier = Modifier.height(28.dp))
 
-            Box(
-                modifier = Modifier
-                    .alpha(textReveal)
-                    .drawBehind {
-                        drawRect(
-                            brush = Brush.radialGradient(
-                                colors = listOf(
-                                    SplashGlowPink.copy(alpha = 0.28f),
-                                    SplashGlowOrange.copy(alpha = 0.14f),
-                                    Color.Transparent,
-                                ),
-                                center = Offset(size.width / 2f, size.height / 2f),
-                                radius = size.minDimension * 0.95f,
-                            ),
-                            size = size,
-                        )
-                    },
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.alpha(textReveal.value.coerceIn(0f, 1f)),
             ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
+                Text(
+                    text = "Morro",
+                    fontFamily = FontFamily.SansSerif,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 36.sp,
+                    letterSpacing = (-1).sp,
+                    color = MorroColors.TextPrimary,
+                    textAlign = TextAlign.Center,
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Text(
+                    text = "The Commitment Alarm",
+                    fontFamily = FontFamily.SansSerif,
+                    fontWeight = FontWeight.Normal,
+                    fontSize = 14.sp,
+                    letterSpacing = 0.4.sp,
+                    color = MorroColors.TextSecondary,
+                    textAlign = TextAlign.Center,
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Short pink underline: the only accent the wordmark needs.
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp, vertical = 8.dp),
-                ) {
-                    Text(
-                        text = "Morro",
-                        fontFamily = FontFamily.SansSerif,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 36.sp,
-                        color = SplashTextPrimary,
-                        textAlign = TextAlign.Center,
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Text(
-                        text = "The Commitment Alarm",
-                        fontFamily = FontFamily.SansSerif,
-                        fontWeight = FontWeight.Normal,
-                        fontSize = 14.sp,
-                        color = SplashTextSecondary,
-                        textAlign = TextAlign.Center,
-                        letterSpacing = 0.06f.sp,
-                    )
-                }
+                        .width(28.dp)
+                        .height(2.dp)
+                        .background(Brush.horizontalGradient(MorroGradientColors))
+                )
             }
+
+            Spacer(modifier = Modifier.weight(0.30f))
         }
+
+        // Tap anywhere to skip the hold.
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable(onClick = { finish() })
+        )
     }
 }
 
-/**
- * Runs a tween from 0f to 1f in [FrameMillis] steps over [durationMillis], reporting the raw
- * progress. Deliberately simple: one coroutine per animation keeps the state updates readable
- * and avoids depending on animation APIs that vary between Compose versions.
- */
-private suspend fun runTimeline(
-    durationMillis: Float,
-    onFrame: (Float) -> Unit,
-) {
-    val step = FrameMillis.toFloat() / durationMillis
-    var progress = 0f
-    while (progress < 1f) {
-        progress = (progress + step).coerceIn(0f, 1f)
-        onFrame(progress)
-        delay(FrameMillis)
-    }
-}
-
-private fun easeInOutCubic(t: Float): Float =
-    if (t < 0.5f) 4f * t * t * t else 1f - ((-2f * t + 2f) * (-2f * t + 2f) * (-2f * t + 2f)) / 2f
+private val MorroGradientColors = listOf(MorroColors.AccentTactical, MorroColors.AccentBubbly)
 
 /**
- * Draws the mascot: a soft dome head, a wavy scalloped hem, two dark oval eyes and pink blush,
- * all inside the supplied canvas size. [scale] drives the entrance growth.
+ * The stage, painted back to front: sun, ribbon, grass.
+ *
+ * The ribbon is one cubic bezier; the grass blades sample that same curve so they always stand on
+ * its upper edge, whatever the screen size.
  */
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawGhost(
-    canvasSize: Size,
-    scale: Float,
-    blinkProgress: Float,
-) {
-    val bodyWidth = canvasSize.width * 0.60f * scale
-    val headTop = canvasSize.height * 0.14f
-    val bodyBottom = canvasSize.height * 0.78f
-    val centerX = canvasSize.width / 2f
-    val halfWidth = bodyWidth / 2f
-    val capHeight = bodyWidth * 0.50f
-    val hemHeight = bodyWidth * 0.10f
-    val left = centerX - halfWidth
-    val right = centerX + halfWidth
+private fun DrawScope.drawStage(glowAlpha: Float) {
+    val w = size.width
+    val h = size.height
 
-    // Warm-yellow halo behind the head.
+    // ── Layer 1: pink sun, upper right ───────────────────────────────────────
+    val sunCenter = Offset(w * 0.74f, h * 0.20f)
     drawCircle(
         brush = Brush.radialGradient(
             colors = listOf(
-                SplashHalo.copy(alpha = 0.16f),
-                Color.Transparent,
+                MorroColors.AccentBubbly.copy(alpha = 0.20f),
+                MorroColors.AccentTactical.copy(alpha = 0.09f),
+                Color.Transparent
             ),
-            center = Offset(centerX, headTop + capHeight * 0.55f),
-            radius = bodyWidth * 0.72f,
+            center = sunCenter,
+            radius = w * 0.52f
         ),
-        radius = bodyWidth * 0.72f,
-        center = Offset(centerX, headTop + capHeight * 0.55f),
+        radius = w * 0.52f,
+        center = sunCenter
+    )
+    drawCircle(
+        brush = Brush.radialGradient(
+            colors = listOf(
+                MorroColors.AccentBubblySoft.copy(alpha = 0.24f),
+                Color.Transparent
+            ),
+            center = sunCenter,
+            radius = w * 0.17f
+        ),
+        radius = w * 0.17f,
+        center = sunCenter
     )
 
-    val body = Path().apply {
-        // Dome head.
-        moveTo(left, headTop + capHeight)
-        cubicTo(
-            left, headTop,
-            left + bodyWidth * 0.14f, headTop,
-            centerX, headTop,
-        )
-        cubicTo(
-            right - bodyWidth * 0.14f, headTop,
-            right, headTop,
-            right, headTop + capHeight,
-        )
+    // ── Layer 2: the ribbon, bottom-left to middle-right ─────────────────────
+    val start = Offset(-w * 0.16f, h * 0.90f)
+    val control1 = Offset(w * 0.24f, h * 0.99f)
+    val control2 = Offset(w * 0.46f, h * 0.60f)
+    val end = Offset(w * 0.98f, h * 0.45f)
 
-        // Straight sides into the hem.
-        lineTo(right, bodyBottom - hemHeight)
+    val ribbon = Path().apply {
+        moveTo(start.x, start.y)
+        cubicTo(control1.x, control1.y, control2.x, control2.y, end.x, end.y)
+    }
+    val ribbonBrush = Brush.linearGradient(
+        colors = listOf(MorroColors.AccentTactical, MorroColors.AccentBubblySoft, MorroColors.AccentBubbly),
+        start = start,
+        end = end
+    )
+    val coreWidth = 7.dp.toPx()
 
-        // Three soft scallops sweeping right to left.
-        val scallop = bodyWidth / 3f
-        var startX = right
-        var dipDown = true
-        var index = 0
-        while (index < 3) {
-            val endX = startX - scallop
-            val controlY = if (dipDown) bodyBottom else bodyBottom - hemHeight * 0.55f
-            quadraticTo(startX - scallop / 2f, controlY, endX, bodyBottom - hemHeight * 0.35f)
-            startX = endX
-            dipDown = !dipDown
-            index++
+    // Soft outer glow: two wide, low-alpha passes, then the crisp core.
+    drawPath(ribbon, ribbonBrush, alpha = glowAlpha * 0.55f, style = Stroke(width = coreWidth * 5f, cap = StrokeCap.Round))
+    drawPath(ribbon, ribbonBrush, alpha = glowAlpha, style = Stroke(width = coreWidth * 2.6f, cap = StrokeCap.Round))
+    drawPath(ribbon, ribbonBrush, alpha = 0.92f, style = Stroke(width = coreWidth, cap = StrokeCap.Round))
+
+    // ── Layer 3: grass on the ribbon's upper edge ────────────────────────────
+    var t = 0.08f
+    var index = 0
+    while (t < 0.62f) {
+        val point = bezierPoint(t, start, control1, control2, end)
+        val baseY = point.y - coreWidth * 0.4f
+        val bladeHeight = (10f + (index % 4) * 5f).dp.toPx()
+        val lean = if (index % 2 == 0) 2.4.dp.toPx() else -2.4.dp.toPx()
+
+        val blade = Path().apply {
+            moveTo(point.x - 1.4.dp.toPx(), baseY + 2.dp.toPx())
+            quadraticTo(point.x + lean * 0.4f, baseY - bladeHeight * 0.6f, point.x + lean, baseY - bladeHeight)
+            quadraticTo(point.x + lean * 1.4f, baseY - bladeHeight * 0.55f, point.x + 1.6.dp.toPx(), baseY + 2.dp.toPx())
+            close()
         }
+        // Dark silhouette so the blades read against the lit ribbon.
+        drawPath(blade, Color(0xFF05050A))
 
-        lineTo(left, bodyBottom - hemHeight)
-        close()
-    }
-
-    drawPath(path = body, color = SplashBody)
-
-    // Face.
-    val eyeCenterY = headTop + capHeight * 0.78f
-    val eyeSpacing = bodyWidth * 0.19f
-    val eyeWidth = bodyWidth * 0.105f
-    val eyeHeight = bodyWidth * 0.17f * (1f - blinkProgress.coerceIn(0f, 0.85f))
-
-    listOf(-1, 1).forEach { side ->
-        drawOval(
-            color = SplashEye,
-            topLeft = Offset(
-                centerX + side * eyeSpacing - eyeWidth / 2f,
-                eyeCenterY - eyeHeight / 2f,
+        // Faint rim light on the leading edge.
+        val rim = Path().apply {
+            moveTo(point.x + lean * 0.9f, baseY - bladeHeight * 0.92f)
+            quadraticTo(point.x + lean * 0.4f, baseY - bladeHeight * 0.6f, point.x - 1.2.dp.toPx(), baseY)
+        }
+        drawPath(
+            rim,
+            brush = Brush.linearGradient(
+                listOf(
+                    MorroColors.AccentBubbly.copy(alpha = 0.45f),
+                    MorroColors.AccentTactical.copy(alpha = 0.30f)
+                )
             ),
-            size = Size(eyeWidth, eyeHeight),
+            style = Stroke(width = 1.dp.toPx(), cap = StrokeCap.Round)
         )
+
+        t += 0.045f
+        index++
     }
 
-    // Blush sits just below the eyes at ~40% alpha so it glows without reading as body text.
-    val blushRadius = bodyWidth * 0.075f
-    listOf(-1, 1).forEach { side ->
-        drawCircle(
-            color = SplashBlush.copy(alpha = 0.40f),
-            radius = blushRadius,
-            center = Offset(
-                centerX + side * bodyWidth * 0.29f,
-                eyeCenterY + bodyWidth * 0.14f,
-            ),
-        )
-    }
+    // A soft floor fade so the ribbon dissolves into the black at the bottom.
+    drawRect(
+        brush = Brush.verticalGradient(
+            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.55f)),
+            startY = h * 0.78f,
+            endY = h
+        ),
+        topLeft = Offset(0f, h * 0.78f),
+        size = Size(w, h * 0.22f)
+    )
 }
 
-
-/**
- * Reads the system animation scale. When animations are disabled (or scaled to zero) the splash
- * skips the entrance, the idle float and the long hold.
- */
+/** Reads the system animator scale; zero means the user asked for no animation. */
 @Composable
 private fun rememberReducedMotion(): Boolean {
     val context = LocalContext.current
     return remember(context) {
-        val scale = Settings.Global.getFloat(
+        Settings.Global.getFloat(
             context.contentResolver,
             Settings.Global.ANIMATOR_DURATION_SCALE,
             1f,
-        )
-        scale == 0f
+        ) == 0f
     }
 }
