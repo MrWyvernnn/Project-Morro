@@ -58,19 +58,21 @@ object MorroShapes {
 object MorroColors {
     // Canvas & surface layers
     val Canvas        = Color(0xFF000000) // Root background — pure black
-    val Surface       = Color(0xFF12121A) // Cards, panels — elevated surface
+    val Surface       = Color(0xFF0A0A0F) // Cards, panels — midnight blue squarcle
     val SurfaceVariant = Color(0xFF0A0A0F) // Warm black
-    val SurfaceLow    = Color(0xFF0A0A0F) // Subtle variant for chips, tags
+    val SurfaceLow    = Color(0xFF12121A) // Raised tiles, pills, drag handles
 
     // Typography colors
     val TextPrimary   = Color(0xFFFFFFFF) // White — headlines, primary labels
     val TextSecondary = Color(0xFFB3FFFFFF) // White at 70% — body text
     val TextDisabled  = Color(0xFF80FFFFFF) // White at 50% — disabled only
+    val TextTertiary  = Color(0xFF80FFFFFF) // White at 50% — tertiary text, hints
 
     // Accent system
     val AccentTactical   = Color(0xFFFF4500) // Tactical Orange — CTA, focus, icons ≥24sp, alarm emphasis
     val AccentBubbly     = Color(0xFFFF6B9D) // Bubbly Pink — GLOW ONLY (waveform, burst, shimmer, live states)
     val AccentBubblyDeep = Color(0xFF9C2D5E) // Deep pink — decorative waveform/depth only, not text or semantic
+    val WarmYellow       = Color(0xFFFFC94A) // Warm yellow — armed / positive states only
 
     // Borders
     val BorderSubtle  = Color(0xFF1FFFFFFF) // Very subtle white divider
@@ -78,7 +80,7 @@ object MorroColors {
 
     // Status
     val Success = Color(0xFF2E7D32) // Positive / armed
-    val Error   = Color(0xFF2E7D32) // Non-alarming; not red
+    val Error   = Color(0xFFC62828) // Destructive / stop actions only
 
     // Legacy aliases for gradual migration (DO NOT USE IN NEW CODE)
     @Suppress("DEPRECATION")
@@ -270,9 +272,11 @@ data class MorroColorPalette(
     val textPrimary: Color = MorroColors.TextPrimary,
     val textSecondary: Color = MorroColors.TextSecondary,
     val textDisabled: Color = MorroColors.TextDisabled,
+    val textTertiary: Color = MorroColors.TextTertiary,
     val accentTactical: Color = MorroColors.AccentTactical,
     val accentBubbly: Color = MorroColors.AccentBubbly,
     val accentBubblyDeep: Color = MorroColors.AccentBubblyDeep,
+    val warmYellow: Color = MorroColors.WarmYellow,
     val borderSubtle: Color = MorroColors.BorderSubtle,
     val borderActive: Color = MorroColors.BorderActive,
     val success: Color = MorroColors.Success,
