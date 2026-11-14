@@ -46,6 +46,7 @@ import com.morro.alarm.ui.components.AlarmBuilderSheet
 import com.morro.alarm.ui.components.AlarmBuilderSheetContent
 import com.morro.alarm.ui.components.MorroAnalogClock
 import com.morro.alarm.ui.components.MorroPrivacyPolicySheet
+import com.morro.alarm.ui.splash.MorroGhostSplash
 import com.morro.alarm.ui.theme.MorroTheme
 import com.morro.alarm.ui.theme.morroColors
 import com.morro.alarm.ui.theme.morroTypography
@@ -79,7 +80,16 @@ class MainActivity : ComponentActivity() {
                 val prefs = remember { getSharedPreferences("morro_prefs", Context.MODE_PRIVATE) }
                 var hasOnboarded by remember { mutableStateOf(prefs.getBoolean("onboarding_completed", false)) }
 
-                if (!hasOnboarded) {
+                // Show the ghost splash once at launch, then hand off to the existing app routing.
+                var splashDone by remember { mutableStateOf(false) }
+                if (!splashDone) {
+                    MorroGhostSplash(
+                        onDismiss = {
+                            splashDone = true
+                        },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else if (!hasOnboarded) {
                     // Launch the full 4-step OnboardingActivity instead of inline screen
                     val intent = Intent(this@MainActivity, OnboardingActivity::class.java).apply {
                         flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
