@@ -29,8 +29,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.morro.alarm.ui.theme.MorroTokens
+import com.morro.alarm.ui.components.MorroGhostMascot
 import com.morro.alarm.ui.theme.MorroTheme
+import com.morro.alarm.ui.theme.morroColors
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.delay
@@ -104,7 +105,7 @@ class OnboardingActivity : ComponentActivity() {
             MorroTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = MorroTokens.CanvasRoot
+                    color = morroColors().canvas
                 ) {
                     OnboardingScreen(
                         currentStep = currentStep,
@@ -380,6 +381,8 @@ fun OnboardingScreen(
 ) {
     val scrollState = rememberScrollState()
 
+    val colors = morroColors()
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -398,18 +401,18 @@ fun OnboardingScreen(
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 4.sp
                 ),
-                color = Color(0xFFFF9E1B)
+                color = colors.accentTactical
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = "Commitment-Driven Wake-Up",
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color(0xFFFFE0B2)
+                color = colors.textSecondary
             )
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            StepProgressBar(currentStep = currentStep)
+            StepProgressBar(currentStep = currentStep, colors = colors)
         }
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -420,7 +423,7 @@ fun OnboardingScreen(
         ) { step ->
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1200)),
+                colors = CardDefaults.cardColors(containerColor = colors.surface),
                 shape = RoundedCornerShape(16.dp)
             ) {
                 Column(
@@ -437,21 +440,24 @@ fun OnboardingScreen(
                                 hasAudio = hasAudioPermission,
                                 onRequest = onRequestPermissions,
                                 onNext = onNextStep,
-                                onOpenSettings = onOpenAppSettings
+                                onOpenSettings = onOpenAppSettings,
+                                colors = colors
                             )
                         }
                         OnboardingActivity.Step.EXACT_ALARMS -> {
                             StepExactAlarmContent(
                                 isGranted = hasExactAlarmPermission,
                                 onRequest = onRequestExactAlarm,
-                                onNext = onNextStep
+                                onNext = onNextStep,
+                                colors = colors
                             )
                         }
                         OnboardingActivity.Step.BATTERY_HARDENING -> {
                             StepBatteryContent(
                                 isIgnored = isBatteryOptimizationsIgnored,
                                 onRequest = onRequestIgnoreBattery,
-                                onNext = onNextStep
+                                onNext = onNextStep,
+                                colors = colors
                             )
                         }
                         OnboardingActivity.Step.FIRST_PROMISE -> {
@@ -464,7 +470,8 @@ fun OnboardingScreen(
                                 onStop = onStopRecording,
                                 onCancel = onCancelRecording,
                                 onPlay = onPlayPreview,
-                                onSave = onSavePromise
+                                onSave = onSavePromise,
+                                colors = colors
                             )
                         }
                     }
@@ -477,14 +484,14 @@ fun OnboardingScreen(
         Text(
             text = "100% offline • No accounts • Local storage only",
             style = MaterialTheme.typography.labelSmall,
-            color = Color(0xFF757575),
+            color = colors.textDisabled,
             textAlign = TextAlign.Center
         )
     }
 }
 
 @Composable
-fun StepProgressBar(currentStep: OnboardingActivity.Step) {
+fun StepProgressBar(currentStep: OnboardingActivity.Step, colors: com.morro.alarm.ui.theme.MorroColorPalette) {
     val totalSteps = OnboardingActivity.Step.values().size
     val currentIndex = currentStep.ordinal
 
@@ -498,7 +505,7 @@ fun StepProgressBar(currentStep: OnboardingActivity.Step) {
                     .weight(1f)
                     .height(4.dp)
                     .background(
-                        color = if (index <= currentIndex) Color(0xFFFF9E1B) else Color(0xFF332200),
+                        color = if (index <= currentIndex) colors.accentTactical else colors.borderSubtle,
                         shape = RoundedCornerShape(2.dp)
                     )
             )
@@ -515,55 +522,77 @@ fun StepPermissionsContent(
     hasAudio: Boolean,
     onRequest: () -> Unit,
     onNext: () -> Unit,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    colors: com.morro.alarm.ui.theme.MorroColorPalette
 ) {
     val bothGranted = hasNotification && hasAudio
 
-    Text(
-        text = "1. Required Permissions",
-        style = MaterialTheme.typography.titleLarge,
-        color = Color(0xFFFF9E1B),
-        fontWeight = FontWeight.SemiBold
-    )
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        // Friendly smiling ghost mascot centered, with subtle pink/orange ambient glow.
+        Box(
+            modifier = Modifier
+                .size(130.dp)
+                .background(colors.canvas.copy(alpha = 0f)),
+            contentAlignment = Alignment.Center
+        ) {
+            MorroGhostMascot(
+                modifier = Modifier.size(96.dp, 120.dp),
+                happy = true
+            )
+        }
 
-    Text(
-        text = "Morro requires two permissions to function:\n\n• Notifications: To display full-screen alarm alerts over your lock screen.\n• Microphone: To record your daily commitment memos.",
-        style = MaterialTheme.typography.bodyMedium,
-        color = Color(0xFFFFCC80),
-        textAlign = TextAlign.Center
-    )
+        Spacer(modifier = Modifier.height(24.dp))
 
-    Spacer(modifier = Modifier.height(8.dp))
-
-    if (bothGranted) {
         Text(
-            text = "✓ Notifications & Microphone granted",
-            style = MaterialTheme.typography.bodyMedium,
-            color = Color(0xFF4CAF50),
-            fontWeight = FontWeight.Bold
+            text = "1. Required Permissions",
+            style = MaterialTheme.typography.titleLarge,
+            color = colors.accentTactical,
+            fontWeight = FontWeight.SemiBold
         )
-        Button(
-            onClick = onNext,
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9E1B), contentColor = Color.Black),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Next: Exact Timing")
-        }
-    } else {
-        Button(
-            onClick = onRequest,
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9E1B), contentColor = Color.Black),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Grant Permissions")
-        }
 
-        OutlinedButton(
-            onClick = onOpenSettings,
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFFFB74D)),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Open App Settings")
+        Text(
+            text = "Morro requires two permissions to function:\n\n• Notifications: To display full-screen alarm alerts over your lock screen.\n• Microphone: To record your daily commitment memos.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.textSecondary,
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        if (bothGranted) {
+            Text(
+                text = "✓ Notifications & Microphone granted",
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.success,
+                fontWeight = FontWeight.Bold
+            )
+            Button(
+                onClick = onNext,
+                colors = ButtonDefaults.buttonColors(containerColor = colors.accentTactical, contentColor = Color.Black),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Next: Exact Timing")
+            }
+        } else {
+            Button(
+                onClick = onRequest,
+                colors = ButtonDefaults.buttonColors(containerColor = colors.accentTactical, contentColor = Color.Black),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Grant Permissions")
+            }
+
+            OutlinedButton(
+                onClick = onOpenSettings,
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.textSecondary),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Open App Settings")
+            }
         }
     }
 }
@@ -575,19 +604,20 @@ fun StepPermissionsContent(
 fun StepExactAlarmContent(
     isGranted: Boolean,
     onRequest: () -> Unit,
-    onNext: () -> Unit
+    onNext: () -> Unit,
+    colors: com.morro.alarm.ui.theme.MorroColorPalette
 ) {
     Text(
         text = "2. Exact Timing",
         style = MaterialTheme.typography.titleLarge,
-        color = Color(0xFFFF9E1B),
+        color = colors.accentTactical,
         fontWeight = FontWeight.SemiBold
     )
 
     Text(
         text = "To preserve battery, Android delays ordinary timers by up to 15 minutes. Morro needs exact alarm permission to wake you at the precise minute you set.",
         style = MaterialTheme.typography.bodyMedium,
-        color = Color(0xFFFFCC80),
+        color = colors.textSecondary,
         textAlign = TextAlign.Center
     )
 
@@ -597,12 +627,12 @@ fun StepExactAlarmContent(
         Text(
             text = "✓ Exact timing enabled",
             style = MaterialTheme.typography.bodyMedium,
-            color = Color(0xFF4CAF50),
+            color = colors.success,
             fontWeight = FontWeight.Bold
         )
         Button(
             onClick = onNext,
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9E1B), contentColor = Color.Black),
+            colors = ButtonDefaults.buttonColors(containerColor = colors.accentTactical, contentColor = Color.Black),
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("Next: Battery Hardening")
@@ -610,7 +640,7 @@ fun StepExactAlarmContent(
     } else {
         Button(
             onClick = onRequest,
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9E1B), contentColor = Color.Black),
+            colors = ButtonDefaults.buttonColors(containerColor = colors.accentTactical, contentColor = Color.Black),
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("Allow Exact Alarms")
@@ -625,19 +655,20 @@ fun StepExactAlarmContent(
 fun StepBatteryContent(
     isIgnored: Boolean,
     onRequest: () -> Unit,
-    onNext: () -> Unit
+    onNext: () -> Unit,
+    colors: com.morro.alarm.ui.theme.MorroColorPalette
 ) {
     Text(
         text = "3. OEM Battery Hardening",
         style = MaterialTheme.typography.titleLarge,
-        color = Color(0xFFFF9E1B),
+        color = colors.accentTactical,
         fontWeight = FontWeight.SemiBold
     )
 
     Text(
         text = "Android and device manufacturers (Samsung, Xiaomi, Nothing, Pixel) aggressively terminate background alarms overnight to save power.\n\nTo ensure your alarm reliably fires while your phone is asleep, Morro must be exempted from battery optimizations.",
         style = MaterialTheme.typography.bodyMedium,
-        color = Color(0xFFFFCC80),
+        color = colors.textSecondary,
         textAlign = TextAlign.Center
     )
 
@@ -647,12 +678,12 @@ fun StepBatteryContent(
         Text(
             text = "✓ Battery optimization disabled",
             style = MaterialTheme.typography.bodyMedium,
-            color = Color(0xFF4CAF50),
+            color = colors.success,
             fontWeight = FontWeight.Bold
         )
         Button(
             onClick = onNext,
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9E1B), contentColor = Color.Black),
+            colors = ButtonDefaults.buttonColors(containerColor = colors.accentTactical, contentColor = Color.Black),
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("Next: Record First Promise")
@@ -660,7 +691,7 @@ fun StepBatteryContent(
     } else {
         Button(
             onClick = onRequest,
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB71C1C), contentColor = Color.White),
+            colors = ButtonDefaults.buttonColors(containerColor = colors.error, contentColor = Color.White),
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("Disable Battery Optimization")
@@ -672,7 +703,7 @@ fun StepBatteryContent(
         ) {
             Text(
                 text = "Continue anyway (Not Recommended)",
-                color = Color(0xFF757575),
+                color = colors.textDisabled,
                 style = MaterialTheme.typography.labelMedium
             )
         }
@@ -692,19 +723,20 @@ fun StepFirstPromiseContent(
     onStop: () -> Unit,
     onCancel: () -> Unit,
     onPlay: () -> Unit,
-    onSave: () -> Unit
+    onSave: () -> Unit,
+    colors: com.morro.alarm.ui.theme.MorroColorPalette
 ) {
     Text(
         text = "4. Your First Promise",
         style = MaterialTheme.typography.titleLarge,
-        color = Color(0xFFFF9E1B),
+        color = colors.accentTactical,
         fontWeight = FontWeight.SemiBold
     )
 
     Text(
         text = "Morro requires an existing commitment to play when tomorrow's alarm rings.\n\nSpeak out loud: what is the ONE thing you commit to doing tomorrow morning? (Max 15 seconds)",
         style = MaterialTheme.typography.bodyMedium,
-        color = Color(0xFFFFCC80),
+        color = colors.textSecondary,
         textAlign = TextAlign.Center
     )
 
@@ -715,20 +747,20 @@ fun StepFirstPromiseContent(
             Text(
                 text = "Recording: $countdown s",
                 style = MaterialTheme.typography.headlineMedium,
-                color = Color(0xFFFF9E1B),
+                color = colors.accentTactical,
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.height(12.dp))
             Button(
                 onClick = onStop,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50), contentColor = Color.Black),
+                colors = ButtonDefaults.buttonColors(containerColor = colors.success, contentColor = Color.White),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Stop Recording")
             }
             OutlinedButton(
                 onClick = onCancel,
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFB71C1C)),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.error),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Cancel")
@@ -738,7 +770,7 @@ fun StepFirstPromiseContent(
             Text(
                 text = if (isPlayingPreview) "Playing preview…" else "Commitment recorded",
                 style = MaterialTheme.typography.titleMedium,
-                color = Color(0xFFFFCC80)
+                color = colors.textSecondary
             )
             Spacer(modifier = Modifier.height(12.dp))
             Row(
@@ -748,14 +780,14 @@ fun StepFirstPromiseContent(
                 Button(
                     onClick = onPlay,
                     enabled = !isPlayingPreview,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9E1B), contentColor = Color.Black),
+                    colors = ButtonDefaults.buttonColors(containerColor = colors.accentTactical, contentColor = Color.Black),
                     modifier = Modifier.weight(1f)
                 ) {
                     Text("Preview")
                 }
                 OutlinedButton(
                     onClick = onCancel,
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFFFCC80)),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.textSecondary),
                     modifier = Modifier.weight(1f)
                 ) {
                     Text("Re-record")
@@ -764,7 +796,7 @@ fun StepFirstPromiseContent(
             Spacer(modifier = Modifier.height(8.dp))
             Button(
                 onClick = onSave,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50), contentColor = Color.Black),
+                colors = ButtonDefaults.buttonColors(containerColor = colors.success, contentColor = Color.White),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Save & Enter Morro", fontWeight = FontWeight.Bold)
@@ -773,7 +805,7 @@ fun StepFirstPromiseContent(
         else -> {
             Button(
                 onClick = onStart,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9E1B), contentColor = Color.Black),
+                colors = ButtonDefaults.buttonColors(containerColor = colors.accentTactical, contentColor = Color.Black),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Start Recording (15s)")
@@ -781,7 +813,7 @@ fun StepFirstPromiseContent(
             Text(
                 text = "You must record your first promise to finish setup.",
                 style = MaterialTheme.typography.labelSmall,
-                color = Color(0xFF757575),
+                color = colors.textDisabled,
                 textAlign = TextAlign.Center
             )
         }

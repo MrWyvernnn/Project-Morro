@@ -129,8 +129,11 @@ private fun DrawScope.drawGhostBody(
     height: Float,
     colors: com.morro.alarm.ui.theme.MorroColorPalette
 ) {
-    // Charcoal-black silhouette, visible on light canvas
-    val bodyColor = Color(0xFF1A1A2E)
+    // Dark silhouette for pure-black background.
+    // Head/shoulders use elevated dark surface; wavy bottom uses canvas-black so the
+    // silhouette reads cleanly and the pink/orange glow does the visible work.
+    val bodyColor = colors.surface
+    val bottomColor = colors.canvas
     val bodyWidth = width * 0.72f
     val bodyHeight = height * 0.78f
 
@@ -161,7 +164,29 @@ private fun DrawScope.drawGhostBody(
         )
         close()
     }
-    drawPath(path, color = bodyColor)
+    // Fill body in two tones so the silhouette is visible on pure black without a hard line.
+    drawPath(path, color = bottomColor)
+
+    // Upper body panel (head + shoulders) in elevated dark surface.
+    val upperPath = Path().apply {
+        moveTo(centerX - bodyWidth / 2, centerY - bodyHeight / 4)
+        cubicTo(
+            centerX - bodyWidth / 2, centerY - bodyHeight / 2,
+            centerX, centerY - bodyHeight / 2,
+            centerX, centerY - bodyHeight / 2
+        )
+        cubicTo(
+            centerX + bodyWidth / 2, centerY - bodyHeight / 2,
+            centerX + bodyWidth / 2, centerY - bodyHeight / 4,
+            centerX + bodyWidth / 2, centerY - bodyHeight / 4
+        )
+        // Cut across the body around the chest line so only the upper portion is elevated surface.
+        val chestY = centerY + bodyHeight * 0.06f
+        lineTo(centerX + bodyWidth / 2, chestY)
+        lineTo(centerX - bodyWidth / 2, chestY)
+        close()
+    }
+    drawPath(upperPath, color = bodyColor)
 }
 
 /** Neutral eyes — open dots for Pain Hook and Contract screens. */

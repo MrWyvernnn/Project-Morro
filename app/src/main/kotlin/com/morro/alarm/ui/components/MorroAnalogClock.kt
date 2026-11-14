@@ -25,18 +25,11 @@ import java.util.Locale
 @Composable
 fun MorroAnalogClock(
     modifier: Modifier = Modifier,
-    size: Dp = 240.dp
+    size: Dp = 240.dp,
+    calendar: Calendar = Calendar.getInstance()
 ) {
     val colors = morroColors()
     val typo = morroTypography()
-    var calendar by remember { mutableStateOf(Calendar.getInstance()) }
-
-    LaunchedEffect(Unit) {
-        while (true) {
-            calendar = Calendar.getInstance()
-            delay(1000)
-        }
-    }
 
     val hour = calendar.get(Calendar.HOUR)
     val minute = calendar.get(Calendar.MINUTE)
@@ -44,8 +37,8 @@ fun MorroAnalogClock(
     val hourFloat = hour + minute / 60f
     val minuteFloat = minute + second / 60f
 
-    val dateFormat = SimpleDateFormat("EEE, MMM d • HH:mm:ss", Locale.getDefault())
-    val dateStr = dateFormat.format(calendar.time).uppercase()
+    val dateFormat = remember { SimpleDateFormat("EEE, MMM d • HH:mm:ss", Locale.getDefault()) }
+    val dateStr = remember(calendar) { dateFormat.format(calendar.time).uppercase() }
 
     Column(
         modifier = modifier,

@@ -31,6 +31,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Offset
+import kotlinx.coroutines.delay
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -49,6 +50,7 @@ import com.morro.alarm.ui.theme.MorroTheme
 import com.morro.alarm.ui.theme.morroColors
 import com.morro.alarm.ui.theme.morroTypography
 import com.morro.alarm.ui.theme.morroShapes
+import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -144,12 +146,19 @@ fun MainAlarmScreen(context: Context) {
     val typo = morroTypography()
     val shapes = morroShapes()
 
-    // Digital time readout
-    val digitalTime = remember(prefsUpdateTrigger) {
-        val cal = Calendar.getInstance()
-        val dayFormat = SimpleDateFormat("EEE, MMM d", Locale.getDefault())
-        val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
-        "${dayFormat.format(cal.time).uppercase()} • ${timeFormat.format(cal.time)}"
+    // Shared clock state — analog clock and digital readout use the same source/timing.
+    var clockCal by remember { mutableStateOf(Calendar.getInstance()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            clockCal = Calendar.getInstance()
+            delay(1000L)
+        }
+    }
+
+    val dayFormat = remember { SimpleDateFormat("EEE, MMM d", Locale.getDefault()) }
+    val timeFormat = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
+    val digitalTime = remember(clockCal) {
+        "${dayFormat.format(clockCal.time).uppercase()} • ${timeFormat.format(clockCal.time)}"
     }
 
     Box(
@@ -192,13 +201,14 @@ fun MainAlarmScreen(context: Context) {
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // 3.1 Zero Alarm Volume Warning Card (Warn, Don't Auto-Change)
+            // Zero Alarm Volume Warning Card (warn only; do not auto-change volume)
             if (alarmVolume == 0) {
+                val colors = morroColors()
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF261805), RoundedCornerShape(16.dp))
-                        .border(1.5.dp, Color(0xFFFF6D00), RoundedCornerShape(16.dp))
+                        .background(colors.surface, RoundedCornerShape(16.dp))
+                        .border(1.5.dp, colors.accentTactical, RoundedCornerShape(16.dp))
                         .padding(16.dp)
                 ) {
                     Row(
@@ -208,7 +218,7 @@ fun MainAlarmScreen(context: Context) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.VolumeOff,
                             contentDescription = "Alarm Volume Off",
-                            tint = Color(0xFFFF9800),
+                            tint = colors.accentTactical,
                             modifier = Modifier.size(24.dp)
                         )
                         Spacer(modifier = Modifier.width(12.dp))
@@ -216,7 +226,7 @@ fun MainAlarmScreen(context: Context) {
                             text = "Alarm volume is off — your commitment will play silently.",
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFFFF9800),
+                            color = colors.accentTactical,
                             lineHeight = 18.sp
                         )
                     }
@@ -224,12 +234,12 @@ fun MainAlarmScreen(context: Context) {
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
-            // Center Focus: The Analog Clock component
-            MorroAnalogClock(size = 280.dp)
+            // Center Focus: The Analog Clock component (driven by the shared clockCal).
+            MorroAnalogClock(size = 280.dp, calendar = clockCal)
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Digital Readout: "WED, NOV 11 • 15:14:03"
+            // Digital Readout: "WED, NOV 11 • 15:14:03" (same source as the analog clock).
             Text(
                 text = digitalTime,
                 style = typo.bodyMedium.copy(
