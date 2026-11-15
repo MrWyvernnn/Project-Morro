@@ -96,7 +96,6 @@ private data class OnboardingQuestion(
 )
 
 private const val TotalQuestions = 5
-private const val SelectionSettleMillis = 210L
 
 private val questions: List<OnboardingQuestion> = listOf(
     OnboardingQuestion(
@@ -223,13 +222,10 @@ fun PersonalizedQuestions(
     }
 
     fun choose(question: OnboardingQuestion, option: String) {
-        val at = index
+        // Choosing no longer moves the flow on by itself: the Continue button below the answers
+        // does that, so a mis-tap can be corrected before leaving the question.
         answers[question.key] = option
         haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-        scope.launch {
-            delay(SelectionSettleMillis)
-            if (index == at && index < questions.lastIndex) index = at + 1
-        }
     }
 
     BackHandler(enabled = index > 0) { index -= 1 }
@@ -425,6 +421,15 @@ private fun QuestionBody(
                     )
                 }
             }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            ContinueButton(
+                active = selected != null,
+                onClick = onContinue
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }

@@ -29,11 +29,14 @@ import kotlin.math.PI
 import kotlin.math.sin
 
 /**
- * MorroGhostMascot — a small, soft, black-on-black ghost with dusty-rose eyes.
+ * MorroGhostMascot — a round, soft, black-on-black ghost with dusty-rose eyes.
+ *
+ * The silhouette is built from curves only: a wide dome, bulging sides, and three big round
+ * scallops along the hem. Nothing on the outline is straight, which is what makes it read as a
+ * soft toy rather than a sheet with a zigzag bottom.
  *
  * Depth comes from three neutral layers, not from colour: a warm bloom behind it, a lifted body
- * gradient, and a rim light along the top edge. That makes the silhouette readable at 120dp on a
- * pure black screen without drawing a white sticker. The eyes are the only dusty rose in the app;
+ * gradient, and a rim light along the top edge. The eyes are the only dusty rose in the app;
  * everything else on the screen stays monochrome.
  *
  * Motion is a hop cycle with anticipation, stretch in the air and a landing squash, on top of a
@@ -79,7 +82,7 @@ fun MorroGhostMascot(
         Canvas(modifier = Modifier.fillMaxSize()) {
             val centerX = size.width / 2f
 
-            // Bloom — warm white, wide and faint. Two stops so the falloff has no banding.
+            // Bloom — warm, wide and faint, so the dark body still has a light behind it.
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(
@@ -138,9 +141,9 @@ private fun blinkAmount(t: Float): Float = when {
 /**
  * Draws the ghost inside [canvasSize].
  *
- * The body is a warm near-black gradient with a hairline rim, so it has weight without turning
- * into a white sticker. The eyes are a soft dusty rose with a small bloom so they read as light
- * rather than paint; the smile stays honey white, which keeps the face monochrome apart from them.
+ * The body is one closed path of cubics: dome, two bulging sides, three round hem scallops, then
+ * back up the other side. The fill is a single-neutral vertical tone shift, lit from above, with a
+ * hairline rim so it has weight without turning into a white sticker.
  */
 private fun DrawScope.drawGhost(
     canvasSize: Size,
@@ -151,35 +154,69 @@ private fun DrawScope.drawGhost(
     blink: Float = 1f,
 ) {
     val centerX = canvasSize.width / 2f
-    val bodyWidth = canvasSize.width * 0.78f
+    val bodyWidth = canvasSize.width * 0.84f
     val halfWidth = bodyWidth / 2f
-    val headTop = canvasSize.height * 0.12f + centerYOffset
-    val capHeight = bodyWidth * 0.52f
-    val hemHeight = bodyWidth * 0.10f
-    val bodyBottom = canvasSize.height * 0.92f + centerYOffset
+    val headTop = canvasSize.height * 0.10f + centerYOffset
+    val headHeight = bodyWidth * 0.58f
+    val hemHeight = bodyWidth * 0.14f
+    val bodyBottom = canvasSize.height * 0.90f + centerYOffset
     val left = centerX - halfWidth
     val right = centerX + halfWidth
 
-    val body = Path().apply {
-        moveTo(left, headTop + capHeight)
-        cubicTo(left, headTop, left + bodyWidth * 0.16f, headTop, centerX, headTop)
-        cubicTo(right - bodyWidth * 0.16f, headTop, right, headTop, right, headTop + capHeight)
-        lineTo(right, bodyBottom - hemHeight)
+    // The widest point sits a third of the way down: a pear, not a column.
+    val waistY = headTop + headHeight * 0.92f
+    val bulge = bodyWidth * 0.055f
 
+    val body = Path().apply {
+        moveTo(left, waistY)
+
+        // Left of the dome.
+        cubicTo(
+            left - bulge * 0.5f, headTop + headHeight * 0.34f,
+            left + bodyWidth * 0.10f, headTop,
+            centerX, headTop
+        )
+        // Right of the dome.
+        cubicTo(
+            right - bodyWidth * 0.10f, headTop,
+            right + bulge * 0.5f, headTop + headHeight * 0.34f,
+            right, waistY
+        )
+
+        // Right flank: a soft outward belly down to the hem.
+        cubicTo(
+            right + bulge, waistY + (bodyBottom - waistY) * 0.28f,
+            right + bulge * 0.7f, bodyBottom - hemHeight * 0.8f,
+            right, bodyBottom - hemHeight * 0.45f
+        )
+
+        // Three round scallops, right to left. Each is a half circle hanging below the hem line.
         val scallop = bodyWidth / 3f
         var startX = right
-        var dipDown = true
         var index = 0
         while (index < 3) {
             val endX = startX - scallop
-            val controlY = if (dipDown) bodyBottom else bodyBottom - hemHeight * 0.55f
-            quadraticTo(startX - scallop / 2f, controlY, endX, bodyBottom - hemHeight * 0.35f)
+            val midX = (startX + endX) / 2f
+            cubicTo(
+                startX - scallop * 0.12f, bodyBottom + hemHeight * 0.55f,
+                midX + scallop * 0.16f, bodyBottom + hemHeight * 0.55f,
+                midX, bodyBottom + hemHeight * 0.42f
+            )
+            cubicTo(
+                midX - scallop * 0.16f, bodyBottom + hemHeight * 0.55f,
+                endX + scallop * 0.12f, bodyBottom + hemHeight * 0.55f,
+                endX, bodyBottom - hemHeight * 0.45f
+            )
             startX = endX
-            dipDown = !dipDown
             index++
         }
 
-        lineTo(left, bodyBottom - hemHeight)
+        // Left flank back up to the start.
+        cubicTo(
+            left - bulge * 0.7f, bodyBottom - hemHeight * 0.8f,
+            left - bulge, waistY + (bodyBottom - waistY) * 0.28f,
+            left, waistY
+        )
         close()
     }
 
@@ -193,30 +230,30 @@ private fun DrawScope.drawGhost(
                 Color(0xFF070706)
             ),
             startY = headTop,
-            endY = bodyBottom
+            endY = bodyBottom + hemHeight
         )
     )
 
-    // Rim light: the top two thirds of the outline, fading toward the hem.
+    // Rim light: a hairline of the body's own light, fading toward the hem.
     drawPath(
         path = body,
         brush = Brush.verticalGradient(
             colors = listOf(
-                MorroColors.TextPrimary.copy(alpha = 0.34f),
+                MorroColors.TextPrimary.copy(alpha = 0.36f),
                 MorroColors.TextPrimary.copy(alpha = 0.12f),
                 MorroColors.TextPrimary.copy(alpha = 0.04f)
             ),
             startY = headTop,
-            endY = bodyBottom
+            endY = bodyBottom + hemHeight
         ),
         style = Stroke(width = 1.6.dp.toPx())
     )
 
-    // Face
-    val eyeY = headTop + capHeight * 0.54f
-    val eyeSpacing = bodyWidth * 0.175f
-    val eyeWidth = bodyWidth * 0.075f
-    val eyeHeight = bodyWidth * 0.115f * blink.coerceIn(0.08f, 1f)
+    // Face — low and wide, centred on the dome.
+    val eyeY = headTop + headHeight * 0.56f
+    val eyeSpacing = bodyWidth * 0.185f
+    val eyeWidth = bodyWidth * 0.082f
+    val eyeHeight = bodyWidth * 0.125f * blink.coerceIn(0.08f, 1f)
 
     listOf(-1f, 1f).forEach { side ->
         val cx = centerX + side * eyeSpacing
@@ -224,18 +261,22 @@ private fun DrawScope.drawGhost(
         // Eye bloom: makes the face glow at small sizes.
         drawCircle(
             brush = Brush.radialGradient(
-                colors = listOf(eyeColor.copy(alpha = 0.22f), Color.Transparent),
+                colors = listOf(eyeColor.copy(alpha = 0.24f), Color.Transparent),
                 center = Offset(cx, eyeY),
-                radius = eyeWidth * 3.2f
+                radius = eyeWidth * 3.4f
             ),
-            radius = eyeWidth * 3.2f,
+            radius = eyeWidth * 3.4f,
             center = Offset(cx, eyeY)
         )
 
         if (happy) {
             val path = Path().apply {
-                moveTo(cx - eyeWidth, eyeY + eyeHeight * 0.32f)
-                quadraticTo(cx, eyeY - eyeHeight * 0.62f, cx + eyeWidth, eyeY + eyeHeight * 0.32f)
+                moveTo(cx - eyeWidth, eyeY + eyeHeight * 0.30f)
+                cubicTo(
+                    cx - eyeWidth * 0.55f, eyeY - eyeHeight * 0.95f,
+                    cx + eyeWidth * 0.55f, eyeY - eyeHeight * 0.95f,
+                    cx + eyeWidth, eyeY + eyeHeight * 0.30f
+                )
             }
             drawPath(
                 path = path,
@@ -243,20 +284,25 @@ private fun DrawScope.drawGhost(
                 style = Stroke(width = eyeHeight * 0.62f, cap = StrokeCap.Round)
             )
         } else {
-            drawOval(
+            // Round pupils read softer than ovals at this size.
+            drawCircle(
                 color = eyeColor,
-                topLeft = Offset(cx - eyeWidth / 2f, eyeY - eyeHeight / 2f),
-                size = Size(eyeWidth, eyeHeight)
+                radius = minOf(eyeWidth, eyeHeight) * 0.80f,
+                center = Offset(cx, eyeY)
             )
         }
     }
 
     // Smile
-    val smileWidth = bodyWidth * 0.18f
-    val smileY = eyeY + bodyWidth * 0.115f
+    val smileWidth = bodyWidth * 0.20f
+    val smileY = eyeY + bodyWidth * 0.125f
     val smile = Path().apply {
         moveTo(centerX - smileWidth / 2f, smileY)
-        quadraticTo(centerX, smileY + bodyWidth * 0.055f, centerX + smileWidth / 2f, smileY)
+        cubicTo(
+            centerX - smileWidth * 0.25f, smileY + bodyWidth * 0.070f,
+            centerX + smileWidth * 0.25f, smileY + bodyWidth * 0.070f,
+            centerX + smileWidth / 2f, smileY
+        )
     }
     drawPath(
         path = smile,

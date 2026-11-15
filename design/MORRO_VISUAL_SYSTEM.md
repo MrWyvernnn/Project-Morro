@@ -81,8 +81,13 @@ Springs, one language:
   no glow, no shimmer, no hover scale on cards.
 - The mascot runs a hop cycle: crouch, stretch, float, land squash, recover, with a slow breath
   and a blink.
-- Clouds drift left on one clock, 150s per full pass, with a few pixels of sway. Intro screens
-  only; the alarm setup and the dashboard stay still.
+- Clouds are solid, not smoky: a flat base and four round puffs in warm white, one outline, one
+  fill, no alpha. They sit along the top edge of the intro screens, cropped by it, and drift left
+  on one clock, 180s per pass, with a few pixels of sway. Keeping them in that band is what lets
+  them be opaque without ever crossing the copy. Intro screens only; the alarm setup and the
+  dashboard stay still.
+- The mascot outline is curves only: a wide dome, two bulging sides and three round hem scallops.
+  Nothing on it is straight.
 - Everything respects `ANIMATOR_DURATION_SCALE = 0`. Reduced motion freezes the mascot hop, the
   clouds and the pulse, and keeps the entrances as fades.
 
@@ -90,13 +95,18 @@ Springs, one language:
 
 1. **Splash.** Clouds, mascot at 124dp, wordmark, signature rule, one line of copy. Tap to continue.
 2. **Questions.** "Question 1 of 5", a 2dp progress rail, one question at 26sp, flat answer rows.
-   Selected = 35% border + check. Last answer is free text with a shake on empty submit.
+   Selected = 35% border + check. Last answer is free text with a shake on empty submit. Continue
+   sits below the options and is explicit: choosing no longer skips ahead, and the button stays a
+   hairline until something is chosen, so a mis-tap can be corrected.
 3. **Permissions.** Two rows, each with an icon, a plain sentence of why and its live status.
-   A quiet reliability card below; Continue never depends on it.
+   A two-line reliability card below: a title, one sentence, then two rows that show either "On"
+   or a single Allow action. Continue never depends on it.
 4. **Dashboard.** Wordmark and one privacy link; the dial; the digital readout; one alarm card with
    the time at 44sp, the mission as a line of text, the arm switch and one filled action.
 5. **Alarm sheet.** Title and one line, "Time" then the time at 62sp, "Mission" then three rows.
-   Selected row = border + honey check. "Save and arm" is the only filled surface.
+   Selected row = border + honey check. "Save and arm" is the only filled surface. An expanded
+   mission states its setting in place ("Object pool / 4 of 30 objects chosen") with one quiet
+   Choose action, and the pool itself is a plain two-column list of named tiles with a check.
 
 ## Anti-patterns (do not reintroduce)
 

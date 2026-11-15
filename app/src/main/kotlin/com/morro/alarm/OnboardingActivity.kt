@@ -21,12 +21,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
@@ -446,72 +448,75 @@ private fun SystemAccessCard(
             fontWeight = FontWeight.Medium
         )
 
-        Spacer(modifier = Modifier.height(10.dp))
-
-        TerminalLine(
-            label = "Exact timing",
-            value = if (hasExactAlarmPermission) "On" else "Needed",
-            ok = hasExactAlarmPermission
-        )
         Spacer(modifier = Modifier.height(6.dp))
-        TerminalLine(
-            label = "Battery",
-            value = if (isBatteryIgnored) "Unrestricted" else "Restricted",
-            ok = isBatteryIgnored
-        )
-
-        if (!hasExactAlarmPermission || !isBatteryIgnored) {
-            Spacer(modifier = Modifier.height(4.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                if (!hasExactAlarmPermission) {
-                    TextButton(onClick = onRequestExactAlarm) {
-                        Text(
-                            text = "Allow timing",
-                            color = MorroColors.Honey,
-                            fontSize = 12.sp
-                        )
-                    }
-                }
-                if (!isBatteryIgnored) {
-                    TextButton(onClick = onRequestBattery) {
-                        Text(
-                            text = "Unrestrict battery",
-                            color = MorroColors.Honey,
-                            fontSize = 12.sp
-                        )
-                    }
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(2.dp))
 
         Text(
-            text = "Optional, but phones that sleep hard can delay an alarm without them.",
+            text = "Optional. A phone that sleeps hard can delay an alarm.",
             color = MorroColors.TextSecondary,
-            fontSize = 11.sp,
-            lineHeight = 16.sp
+            fontSize = 12.sp,
+            lineHeight = 17.sp
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        AccessRow(
+            label = "Exact timing",
+            allowed = hasExactAlarmPermission,
+            onAllow = onRequestExactAlarm
+        )
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        AccessRow(
+            label = "Battery",
+            allowed = isBatteryIgnored,
+            onAllow = onRequestBattery
         )
     }
 }
 
+/** One reliability line: what it is, and either its state or the single action that fixes it. */
 @Composable
-private fun TerminalLine(label: String, value: String, ok: Boolean) {
+private fun AccessRow(label: String, allowed: Boolean, onAllow: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 32.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             text = label,
             color = MorroColors.TextSecondary,
-            fontSize = 12.sp
+            fontSize = 13.sp
         )
-        Text(
-            text = value,
-            color = if (ok) MorroColors.TextPrimary else MorroColors.Honey,
-            fontFamily = FontFamily.Monospace,
-            fontSize = 12.sp
-        )
+        if (allowed) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Filled.Check,
+                    contentDescription = null,
+                    tint = MorroColors.Honey,
+                    modifier = Modifier.size(13.dp)
+                )
+                Spacer(modifier = Modifier.width(5.dp))
+                Text(
+                    text = "On",
+                    color = MorroColors.TextTertiary,
+                    fontSize = 12.sp
+                )
+            }
+        } else {
+            TextButton(
+                onClick = onAllow,
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+            ) {
+                Text(
+                    text = "Allow",
+                    color = MorroColors.Honey,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
     }
 }

@@ -905,30 +905,30 @@ private fun QrExpandedContent(
     val colors = morroColors()
     val typo = morroTypography()
 
-    Column(
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Box(
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = if (qrCodeValue.isNotBlank()) {
+                "Locked to $qrCodeValue"
+            } else {
+                "Any QR code or barcode will do."
+            },
+            style = typo.bodyMedium,
+            color = colors.textSecondary
+        )
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        Text(
+            text = if (qrCodeValue.isNotBlank()) "Change the code" else "Lock it to one code",
+            style = typo.titleMedium,
+            color = colors.textPrimary,
+            textAlign = TextAlign.Center,
             modifier = Modifier
                 .fillMaxWidth()
-                .background(colors.surfaceLow)
-                .clip(RoundedCornerShape(8.dp))
-                .padding(horizontal = 12.dp, vertical = 8.dp)
-        ) {
-            Text(
-                text = if (qrCodeValue.isNotBlank()) "Target: $qrCodeValue" else "Status: Any QR/Barcode accepted",
-                style = typo.bodyMedium,
-                color = colors.textSecondary
-            )
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        MorroPrimaryButton(
-            text = "SCAN & LOCK TARGET BARCODE (OPTIONAL)",
-            onClick = { onQrDialogChange(true) },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = true
+                .clip(RoundedCornerShape(12.dp))
+                .morroHairline(radius = 12.dp, color = colors.borderStrong)
+                .clickable { onQrDialogChange(true) }
+                .padding(vertical = 14.dp)
         )
     }
 
@@ -1017,12 +1017,42 @@ private fun PhotoExpandedContent(
     val colors = morroColors()
     val typo = morroTypography()
 
-    MorroPrimaryButton(
-        text = "CONFIGURE OBJECT POOL (${selectedPhotoItems.size} ITEMS ACTIVE) →",
-        onClick = { onPhotoSheetChange(true) },
+    Row(
         modifier = Modifier.fillMaxWidth(),
-        enabled = true
-    )
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "Object pool",
+                style = typo.bodyMedium,
+                color = colors.textSecondary
+            )
+            Spacer(modifier = Modifier.height(3.dp))
+            Text(
+                text = if (selectedPhotoItems.isEmpty()) {
+                    "Nothing chosen yet"
+                } else {
+                    "${selectedPhotoItems.size} of 30 objects chosen"
+                },
+                style = typo.titleMedium,
+                color = colors.textPrimary
+            )
+        }
+
+        Spacer(modifier = Modifier.width(12.dp))
+
+        Text(
+            text = "Choose",
+            style = typo.labelLarge,
+            color = colors.textPrimary,
+            modifier = Modifier
+                .clip(RoundedCornerShape(50))
+                .morroHairline(radius = 50.dp, color = colors.borderStrong)
+                .clickable { onPhotoSheetChange(true) }
+                .padding(horizontal = 16.dp, vertical = 11.dp)
+        )
+    }
 
     // Photo Target Sheet (2-Column Bento Grid Modal)
     if (showPhotoSheet) {
@@ -1043,7 +1073,11 @@ private fun PhotoExpandedContent(
 }
 
 /**
- * PhotoTargetSheet — 2-Column Bento Grid for 30 household items.
+ * PhotoTargetSheet — the object pool, as a plain list of choices.
+ *
+ * Two columns of text tiles, each with a check; presets as quiet outlined chips; one save action.
+ * The list is a normal Column inside one scroll container, not a lazy grid nested in a scrolling
+ * parent, so the sheet measures and scrolls as one surface.
  */
 @Composable
 private fun PhotoTargetSheet(
@@ -1055,322 +1089,256 @@ private fun PhotoTargetSheet(
     val typo = morroTypography()
     var localSelectedItems by remember { mutableStateOf(selectedPhotoItems) }
 
-    val itemEmojiMap = remember {
-        mapOf(
-            "Cup / Mug" to "☕",
-            "Toothbrush" to "🪥",
-            "Sink / Faucet" to "🚰",
-            "Chair" to "🪑",
-            "Keyboard" to "⌨️",
-            "Computer Mouse" to "🖱️",
-            "Shoe / Sneaker" to "👟",
-            "Book" to "📖",
-            "Water Bottle" to "🧴",
-            "Glasses / Eyewear" to "👓",
-            "Spoon" to "🥄",
-            "Fork" to "🍴",
-            "Houseplant" to "🪴",
-            "Pillow / Cushion" to "🛏️",
-            "Wristwatch" to "⌚",
-            "Backpack / Bag" to "🎒",
-            "Door / Doorhandle" to "🚪",
-            "Monitor / TV" to "🖥️",
-            "Laptop" to "💻",
-            "Remote Control" to "📺",
-            "Scissors" to "✂️",
-            "Towel" to "🧺",
-            "Desk / Table" to "🪵",
-            "Lamp / Light" to "💡",
-            "Mirror" to "🪞",
-            "Pen / Pencil" to "🖊️",
-            "Headphones / Earbuds" to "🎧",
-            "Wallet" to "👛",
-            "Keys / Keychain" to "🔑",
-            "Wall Clock" to "🕰️"
-        )
-    }
-
-    // Modal overlay approach
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Transparent)
-            .clickable(onClick = onDismiss)
-    ) {
+    Box(modifier = Modifier.fillMaxSize()) {
         Box(
             modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.88f))
+                .clickable(onClick = onDismiss)
+        )
+
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .fillMaxHeight()
+                .fillMaxHeight(0.94f)
+                .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
                 .background(colors.surface)
-                .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                .align(Alignment.BottomCenter),
-            contentAlignment = Alignment.BottomCenter
+                .navigationBarsPadding()
+                .imePadding()
         ) {
-            Column(
+            // Drag handle: the line sits inside its own padding, not inside a 4dp box.
+            Box(
+                modifier = Modifier
+                    .padding(top = 10.dp, bottom = 14.dp)
+                    .align(Alignment.CenterHorizontally)
+                    .width(40.dp)
+                    .height(4.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(colors.borderSubtle)
+            )
+
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .fillMaxHeight()
-                    .verticalScroll(rememberScrollState()),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .padding(horizontal = 24.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
             ) {
-                // Drag handle
-                Box(
-                    modifier = Modifier
-                        .width(40.dp)
-                        .height(4.dp)
-                        .background(colors.borderSubtle)
-                        .clip(RoundedCornerShape(2.dp))
-                        .padding(top = 12.dp, bottom = 16.dp)
-                )
-
-                // Header
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 24.dp, top = 8.dp, end = 24.dp, bottom = 0.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Wake-Up Object Pool",
-                        style = typo.headlineLarge.copy(fontWeight = FontWeight.Bold),
+                        text = "Object pool",
+                        style = typo.headlineLarge,
                         color = colors.textPrimary
                     )
-                    Box(
-                        modifier = Modifier
-                            .background(colors.honey.copy(alpha = 0.15f))
-                            .clip(RoundedCornerShape(50))
-                            .padding(horizontal = 12.dp, vertical = 6.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "${localSelectedItems.size} Selected",
-                            style = typo.labelLarge.copy(fontWeight = FontWeight.Bold),
-                            color = colors.honey
-                        )
-                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Morro picks one at random when the alarm rings.",
+                        style = typo.bodyMedium,
+                        color = colors.textSecondary
+                    )
                 }
+                TextButton(onClick = onDismiss) {
+                    Text(
+                        text = "Close",
+                        style = typo.labelLarge,
+                        color = colors.textSecondary
+                    )
+                }
+            }
 
-                // Subtitle
-                Text(
-                    text = "At alarm time, Morro randomly picks one object from your pool. You must photograph it to silence the alarm.",
-                    style = typo.bodyMedium,
-                    color = colors.textSecondary,
-                    lineHeight = 18.sp,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 16.dp)
-                )
+            Spacer(modifier = Modifier.height(16.dp))
 
-                // Quick-Select Filter Pills
-                FilterPillsRow(
-                    localSelectedItems = localSelectedItems,
-                    onSelectionChange = { localSelectedItems = it }
-                )
+            Text(
+                text = "${localSelectedItems.size} of ${PhotoTargetPool.ITEMS.size} selected",
+                style = typo.labelLarge,
+                color = colors.textTertiary,
+                modifier = Modifier.padding(horizontal = 24.dp)
+            )
 
-                Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-                // 2-Column Bento Grid Tiles (30 Items)
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    items(PhotoTargetPool.ITEMS) { item ->
-                        val isSelected = localSelectedItems.contains(item.id)
-                        val emoji = itemEmojiMap[item.displayName] ?: "📦"
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+            ) {
+                item {
+                    PoolPreset(
+                        label = "Common ten",
+                        active = localSelectedItems == PhotoTargetPool.COMMON_10_IDS.toSet(),
+                        onClick = { localSelectedItems = PhotoTargetPool.COMMON_10_IDS.toSet() }
+                    )
+                }
+                item {
+                    PoolPreset(
+                        label = "Everything",
+                        active = localSelectedItems.size == PhotoTargetPool.ITEMS.size,
+                        onClick = { localSelectedItems = PhotoTargetPool.ITEMS.map { it.id }.toSet() }
+                    )
+                }
+                item {
+                    PoolPreset(
+                        label = "Bathroom",
+                        active = false,
+                        onClick = {
+                            localSelectedItems = setOf("toothbrush", "sink", "mirror", "towel", "scissors")
+                        }
+                    )
+                }
+                item {
+                    PoolPreset(
+                        label = "Desk",
+                        active = false,
+                        onClick = {
+                            localSelectedItems = setOf(
+                                "keyboard", "mouse", "monitor", "laptop",
+                                "remote", "headphones", "desk", "pen", "lamp"
+                            )
+                        }
+                    )
+                }
+                item {
+                    PoolPreset(
+                        label = "Kitchen",
+                        active = false,
+                        onClick = { localSelectedItems = setOf("cup", "bottle", "spoon", "fork") }
+                    )
+                }
+                item {
+                    PoolPreset(
+                        label = "Clear",
+                        active = localSelectedItems.isEmpty(),
+                        onClick = { localSelectedItems = emptySet() }
+                    )
+                }
+            }
 
-                        Box(
-                            modifier = Modifier
-                                .height(76.dp)
-                                .fillMaxWidth()
-                                .background(
-                                    if (isSelected) colors.honey.copy(alpha = 0.10f) else colors.surfaceLow,
-                                    RoundedCornerShape(16.dp)
-                                )
-                                .border(
-                                    if (isSelected) 1.5.dp else 1.dp,
-                                    if (isSelected) colors.honey else colors.borderSubtle,
-                                    RoundedCornerShape(16.dp)
-                                )
-                                .clip(RoundedCornerShape(16.dp))
-                                .clickable {
-                                    localSelectedItems = if (isSelected) {
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                PhotoTargetPool.ITEMS.chunked(2).forEach { pair ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        pair.forEach { item ->
+                            PoolTile(
+                                label = item.displayName,
+                                selected = localSelectedItems.contains(item.id),
+                                modifier = Modifier.weight(1f),
+                                onToggle = {
+                                    localSelectedItems = if (localSelectedItems.contains(item.id)) {
                                         localSelectedItems - item.id
                                     } else {
                                         localSelectedItems + item.id
                                     }
                                 }
-                                .padding(12.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxSize(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    // 38.dp circular badge with distinct emoji
-                                    Box(
-                                        modifier = Modifier
-                                            .size(38.dp)
-                                            .background(colors.surfaceVariant, CircleShape),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(text = emoji, fontSize = 18.sp)
-                                    }
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                    Text(
-                                        text = item.displayName,
-                                        style = typo.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                                        color = if (isSelected) colors.textPrimary else colors.textSecondary,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-
-                                Spacer(modifier = Modifier.width(4.dp))
-
-                                // Top-Right Corner: 18.dp circular indicator
-                                Box(
-                                    modifier = Modifier
-                                        .size(18.dp)
-                                        .background(
-                                            if (isSelected) colors.honey else Color.Transparent,
-                                            CircleShape
-                                        )
-                                        .border(
-                                            1.5.dp,
-                                            if (isSelected) colors.honey else colors.borderSubtle,
-                                            CircleShape
-                                        ),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    if (isSelected) {
-                                        Icon(
-                                            imageVector = Icons.Filled.Check,
-                                            contentDescription = null,
-                                            tint = Color.Black,
-                                            modifier = Modifier.size(11.dp)
-                                        )
-                                    }
-                                }
-                            }
+                            )
+                        }
+                        if (pair.size == 1) {
+                            Spacer(modifier = Modifier.weight(1f))
                         }
                     }
                 }
-
-                // Sticky Bottom Action Bar
-                Spacer(modifier = Modifier.height(16.dp))
-                MorroPrimaryButton(
-                    text = "CONFIRM ${localSelectedItems.size} OBJECTS",
-                    onClick = {
-                        onSave(localSelectedItems)
-                        onDismiss()
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 24.dp, top = 0.dp, end = 24.dp, bottom = 24.dp),
-                    enabled = localSelectedItems.isNotEmpty()
-                )
             }
+
+            MorroPrimaryButton(
+                text = if (localSelectedItems.isEmpty()) {
+                    "Choose at least one"
+                } else {
+                    "Save ${localSelectedItems.size} objects"
+                },
+                onClick = { onSave(localSelectedItems) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 24.dp, top = 16.dp, end = 24.dp, bottom = 24.dp),
+                enabled = localSelectedItems.isNotEmpty()
+            )
         }
     }
 }
 
-/**
- * FilterPillsRow — Quick-select filter chips for Photo mission.
- */
+/** One pool chip. Selected is a filled surface plus a stronger hairline, nothing louder. */
 @Composable
-private fun FilterPillsRow(
-    localSelectedItems: Set<String>,
-    onSelectionChange: (Set<String>) -> Unit
+private fun PoolPreset(label: String, active: Boolean, onClick: () -> Unit) {
+    val colors = morroColors()
+    Text(
+        text = label,
+        fontSize = 12.sp,
+        color = if (active) colors.textPrimary else colors.textSecondary,
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(if (active) colors.surfaceElevated else Color.Transparent)
+            .morroHairline(
+                radius = 50.dp,
+                color = if (active) colors.borderActive else colors.borderSubtle
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 13.dp, vertical = 8.dp)
+    )
+}
+
+/** One object in the pool: its name on the left, a check on the right. No icon, no badge. */
+@Composable
+private fun PoolTile(
+    label: String,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onToggle: () -> Unit
 ) {
     val colors = morroColors()
-    val typo = morroTypography()
-
-    LazyRow(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 24.dp)
+    Row(
+        modifier = modifier
+            .height(54.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (selected) colors.surfaceElevated else colors.surfaceCard)
+            .morroHairline(
+                radius = 12.dp,
+                color = if (selected) colors.borderActive else colors.borderSubtle
+            )
+            .clickable(onClick = onToggle)
+            .padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        item {
-            FilterChip(
-                selected = false,
-                onClick = { onSelectionChange(PhotoTargetPool.COMMON_10_IDS.toSet()) },
-                label = { Text("✨ Common 10", style = typo.labelLarge) },
-                colors = FilterChipDefaults.filterChipColors(
-                    containerColor = colors.surfaceLow,
-                    labelColor = colors.honey
+        Text(
+            text = label,
+            fontSize = 13.sp,
+            color = if (selected) colors.textPrimary else colors.textSecondary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Box(
+            modifier = Modifier
+                .size(18.dp)
+                .clip(CircleShape)
+                .background(if (selected) colors.honey else Color.Transparent)
+                .border(
+                    width = 1.5.dp,
+                    color = if (selected) colors.honey else colors.borderSubtle,
+                    shape = CircleShape
                 ),
-                shape = RoundedCornerShape(50)
-            )
-        }
-        item {
-            FilterChip(
-                selected = false,
-                onClick = { onSelectionChange(PhotoTargetPool.ITEMS.map { it.id }.toSet()) },
-                label = { Text("Select All 30", style = typo.labelLarge) },
-                colors = FilterChipDefaults.filterChipColors(
-                    containerColor = colors.surfaceLow,
-                    labelColor = colors.honey
-                ),
-                shape = RoundedCornerShape(50)
-            )
-        }
-        item {
-            FilterChip(
-                selected = false,
-                onClick = { onSelectionChange(setOf("toothbrush", "sink", "mirror", "towel", "scissors")) },
-                label = { Text("Bathroom", style = typo.labelLarge) },
-                colors = FilterChipDefaults.filterChipColors(
-                    containerColor = colors.surfaceLow,
-                    labelColor = colors.honey
-                ),
-                shape = RoundedCornerShape(50)
-            )
-        }
-        item {
-            FilterChip(
-                selected = false,
-                onClick = { onSelectionChange(setOf("keyboard", "mouse", "monitor", "laptop", "remote", "headphones", "desk", "pen", "lamp")) },
-                label = { Text("Desk & Tech", style = typo.labelLarge) },
-                colors = FilterChipDefaults.filterChipColors(
-                    containerColor = colors.surfaceLow,
-                    labelColor = colors.honey
-                ),
-                shape = RoundedCornerShape(50)
-            )
-        }
-        item {
-            FilterChip(
-                selected = false,
-                onClick = { onSelectionChange(setOf("cup", "bottle", "spoon", "fork")) },
-                label = { Text("Kitchen", style = typo.labelLarge) },
-                colors = FilterChipDefaults.filterChipColors(
-                    containerColor = colors.surfaceLow,
-                    labelColor = colors.honey
-                ),
-                shape = RoundedCornerShape(50)
-            )
-        }
-        item {
-            FilterChip(
-                selected = false,
-                onClick = { onSelectionChange(emptySet()) },
-                label = { Text("Clear", style = typo.labelLarge) },
-                colors = FilterChipDefaults.filterChipColors(
-                    containerColor = colors.surfaceLow,
-                    labelColor = colors.textDisabled
-                ),
-                shape = RoundedCornerShape(50)
-            )
+            contentAlignment = Alignment.Center
+        ) {
+            if (selected) {
+                Icon(
+                    imageVector = Icons.Filled.Check,
+                    contentDescription = null,
+                    tint = Color.Black,
+                    modifier = Modifier.size(11.dp)
+                )
+            }
         }
     }
 }
