@@ -1,145 +1,104 @@
-# Morro — Visual System
+# Morro visual system
 
-One stage: pure black. One signal: orange bleeding into pink. Everything else is a step in tone,
-a line of type, or air.
+The interface is warm monochrome on pure black. No hue gradients, no glowing chrome, no second
+accent. Depth comes from surface steps, hairlines and light, and each screen has exactly one moment
+that carries the character.
 
-This document is the design contract for the base UI. The code is the source of truth
-(`ui/theme/Theme.kt`); this records why the values are what they are.
+## Direction
 
----
+- **Product.** An alarm that makes you say a promise before it stops.
+- **Character.** Calm, warm, a little stubborn.
+- **World.** A windowsill before sunrise: black glass, warm paper-white light, soft edges.
+- **Moments.** The mascot on the opening screen; the dial on the dashboard; the wake-up time at
+  display size in the setup sheet.
+- **Signature.** A short hand-drawn rule under the wordmark, and an elapsed-hour arc on the dial.
 
-## 1. Colour
+## Colour
 
-| Token | Value | Role |
-| --- | --- | --- |
-| `Canvas` | `#000000` | Every screen's ground. AMOLED black, no tint. |
-| `Surface` | `#07070B` | Sheets and large panels. |
-| `SurfaceCard` | `#09090D` | Rows, quiet containers. |
-| `SurfaceElevated` | `#0D0D12` | Bento cards, answer cards, the mission dock. |
-| `SurfaceLow` | `#12121A` | Icon wells, legibility pills, drag handles. |
-| `TextPrimary` | `#FFFFFF` | Headlines, times, names. |
-| `TextSecondary` | `#A0A0AB` | Body copy, explanations, status. |
-| `TextTertiary` | `#6B6B76` | Decorative eyebrows and disabled states only. |
-| `AccentTactical` | `#FF5500` | Primary action, active state, second hand. |
-| `AccentBubbly` | `#FF66A3` | Selection checks, live states, glow. |
-| `AccentBubblySoft` | `#FF85B3` | Gradient midpoint. |
-| `AccentBubblyDeep` | `#FF5E9E` | Inline validation (borrowed, not a second error hue). |
-| `WarmYellow` | `#FFC94A` | Armed status only. |
-| `BorderSubtle` | `#1FFFFFFF` | Structural hairlines. |
-| `Success` | `#2E7D32` | Reserved for positive confirmation. |
-| `Error` | `#FF4D5E` | Destructive only. |
+One warm neutral ramp. Nothing tints the ground.
 
-**Gradient.** `MorroGradients.horizontal()` is the only gradient in the product: `#FF5500 →
-#FF66A3`, used on progress, selected borders, the primary action and the dial rim. It is a
-signature, so it is never used as background decoration behind text.
+| Role | Value |
+| --- | --- |
+| Canvas | `#000000` |
+| Surface (sheets) | `#0B0A08` |
+| Surface card | `#121110` |
+| Surface elevated (inputs, selection) | `#1A1714` |
+| Text primary ("warm honey white") | `#EFE7D6` |
+| Text secondary | `#A79E8D` |
+| Text tertiary | `#7C7466` |
+| Honey highlight (arc, armed dot, second hand) | `#E8C58F` |
+| Hairline | text primary at 8% (`#14EFE7D6`) |
+| Hairline, strong / active | 18% / 35% |
 
-### Measured contrast (WCAG 2.1 relative luminance)
+Rules:
 
-| Pair | Ratio | Result |
-| --- | --- | --- |
-| White on `#000000` | 21.00 | AA / AAA |
-| White on `#0D0D12` | 19.38 | AA / AAA |
-| `#A0A0AB` on `#000000` | 8.11 | AA / AAA |
-| `#A0A0AB` on `#0D0D12` | 7.49 | AA / AAA |
-| `#FF5500` on `#000000` | 6.55 | AA |
-| `#FF5500` on `#0D0D12` | 6.05 | AA |
-| `#FF66A3` on `#000000` | 7.68 | AA / AAA |
-| `#FF66A3` on `#0D0D12` | 7.09 | AA |
-| Black on `#FF5500` | 6.55 | AA (button label) |
-| Black on `#FF66A3` | 7.68 | AA (check on selection) |
-| `#FFC94A` on `#0D0D12` | 12.65 | AA / AAA |
-| `#FF4D5E` on `#09090D` | 6.13 | AA |
-| `#6B6B76` on `#000000` | 3.99 | Large / UI only |
+- The only warm mark on a screen is the honey highlight, and it appears once or twice.
+- Primary actions are a warm off-white fill with near-black text. That is the hierarchy on black.
+- Status is tonal. "Armed" is a honey dot plus the word; nothing turns green or red at rest.
+- No gradient runs from one hue to another anywhere. A single-neutral tone shift is the only
+  gradient allowed, and only inside the mascot body and the dial face.
 
-`#6B6B76` is the brief's tertiary. It clears the 3:1 threshold for large text and UI edges but not
-4.5:1 for small body copy, so it is used only for decorative eyebrows (`WAKE-UP MISSION`,
-`SYSTEM CHECK`) and disabled labels. Every string that carries information uses `#A0A0AB` or
-above.
+## Type
 
----
+System sans, weights 400/500 (600 rare). Hierarchy from size and colour, never weight or tracking.
 
-## 2. Geometry
+| Use | Size / line height |
+| --- | --- |
+| Sheet title | 26 / 32, medium |
+| Screen title | 30 / 37, medium |
+| Question | 26 / 33, medium |
+| Body | 15 / 23 |
+| Secondary, helpers | 13–14 / 19–21 |
+| Labels, metadata | 12 / 16 |
 
-- Cards: **20dp** squarcle.
-- Buttons: **16dp** squarcle; pills are fully round.
-- Sheet: **28dp** top corners only.
-- Page gutter: **24dp** on every screen, with a **24dp** vertical rhythm.
-- Touch targets: **56dp** minimum button height, **44dp** minimum icon well.
+- Sentence case everywhere. No uppercase tracked labels, no negative tracking below 16sp.
+- Monospace only for figures with a fixed rhythm: the clock readout, the time display, the
+  character counter, the system status values.
+- Numbers use one format across a screen.
 
-No sharp interactive corners, and no card nested inside a card except the sheet's expanded mission
-panel, where the inner panel is a different tone rather than a border.
+## Space and shape
 
----
+- 4px rhythm: 4, 8, 12, 16, 20, 24, 28, 32, 40, 48.
+- Cards 16dp radius, buttons and inputs 12dp, chips 10dp, sheet 20dp. Not everything is a pill.
+- Card padding 18–20dp, screen edges 24dp. Group gaps smaller than the gaps between groups.
+- Selected rows are a border step (35%) plus a check, never a coloured wash.
 
-## 3. Type
+## Motion
 
-Two faces: system sans for voice, system mono for status.
+Springs, one language:
 
-| Role | Size / weight | Notes |
-| --- | --- | --- |
-| Splash wordmark | 36sp bold, −1sp tracking | White. |
-| Screen title | 28sp bold, −0.5sp | White, left aligned. |
-| Question | 22sp medium, 30sp leading | White, left aligned. |
-| Body | 14–16sp regular | `#A0A0AB`, not grey-on-grey. |
-| Wake-up time | 64sp bold | The one number that may be loud. |
-| Status / eyebrows | 10–11sp mono, 1.2–2.2sp tracking | Decorative, sentence-case where it carries meaning. |
+| Use | Damping / stiffness |
+| --- | --- |
+| Default (layout, focus) | 1.0 / 322 |
+| Settle after a gesture | 0.82 / 386 |
+| Press | 1.0 / 2741 |
+| Playful pop (buttons, mascot) | 0.55 / 438 |
 
----
+- Buttons dip to 0.96 on a press and return with a ~1% overshoot. That is the whole playfulness;
+  no glow, no shimmer, no hover scale on cards.
+- The mascot runs a hop cycle: crouch, stretch, float, land squash, recover, with a slow breath
+  and a blink.
+- Clouds drift left on one clock, 150s per full pass, with a few pixels of sway. Intro screens
+  only; the alarm setup and the dashboard stay still.
+- Everything respects `ANIMATOR_DURATION_SCALE = 0`. Reduced motion freezes the mascot hop, the
+  clouds and the pulse, and keeps the entrances as fades.
 
-## 4. Motion
+## Screens
 
-Springs, not durations, for anything a finger touches.
+1. **Splash.** Clouds, mascot at 124dp, wordmark, signature rule, one line of copy. Tap to continue.
+2. **Questions.** "Question 1 of 5", a 2dp progress rail, one question at 26sp, flat answer rows.
+   Selected = 35% border + check. Last answer is free text with a shake on empty submit.
+3. **Permissions.** Two rows, each with an icon, a plain sentence of why and its live status.
+   A quiet reliability card below; Continue never depends on it.
+4. **Dashboard.** Wordmark and one privacy link; the dial; the digital readout; one alarm card with
+   the time at 44sp, the mission as a line of text, the arm switch and one filled action.
+5. **Alarm sheet.** Title and one line, "Time" then the time at 62sp, "Mission" then three rows.
+   Selected row = border + honey check. "Save and arm" is the only filled surface.
 
-| Intent | Damping | Response | Stiffness used |
-| --- | --- | --- | --- |
-| Default (settle, no overshoot) | 1.00 | 0.35s | 322 |
-| Momentum (entrance, flick) | 0.82 | 0.32s | 386 |
-| Press (touch-down) | 1.00 | 0.12s | 2741 |
+## Anti-patterns (do not reintroduce)
 
-- Press = scale **0.97**, acknowledged on touch-down.
-- Screen transitions: shared-axis fade + slide, **300ms**.
-- Ambient loops (ribbon breathe, pin glow, ghost bob) are the only tweens: 1.6–11s.
-- Reduced motion (`ANIMATOR_DURATION_SCALE == 0`): springs become a **150ms** cross-fade, idle
-  loops hold still, the splash's hold collapses to a beat.
-- One `Animatable` per animated component; every visual is derived from its value.
-
----
-
-## 5. Composition
-
-**Splash.** Layered Canvas, back to front: pink sun (upper right), orange→pink ribbon (bottom-left
-to middle-right), grass blades sampling the ribbon's own bezier so they always stand on its edge,
-then the white ghost with pink eyes and a smile. The ghost rises 36dp and the wordmark lands after
-it. Tap or 2.4s advances.
-
-**Questions.** Editorial, not a wizard: mono position line, one gradient progress strip, a 22sp
-question, one column of answer cards. Selection = gradient border + 6% warm wash + pink check.
-The free-text answer owns the keyboard: the header compacts on IME, the card shakes ±10px on empty
-submit, and the counter warns 12 characters before the cap.
-
-**How it works.** Three existing slides, unchanged content. The only gradient is the progress and
-the final CTA; pagination has 28dp of clearance above the button so they can never collide.
-
-**Permissions.** One screen. Two live rows (notifications, microphone) with inline system requests
-and status pills that flip to a pink check. Exact timing and battery live in a monospace terminal
-card with optional actions; Continue never depends on them.
-
-**Dashboard.** Black, with a low dusk-blue→orange→pink horizon arc behind the dial. The clock is the
-hero: near-black face, dual-tone rim, white hands, orange second hand, pink pin. One mono readout
-under it. The bento mission dock owns the bottom: status, time, mission, armed switch, and one
-full-width action. No floating button.
-
-**Alarm sheet.** Bottom anchored at 92% height, opaque `#07070B`, 88% black scrim, navigation-bar
-and IME insets, content scrolls. Time card → mission rows → save. Nothing else.
-
----
-
-## 6. Rules
-
-1. Colour never carries meaning alone: every state also changes a border, a check, a label or a
-   dot.
-2. Black is the ground, not a tint. Never place a dark panel on a dark panel without a tone step.
-3. The ribbon gradient appears on progress, selection and the primary action — three jobs, no more.
-4. No shadows at rest. Elevation is a response to touch, not decoration.
-5. Copy is accountable, never shaming. No "no excuses", no guilt, no streaks.
-6. Motion explains a change or answers a touch; it never performs for its own sake.
+- Orange-to-pink or any hue gradient; gradient borders; sweeping rim glows.
+- Uppercase letter-spaced eyebrows ("WAKE-UP MISSION", "MORRO • 01 / 05").
+- Pill everything: pills are for pips and the sheet handle only.
+- Looping pulses on things that are not live.
+- Emoji as icons; more than three type roles; shadows on resting cards.

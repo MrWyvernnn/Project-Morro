@@ -12,7 +12,6 @@ import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -50,10 +49,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -70,7 +65,6 @@ import com.morro.alarm.ui.components.AlarmBuilderSheetContent
 import com.morro.alarm.ui.components.MorroAnalogClock
 import com.morro.alarm.ui.components.MorroPrimaryButton
 import com.morro.alarm.ui.components.MorroPrivacyPolicySheet
-import com.morro.alarm.ui.onboarding.HowItWorksSlideshow
 import com.morro.alarm.ui.onboarding.OnboardingGate
 import com.morro.alarm.ui.onboarding.PersonalizationStorage
 import com.morro.alarm.ui.onboarding.PersonalizedQuestions
@@ -79,7 +73,7 @@ import com.morro.alarm.ui.theme.MorroColors
 import com.morro.alarm.ui.theme.MorroShapes
 import com.morro.alarm.ui.theme.MorroTheme
 import com.morro.alarm.ui.theme.morroColors
-import com.morro.alarm.ui.theme.morroGradientBorder
+import com.morro.alarm.ui.theme.morroHairline
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -112,7 +106,6 @@ class MainActivity : ComponentActivity() {
                 // One flag for the intro; a returning person lands straight on the dashboard.
                 val alreadyOnboarded = OnboardingGate.isComplete(this@MainActivity)
                 var splashDone by remember { mutableStateOf(alreadyOnboarded) }
-                var slideshowDone by remember { mutableStateOf(alreadyOnboarded) }
                 var questionsDone by remember {
                     mutableStateOf(alreadyOnboarded || PersonalizationStorage.isComplete(this@MainActivity))
                 }
@@ -123,17 +116,16 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxSize()
                     )
 
-                    !questionsDone -> PersonalizedQuestions(onComplete = { questionsDone = true })
-
-                    !slideshowDone -> HowItWorksSlideshow(
-                        onFinished = {
+                    !questionsDone -> PersonalizedQuestions(
+                        onComplete = {
+                            // The intro is over the moment the questions are answered; there is no
+                            // explainer step between the promise and the app.
                             OnboardingGate.markComplete(this@MainActivity)
-                            slideshowDone = true
+                            questionsDone = true
                         }
                     )
 
                     !hasOnboarded -> {
-                        // The single permission screen; Continue writes onboarding_completed.
                         val intent = Intent(this@MainActivity, OnboardingActivity::class.java).apply {
                             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
                         }
@@ -190,10 +182,10 @@ fun MainAlarmScreen(context: Context) {
     val missionType = remember(prefsUpdateTrigger) { MissionPrefs.getMissionType(context) }
     val photoItems = remember(prefsUpdateTrigger) { MissionPrefs.getSelectedPhotoItems(context) }
 
-    val missionBadgeText = when (missionType) {
-        MissionType.VOICE_COMMITMENT, MissionType.VOICE_MEMO -> "VOICE COMMITMENT"
-        MissionType.QR_CODE, MissionType.QR_BARCODE -> "QR SCAN"
-        MissionType.PHOTO_MISSION, MissionType.PHOTO_OBJECT -> "PHOTO HUNT · ${photoItems.size} ITEMS"
+    val missionLabel = when (missionType) {
+        MissionType.VOICE_COMMITMENT, MissionType.VOICE_MEMO -> "Voice promise"
+        MissionType.QR_CODE, MissionType.QR_BARCODE -> "QR scan"
+        MissionType.PHOTO_MISSION, MissionType.PHOTO_OBJECT -> "Photo hunt · ${photoItems.size} items"
     }
 
     val colors = morroColors()
@@ -207,11 +199,10 @@ fun MainAlarmScreen(context: Context) {
         }
     }
 
-    val dayFormat = remember { SimpleDateFormat("EEE, MMM d", Locale.getDefault()) }
+    val dayFormat = remember { SimpleDateFormat("EEEE d MMMM", Locale.getDefault()) }
     val timeFormat = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
-    val digitalTime = remember(clockCal) {
-        "${dayFormat.format(clockCal.time).uppercase()} • ${timeFormat.format(clockCal.time)}"
-    }
+    val dateLine = remember(clockCal) { dayFormat.format(clockCal.time) }
+    val timeLine = remember(clockCal) { timeFormat.format(clockCal.time) }
 
     val dockTime = remember(prefsUpdateTrigger, savedAlarm) {
         savedAlarm?.let { (hour, minute) ->
@@ -225,121 +216,100 @@ fun MainAlarmScreen(context: Context) {
             .background(colors.canvas)
             .windowInsetsPadding(WindowInsets.systemBars)
     ) {
-        // Dawn sky sits behind the dial: an arc at the horizon, barely there.
-        DawnSkyGlow(modifier = Modifier.fillMaxSize())
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 24.dp, vertical = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // ── Top bar ──────────────────────────────────────────────────────
+            // ── Top bar: wordmark, one quiet action ───────────────────────────
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "MORRO",
-                    fontSize = 16.sp,
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Bold,
+                    text = "Morro",
+                    fontSize = 18.sp,
+                    fontFamily = FontFamily.SansSerif,
+                    fontWeight = FontWeight.Medium,
                     color = colors.textPrimary,
-                    letterSpacing = 6.sp
+                    letterSpacing = (-0.2).sp
                 )
-                Row(
-                    modifier = Modifier
-                        .clip(MorroShapes.Pill)
-                        .background(colors.surfaceCard)
-                        .morroGradientBorder(
-                            shape = MorroShapes.Pill,
-                            width = 1.dp,
-                            brush = Brush.horizontalGradient(
-                                listOf(colors.borderSubtle, colors.borderSubtle)
-                            )
-                        )
-                        .padding(start = 12.dp, end = 6.dp, top = 2.dp, bottom = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                TextButton(onClick = { showPrivacyPolicy = true }) {
                     Icon(
                         imageVector = Icons.Filled.Lock,
                         contentDescription = null,
-                        tint = colors.accentTactical,
-                        modifier = Modifier.size(12.dp)
+                        tint = colors.textTertiary,
+                        modifier = Modifier.size(13.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
-                    TextButton(onClick = { showPrivacyPolicy = true }) {
-                        Text(
-                            text = "Privacy",
-                            fontSize = 11.sp,
-                            fontFamily = FontFamily.Monospace,
-                            color = colors.accentTactical
-                        )
-                    }
+                    Text(
+                        text = "Privacy",
+                        fontSize = 13.sp,
+                        fontFamily = FontFamily.SansSerif,
+                        color = colors.textSecondary
+                    )
                 }
             }
 
-            // ── Volume warning (warn, never auto-change the stream) ──────────
+            // ── Volume warning (warn, never auto-change the stream) ───────────
             if (alarmVolume == 0) {
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(8.dp))
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(MorroShapes.Card)
                         .background(colors.surfaceCard)
-                        .morroGradientBorder(
-                            shape = MorroShapes.Card,
-                            width = 1.dp,
-                            brush = Brush.horizontalGradient(
-                                listOf(
-                                    colors.accentTactical,
-                                    colors.accentTactical.copy(alpha = 0.5f)
-                                )
-                            )
-                        )
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                        .morroHairline(radius = 16.dp)
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.VolumeOff,
                         contentDescription = null,
                         tint = colors.accentTactical,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(17.dp)
                     )
-                    Spacer(modifier = Modifier.width(10.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
                     Text(
-                        text = "Alarm volume is off — your promise will play silently.",
-                        fontSize = 12.sp,
-                        lineHeight = 17.sp,
-                        color = colors.accentTactical
+                        text = "Alarm volume is off, so your promise will play silently.",
+                        fontSize = 12.5.sp,
+                        lineHeight = 18.sp,
+                        color = colors.textSecondary
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.weight(0.10f))
+            Spacer(modifier = Modifier.weight(0.12f))
 
-            // ── Hero clock ───────────────────────────────────────────────────
-            MorroAnalogClock(size = 264.dp, calendar = clockCal)
+            // ── Hero clock ────────────────────────────────────────────────────
+            MorroAnalogClock(size = 248.dp, calendar = clockCal)
 
-            Spacer(modifier = Modifier.height(18.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
             Text(
-                text = digitalTime,
+                text = timeLine,
                 fontFamily = FontFamily.Monospace,
                 fontSize = 13.sp,
-                letterSpacing = 1.2.sp,
                 color = colors.textSecondary,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = dateLine,
+                fontSize = 12.5.sp,
+                color = colors.textTertiary,
                 textAlign = TextAlign.Center
             )
 
             Spacer(modifier = Modifier.weight(1f))
 
-            // ── Bento mission dock ───────────────────────────────────────────
+            // ── Alarm dock ────────────────────────────────────────────────────
             if (!showAlarmBuilder) {
-                MissionDock(
+                AlarmDock(
                     dockTime = dockTime,
-                    missionBadgeText = missionBadgeText,
+                    missionLabel = missionLabel,
                     hasActiveAlarm = hasActiveAlarm,
                     onSetAlarm = { showAlarmBuilder = true },
                     onArmToggle = { armed ->
@@ -390,7 +360,7 @@ fun MainAlarmScreen(context: Context) {
                                 // Never fail silently: the likely cause is revoked exact-alarm access.
                                 Toast.makeText(
                                     context,
-                                    "Exact alarm access is off — allow it in Settings to arm the alarm.",
+                                    "Exact alarm access is off. Allow it in Settings to arm the alarm.",
                                     Toast.LENGTH_LONG
                                 ).show()
                             }
@@ -408,14 +378,15 @@ fun MainAlarmScreen(context: Context) {
 }
 
 /**
- * Bento mission dock: one card that states the alarm, its mission, and the one action that opens
- * the setup sheet. It replaces both the hollow instruction box and the floating + button, so
- * there is exactly one obvious next step on the dashboard.
+ * The alarm dock: one card that states the alarm, its mission and the one action that opens setup.
+ *
+ * Order is deliberate — the time is the biggest thing, the mission is a line of text, the arm
+ * switch sits next to what it arms, and the button is the only filled surface on the screen.
  */
 @Composable
-private fun MissionDock(
+private fun AlarmDock(
     dockTime: String?,
-    missionBadgeText: String,
+    missionLabel: String,
     hasActiveAlarm: Boolean,
     onSetAlarm: () -> Unit,
     onArmToggle: (Boolean) -> Unit,
@@ -428,18 +399,9 @@ private fun MissionDock(
         modifier = Modifier
             .fillMaxWidth()
             .clip(MorroShapes.Card)
-            .background(colors.surfaceElevated)
-            .morroGradientBorder(
-                shape = MorroShapes.Card,
-                width = 1.dp,
-                brush = Brush.horizontalGradient(
-                    listOf(
-                        colors.accentTactical.copy(alpha = if (armed) 0.85f else 0.35f),
-                        colors.accentBubbly.copy(alpha = if (armed) 0.85f else 0.35f)
-                    )
-                )
-            )
-            .padding(18.dp)
+            .background(colors.surfaceCard)
+            .morroHairline(radius = 16.dp)
+            .padding(20.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -447,29 +409,24 @@ private fun MissionDock(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "WAKE-UP MISSION",
-                fontFamily = FontFamily.Monospace,
-                fontSize = 10.sp,
-                letterSpacing = 1.6.sp,
-                fontWeight = FontWeight.Bold,
+                text = "Next alarm",
+                fontSize = 12.sp,
                 color = colors.textTertiary
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
-                        .size(7.dp)
+                        .size(6.dp)
                         .background(
-                            if (armed) colors.warmYellow else colors.textTertiary,
+                            if (armed) colors.accentTactical else colors.textDisabled,
                             CircleShape
                         )
                 )
-                Spacer(modifier = Modifier.width(6.dp))
+                Spacer(modifier = Modifier.width(7.dp))
                 Text(
-                    text = if (armed) "ARMED" else "IDLE",
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (armed) colors.warmYellow else colors.textSecondary
+                    text = if (armed) "Armed" else "Idle",
+                    fontSize = 12.sp,
+                    color = if (armed) colors.textPrimary else colors.textTertiary
                 )
             }
         }
@@ -479,121 +436,71 @@ private fun MissionDock(
         if (dockTime != null) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Bottom,
+                verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
                     text = dockTime,
-                    fontSize = 40.sp,
-                    lineHeight = 42.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = (-1).sp,
+                    fontSize = 44.sp,
+                    lineHeight = 46.sp,
+                    fontWeight = FontWeight.Medium,
+                    letterSpacing = (-1.4).sp,
                     color = colors.textPrimary
                 )
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        text = missionBadgeText,
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 10.sp,
-                        color = colors.textSecondary,
-                        textAlign = TextAlign.End
+                Switch(
+                    checked = hasActiveAlarm,
+                    onCheckedChange = onArmToggle,
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = colors.canvas,
+                        checkedTrackColor = colors.accentTactical,
+                        uncheckedThumbColor = colors.textSecondary,
+                        uncheckedTrackColor = colors.surfaceLow
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Switch(
-                        checked = hasActiveAlarm,
-                        onCheckedChange = onArmToggle,
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = Color.Black,
-                            checkedTrackColor = colors.warmYellow,
-                            uncheckedThumbColor = colors.textSecondary,
-                            uncheckedTrackColor = colors.surfaceLow
-                        )
-                    )
-                }
+                )
             }
-        } else {
+
+            Spacer(modifier = Modifier.height(6.dp))
             Text(
-                text = "No alarm set",
-                fontSize = 22.sp,
-                fontWeight = FontWeight.SemiBold,
+                text = missionLabel,
+                fontSize = 13.sp,
                 color = colors.textSecondary
             )
-            Spacer(modifier = Modifier.height(4.dp))
+        } else {
+            Text(
+                text = "No alarm yet",
+                fontSize = 24.sp,
+                lineHeight = 30.sp,
+                fontWeight = FontWeight.Medium,
+                color = colors.textSecondary
+            )
+            Spacer(modifier = Modifier.height(6.dp))
             Text(
                 text = "One time, one mission, one promise.",
-                fontSize = 12.sp,
-                color = colors.textSecondary
+                fontSize = 13.sp,
+                color = colors.textTertiary
             )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(20.dp))
 
         MorroPrimaryButton(
-            text = if (dockTime == null) "Set Wake-Up Mission +" else "Change Wake-Up Mission",
+            text = if (dockTime == null) "Set wake-up" else "Change wake-up",
             onClick = onSetAlarm,
             modifier = Modifier.fillMaxWidth()
         )
 
         if (BuildConfig.DEBUG) {
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(12.dp))
             Text(
-                text = "TEST 5S",
-                fontFamily = FontFamily.Monospace,
-                fontSize = 9.sp,
+                text = "Test alarm in 5s",
+                fontSize = 11.sp,
                 color = colors.textTertiary,
                 modifier = Modifier
                     .align(Alignment.End)
-                    .clip(MorroShapes.Pill)
-                    .background(colors.surfaceCard)
                     .clickable(onClick = onTestAlarm)
-                    .padding(horizontal = 10.dp, vertical = 4.dp)
+                    .padding(vertical = 4.dp)
             )
         }
-    }
-}
-
-/**
- * Dawn sky: a dusk-blue to orange to pink arc low behind the clock, at 0.10-0.30 alpha. It gives
- * the black canvas a horizon without ever turning the app light.
- */
-@Composable
-private fun DawnSkyGlow(modifier: Modifier = Modifier) {
-    Canvas(modifier = modifier) {
-        val w = size.width
-        val h = size.height
-        val horizon = h * 0.52f
-
-        // Sky wash above the horizon.
-        drawRect(
-            brush = Brush.radialGradient(
-                colors = listOf(
-                    Color(0xFF16243F).copy(alpha = 0.30f),
-                    MorroColors.AccentTactical.copy(alpha = 0.10f),
-                    Color.Transparent
-                ),
-                center = Offset(w * 0.50f, horizon),
-                radius = w * 0.95f
-            )
-        )
-
-        // The arc itself: a wide ellipse, only its top edge drawn.
-        drawArc(
-            brush = Brush.verticalGradient(
-                colors = listOf(
-                    Color(0xFF2A3F63).copy(alpha = 0.22f),
-                    MorroColors.AccentTactical.copy(alpha = 0.20f),
-                    MorroColors.AccentBubbly.copy(alpha = 0.10f)
-                ),
-                startY = horizon - h * 0.22f,
-                endY = h * 0.70f
-            ),
-            startAngle = 188f,
-            sweepAngle = 164f,
-            useCenter = false,
-            topLeft = Offset(-w * 0.32f, horizon - h * 0.20f),
-            size = Size(w * 1.64f, h * 0.46f),
-            style = Stroke(width = 2.dp.toPx())
-        )
     }
 }
 
@@ -625,7 +532,7 @@ fun scheduleTestAlarmIn5Seconds(context: Context) {
 
     try {
         alarmManager.setAlarmClock(AlarmManager.AlarmClockInfo(triggerAt, showPendingIntent), pendingIntent)
-        Toast.makeText(context, "Test alarm armed — firing in 5 seconds", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, "Test alarm armed, firing in 5 seconds", Toast.LENGTH_SHORT).show()
     } catch (e: Exception) {
         Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
     }

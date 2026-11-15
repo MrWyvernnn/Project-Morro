@@ -27,7 +27,7 @@ fun MorroPrivacyPolicySheet(onDismiss: () -> Unit) {
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
         containerColor = colors.surface,
         contentColor = colors.textPrimary,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -51,12 +51,15 @@ fun MorroPrivacyPolicySheet(onDismiss: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             Text(
-                text = "PRIVACY POLICY",
-                style = typo.headlineSmall.copy(
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.5.sp
-                ),
-                color = colors.accentTactical
+                text = "Privacy",
+                style = typo.headlineLarge,
+                color = colors.textPrimary
+            )
+
+            Text(
+                text = "Everything Morro records stays on this phone.",
+                style = typo.bodyMedium,
+                color = colors.textSecondary
             )
 
             PolicySection(
@@ -103,19 +106,16 @@ fun MorroPrivacyPolicySheet(onDismiss: () -> Unit) {
                 onClick = onDismiss,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp),
+                    .height(52.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = colors.accentTactical,
-                    contentColor = Color.White
+                    containerColor = colors.textPrimary,
+                    contentColor = Color.Black
                 ),
-                shape = RoundedCornerShape(14.dp)
+                shape = RoundedCornerShape(12.dp)
             ) {
                 Text(
-                    text = "CLOSE",
-                    style = typo.titleMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.sp
-                    )
+                    text = "Close",
+                    style = typo.titleMedium
                 )
             }
         }
@@ -129,9 +129,7 @@ private fun PolicySection(title: String, body: String) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
             text = title,
-            style = typo.bodyLarge.copy(
-                fontWeight = FontWeight.Bold
-            ),
+            style = typo.bodyLarge.copy(fontWeight = FontWeight.Medium),
             color = colors.textPrimary
         )
         Text(

@@ -19,6 +19,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -50,6 +52,7 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
@@ -92,10 +95,9 @@ import com.morro.alarm.MemoStorage
 import com.morro.alarm.mission.MissionPrefs
 import com.morro.alarm.mission.MissionType
 import com.morro.alarm.mission.PhotoTargetPool
-import com.morro.alarm.ui.theme.MorroGradients
 import com.morro.alarm.ui.theme.MorroSpring
 import com.morro.alarm.ui.theme.morroColors
-import com.morro.alarm.ui.theme.morroGradientBorder
+import com.morro.alarm.ui.theme.morroHairline
 import com.morro.alarm.ui.theme.morroShapes
 import com.morro.alarm.ui.theme.morroTypography
 import java.util.Locale
@@ -307,18 +309,15 @@ fun AlarmBuilderSheetContent(
         ) {
             Column {
                 Text(
-                    text = "SET WAKE-UP",
-                    color = colors.textTertiary,
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 10.sp,
-                    letterSpacing = 1.6.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "Your morning, armed.",
-                    style = typo.headlineMedium,
+                    text = "Wake-up",
+                    style = typo.headlineLarge,
                     color = colors.textPrimary
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Pick a time and the promise you have to keep.",
+                    style = typo.bodyMedium,
+                    color = colors.textSecondary
                 )
             }
             IconButton(onClick = onDismiss) {
@@ -335,15 +334,12 @@ fun AlarmBuilderSheetContent(
 
         // ── Section 1: Wake-Up Time Card ──
         Text(
-            text = "WAKE-UP TIME",
-            style = typo.labelLarge.copy(
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 0.12f.sp
-            ),
-            color = colors.accentTactical,
+            text = "Time",
+            style = typo.labelLarge,
+            color = colors.textTertiary,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 12.dp)
+                .padding(bottom = 10.dp)
         )
 
         // Huge digital time display, tap to adjust
@@ -359,17 +355,13 @@ fun AlarmBuilderSheetContent(
         Spacer(modifier = Modifier.height(24.dp))
 
         // ── Section 2: Mission Selector ──
-        // Label: "WAKE-UP MISSION"
         Text(
-            text = "WAKE-UP MISSION",
-            style = typo.labelLarge.copy(
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 0.12f.sp
-            ),
-            color = colors.accentTactical,
+            text = "Mission",
+            style = typo.labelLarge,
+            color = colors.textTertiary,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 12.dp)
+                .padding(bottom = 10.dp)
         )
 
         // Three distinct MorroOptionChip cards stacked vertically
@@ -455,7 +447,7 @@ fun AlarmBuilderSheetContent(
 
         // ── Bottom CTA: Save & Arm Alarm ──
         MorroPrimaryButton(
-            text = "SAVE & ARM ALARM",
+            text = "Save and arm",
             onClick = {
                 val needsVoiceRecording = selectedMission == MissionType.VOICE_COMMITMENT ||
                         selectedMission == MissionType.VOICE_MEMO
@@ -501,12 +493,8 @@ private fun TimePickerCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(shapes.Card)
-            .background(colors.surfaceElevated)
-            .morroGradientBorder(
-                shape = shapes.Card,
-                width = 1.dp,
-                brush = MorroGradients.horizontal(0.45f)
-            )
+            .background(colors.surfaceCard)
+            .morroHairline(radius = 16.dp)
             .clickable {
                 TimePickerDialog(
                     context,
@@ -516,31 +504,29 @@ private fun TimePickerCard(
                     true
                 ).show()
             }
-            .padding(vertical = 26.dp, horizontal = 20.dp),
+            .padding(vertical = 28.dp, horizontal = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
             text = String.format(Locale.getDefault(), "%02d:%02d", selectedHour, selectedMinute),
-            style = typo.displayHero.copy(fontSize = 64.sp, lineHeight = 68.sp),
+            style = typo.displayHero.copy(fontSize = 62.sp, lineHeight = 66.sp),
             color = colors.textPrimary
         )
 
-        Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
-        Box(
-            modifier = Modifier
-                .clip(shapes.Pill)
-                .background(colors.accentTactical.copy(alpha = 0.10f))
-                .morroGradientBorder(shapes.Pill, 1.dp, MorroGradients.horizontal(0.55f))
-                .padding(horizontal = 14.dp, vertical = 6.dp)
-        ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = Icons.Filled.Schedule,
+                contentDescription = null,
+                tint = colors.textTertiary,
+                modifier = Modifier.size(13.dp)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
             Text(
-                text = "TAP TO ADJUST TIME",
-                color = colors.accentTactical,
-                fontFamily = FontFamily.Monospace,
-                fontSize = 10.sp,
-                letterSpacing = 1.2.sp,
-                fontWeight = FontWeight.Bold
+                text = "Tap to change",
+                color = colors.textTertiary,
+                fontSize = 12.sp
             )
         }
     }
@@ -567,26 +553,34 @@ private fun MorroOptionChip(
     val shapes = morroShapes()
     val accentColor = if (accent == Color.Unspecified) colors.accentBubbly else accent
 
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val pressScale by animateFloatAsState(
+        targetValue = if (pressed && enabled) 0.985f else 1f,
+        animationSpec = MorroSpring.FloatSpringPlayful,
+        label = "missionPress"
+    )
+
     Column(modifier = Modifier.fillMaxWidth()) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
+                .graphicsLayer {
+                    scaleX = pressScale
+                    scaleY = pressScale
+                }
                 .clip(shapes.Card)
                 .background(if (isSelected) colors.surfaceElevated else colors.surfaceCard)
-                .then(
-                    if (isSelected) {
-                        Modifier.morroGradientBorder(shapes.Card, 1.dp)
-                    } else {
-                        Modifier.morroGradientBorder(
-                            shape = shapes.Card,
-                            width = 1.dp,
-                            brush = Brush.horizontalGradient(
-                                listOf(colors.borderSubtle, colors.borderSubtle)
-                            )
-                        )
-                    }
+                .morroHairline(
+                    radius = 16.dp,
+                    color = if (isSelected) colors.borderActive else colors.borderSubtle
                 )
-                .clickable(enabled = enabled, onClick = onSelect)
+                .clickable(
+                    interactionSource = interactionSource,
+                    indication = null,
+                    enabled = enabled,
+                    onClick = onSelect
+                )
                 .padding(16.dp)
         ) {
             Row(
@@ -599,62 +593,40 @@ private fun MorroOptionChip(
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                     modifier = Modifier.weight(1f)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(44.dp)
-                            .background(
-                                if (isSelected) accentColor.copy(alpha = 0.16f) else colors.surfaceLow,
-                                RoundedCornerShape(12.dp)
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = icon,
-                            contentDescription = null,
-                            tint = if (isSelected) accentColor else colors.textSecondary,
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = if (isSelected) colors.accentTactical
+                        else if (enabled) colors.textSecondary else colors.textTertiary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                         Text(
                             text = title,
-                            style = typo.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            style = typo.titleMedium,
                             color = if (enabled) colors.textPrimary else colors.textTertiary
                         )
                         Text(
                             text = subtitle,
-                            style = typo.bodyMedium.copy(fontSize = 12.sp, lineHeight = 17.sp),
-                            color = colors.textSecondary
+                            style = typo.bodyMedium,
+                            color = if (enabled) colors.textSecondary else colors.textTertiary
                         )
                     }
                 }
 
                 if (!enabled) {
                     Text(
-                        text = "SOON",
-                        color = colors.textSecondary,
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 9.sp,
-                        letterSpacing = 1.sp,
-                        modifier = Modifier
-                            .clip(shapes.Pill)
-                            .background(colors.surfaceLow)
-                            .padding(horizontal = 10.dp, vertical = 5.dp)
+                        text = "Soon",
+                        color = colors.textTertiary,
+                        fontSize = 11.sp
                     )
                 } else if (isSelected) {
-                    Box(
-                        modifier = Modifier
-                            .size(24.dp)
-                            .background(accentColor, RoundedCornerShape(50)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Check,
-                            contentDescription = null,
-                            tint = Color.Black,
-                            modifier = Modifier.size(15.dp)
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Filled.Check,
+                        contentDescription = "Selected",
+                        tint = colors.accentTactical,
+                        modifier = Modifier.size(18.dp)
+                    )
                 }
             }
         }
@@ -708,7 +680,7 @@ private fun VoiceExpandedContent(
                     Spacer(modifier = Modifier.height(16.dp))
 
                     MorroPrimaryButton(
-                        text = "TAP TO RECORD (15S)",
+                        text = "Record your promise",
                         onClick = onRecord,
                         modifier = Modifier.fillMaxWidth(),
                         enabled = true
@@ -720,30 +692,19 @@ private fun VoiceExpandedContent(
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .background(colors.accentTactical.copy(alpha = 0.15f))
-                                .clip(RoundedCornerShape(50))
-                                .border(1.5.dp, colors.accentTactical, RoundedCornerShape(50))
-                                .padding(horizontal = 16.dp, vertical = 8.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Filled.Check,
-                                    contentDescription = null,
-                                    tint = colors.accentTactical,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "Voice Promise Locked",
-                                    style = typo.labelLarge.copy(
-                                        fontWeight = FontWeight.Bold
-                                    ),
-                                    color = colors.accentTactical
-                                )
-                            }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Filled.Check,
+                                contentDescription = null,
+                                tint = colors.accentTactical,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Voice promise ready",
+                                style = typo.bodyMedium,
+                                color = colors.textSecondary
+                            )
                         }
                     }
 
@@ -757,14 +718,14 @@ private fun VoiceExpandedContent(
                             onClick = onPreview,
                             enabled = !isPlayingPreview,
                             modifier = Modifier.weight(1f).height(48.dp),
-                            shape = RoundedCornerShape(50),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, colors.borderSubtle),
+                            shape = RoundedCornerShape(12.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, colors.borderStrong),
                             colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
                                 contentColor = colors.textPrimary
                             )
                         ) {
                             Text(
-                                text = if (isPlayingPreview) "Playing..." else "Preview Voice",
+                                text = if (isPlayingPreview) "Playing" else "Play back",
                                 style = typo.labelLarge.copy(fontWeight = FontWeight.Medium),
                                 color = colors.textPrimary
                             )
@@ -772,8 +733,8 @@ private fun VoiceExpandedContent(
                         OutlinedButton(
                             onClick = onRerecord,
                             modifier = Modifier.weight(1f).height(48.dp),
-                            shape = RoundedCornerShape(50),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, colors.borderSubtle),
+                            shape = RoundedCornerShape(12.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, colors.borderStrong),
                             colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
                                 contentColor = colors.textSecondary
                             )
@@ -817,10 +778,10 @@ private fun VoiceExpandedContent(
                 Text(
                     text = String.format(Locale.getDefault(), "00:%02d", recordingCountdown),
                     style = typo.displayLarge.copy(
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.Medium,
                         fontFamily = FontFamily.Monospace
                     ),
-                    color = colors.accentTactical,
+                    color = colors.textPrimary,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -831,9 +792,10 @@ private fun VoiceExpandedContent(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(56.dp)
-                        .background(colors.error, RoundedCornerShape(50))
-                        .clip(RoundedCornerShape(50))
+                        .height(52.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(colors.surfaceElevated)
+                        .morroHairline(radius = 12.dp, color = colors.borderStrong)
                         .clickable(onClick = onStop),
                     contentAlignment = Alignment.Center
                 ) {
@@ -844,17 +806,14 @@ private fun VoiceExpandedContent(
                         Icon(
                             imageVector = Icons.Filled.Stop,
                             contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(20.dp)
+                            tint = colors.textPrimary,
+                            modifier = Modifier.size(18.dp)
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "STOP & LOCK CLIP",
-                            style = typo.titleMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.sp
-                            ),
-                            color = Color.White
+                            text = "Stop and lock",
+                            style = typo.titleMedium,
+                            color = colors.textPrimary
                         )
                     }
                 }
@@ -873,30 +832,19 @@ private fun VoiceExpandedContent(
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .background(colors.accentTactical.copy(alpha = 0.15f))
-                            .clip(RoundedCornerShape(50))
-                            .border(1.5.dp, colors.accentTactical, RoundedCornerShape(50))
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Filled.Check,
-                                contentDescription = null,
-                                tint = colors.accentTactical,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Voice Promise Locked",
-                                style = typo.labelLarge.copy(
-                                    fontWeight = FontWeight.Bold
-                                ),
-                                color = colors.accentTactical
-                            )
-                        }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Filled.Check,
+                            contentDescription = null,
+                            tint = colors.accentTactical,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Voice promise ready",
+                            style = typo.bodyMedium,
+                            color = colors.textSecondary
+                        )
                     }
                 }
 
@@ -910,14 +858,14 @@ private fun VoiceExpandedContent(
                         onClick = onPreview,
                         enabled = !isPlayingPreview,
                         modifier = Modifier.weight(1f).height(48.dp),
-                        shape = RoundedCornerShape(50),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, colors.borderSubtle),
+                        shape = RoundedCornerShape(12.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, colors.borderStrong),
                         colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
                             contentColor = colors.textPrimary
                         )
                     ) {
                         Text(
-                            text = if (isPlayingPreview) "Playing..." else "Preview Voice",
+                            text = if (isPlayingPreview) "Playing" else "Play back",
                             style = typo.labelLarge.copy(fontWeight = FontWeight.Medium),
                             color = colors.textPrimary
                         )
@@ -925,8 +873,8 @@ private fun VoiceExpandedContent(
                     OutlinedButton(
                         onClick = onRerecord,
                         modifier = Modifier.weight(1f).height(48.dp),
-                        shape = RoundedCornerShape(50),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, colors.borderSubtle),
+                        shape = RoundedCornerShape(12.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, colors.borderStrong),
                         colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
                             contentColor = colors.textSecondary
                         )
