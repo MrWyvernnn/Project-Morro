@@ -64,19 +64,17 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -88,8 +86,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.zIndex
-import com.morro.alarm.MemoPlayer
 import com.morro.alarm.MemoRecorder
 import com.morro.alarm.MemoStorage
 import com.morro.alarm.mission.MissionPrefs
@@ -186,17 +182,11 @@ fun AlarmBuilderSheet(
     }
 }
 /**
- * AlarmBuilderSheetContent — Complete alarm configuration content.
- * Includes time picker, mission selection, and mission-specific configuration.
+ * AlarmBuilderSheetContent — the alarm setup, in one scroll.
  *
- * STRUCTURE (per screenshot):
- * - Header: "Configure Alarm" title with "X" close icon
- * - Time Target: Section label "WAKE-UP TARGET", huge digital time display tap-to-adjust
- * - Mission List: Section label "WAKE-UP MISSION", three MorroOptionChip cards:
- *   1. Voice Commitment (record button + yellow checkmark active state)
- *   2. QR / Barcode Scan
- *   3. Object Photo Hunt
- * - Surface: Sheet uses MorroTokens.Surface at 92% alpha
+ * Order is the order you think in: title, the time at display size (the whole card opens the system
+ * picker), then the mission list, then one filled action. Selected mission rows take a 35% border
+ * and a honey check; nothing glows.
  */
 @Composable
 fun AlarmBuilderSheetContent(
@@ -364,7 +354,7 @@ fun AlarmBuilderSheetContent(
                 .padding(bottom = 10.dp)
         )
 
-        // Three distinct MorroOptionChip cards stacked vertically
+        // One row per mission, stacked with a single gap so the list reads as one block.
         Column(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -374,7 +364,6 @@ fun AlarmBuilderSheetContent(
                 title = "Voice Commitment",
                 subtitle = "15s personal commitment recorded in-app",
                 icon = Icons.Filled.Mic,
-                accent = colors.accentBubbly,
                 isSelected = selectedMission == MissionType.VOICE_COMMITMENT || selectedMission == MissionType.VOICE_MEMO,
                 onSelect = { selectedMission = MissionType.VOICE_COMMITMENT },
                 showExpanded = selectedMission == MissionType.VOICE_COMMITMENT || selectedMission == MissionType.VOICE_MEMO,
@@ -432,7 +421,7 @@ fun AlarmBuilderSheetContent(
                 }
             )
 
-            // 4. Math puzzle — reserved. Not wired end to end, so it is shown honestly as SOON.
+            // 4. Math puzzle — reserved. Not wired end to end, so it is shown honestly as "Soon".
             MorroOptionChip(
                 title = "Math Puzzle",
                 subtitle = "Wiring in progress — not part of this build",
@@ -533,8 +522,8 @@ private fun TimePickerCard(
 }
 
 /**
- * MorroOptionChip — one mission. Selected takes the ribbon border, a pink icon and a pink check;
- * a disabled mission says SOON and explains itself in the subtitle instead of pretending to work.
+ * MorroOptionChip — one mission. Selected takes a 35% border, a honey icon and a check; a disabled
+ * mission says "Soon" and explains itself in the subtitle instead of pretending to work.
  */
 @Composable
 private fun MorroOptionChip(
@@ -544,14 +533,12 @@ private fun MorroOptionChip(
     isSelected: Boolean,
     onSelect: () -> Unit,
     showExpanded: Boolean = false,
-    accent: Color = Color.Unspecified,
     enabled: Boolean = true,
     expandedContent: @Composable (() -> Unit)? = null
 ) {
     val colors = morroColors()
     val typo = morroTypography()
     val shapes = morroShapes()
-    val accentColor = if (accent == Color.Unspecified) colors.accentBubbly else accent
 
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
@@ -596,7 +583,7 @@ private fun MorroOptionChip(
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
-                        tint = if (isSelected) colors.accentTactical
+                        tint = if (isSelected) colors.honey
                         else if (enabled) colors.textSecondary else colors.textTertiary,
                         modifier = Modifier.size(20.dp)
                     )
@@ -624,7 +611,7 @@ private fun MorroOptionChip(
                     Icon(
                         imageVector = Icons.Filled.Check,
                         contentDescription = "Selected",
-                        tint = colors.accentTactical,
+                        tint = colors.honey,
                         modifier = Modifier.size(18.dp)
                     )
                 }
@@ -696,7 +683,7 @@ private fun VoiceExpandedContent(
                             Icon(
                                 imageVector = Icons.Filled.Check,
                                 contentDescription = null,
-                                tint = colors.accentTactical,
+                                tint = colors.honey,
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
@@ -836,7 +823,7 @@ private fun VoiceExpandedContent(
                         Icon(
                             imageVector = Icons.Filled.Check,
                             contentDescription = null,
-                            tint = colors.accentTactical,
+                            tint = colors.honey,
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
@@ -1005,7 +992,7 @@ private fun QrCodeDialog(
             TextButton(onClick = {
                 onSave(tempCode)
             }) {
-                Text("Save", style = typo.labelLarge.copy(fontWeight = FontWeight.Bold), color = colors.accentTactical)
+                Text("Save", style = typo.labelLarge.copy(fontWeight = FontWeight.Bold), color = colors.honey)
             }
         },
         dismissButton = {
@@ -1151,7 +1138,7 @@ private fun PhotoTargetSheet(
                     )
                     Box(
                         modifier = Modifier
-                            .background(colors.accentTactical.copy(alpha = 0.15f))
+                            .background(colors.honey.copy(alpha = 0.15f))
                             .clip(RoundedCornerShape(50))
                             .padding(horizontal = 12.dp, vertical = 6.dp),
                         contentAlignment = Alignment.Center
@@ -1159,7 +1146,7 @@ private fun PhotoTargetSheet(
                         Text(
                             text = "${localSelectedItems.size} Selected",
                             style = typo.labelLarge.copy(fontWeight = FontWeight.Bold),
-                            color = colors.accentTactical
+                            color = colors.honey
                         )
                     }
                 }
@@ -1201,12 +1188,12 @@ private fun PhotoTargetSheet(
                                 .height(76.dp)
                                 .fillMaxWidth()
                                 .background(
-                                    if (isSelected) colors.accentTactical.copy(alpha = 0.10f) else colors.surfaceLow,
+                                    if (isSelected) colors.honey.copy(alpha = 0.10f) else colors.surfaceLow,
                                     RoundedCornerShape(16.dp)
                                 )
                                 .border(
                                     if (isSelected) 1.5.dp else 1.dp,
-                                    if (isSelected) colors.accentTactical else colors.borderSubtle,
+                                    if (isSelected) colors.honey else colors.borderSubtle,
                                     RoundedCornerShape(16.dp)
                                 )
                                 .clip(RoundedCornerShape(16.dp))
@@ -1254,12 +1241,12 @@ private fun PhotoTargetSheet(
                                     modifier = Modifier
                                         .size(18.dp)
                                         .background(
-                                            if (isSelected) colors.accentTactical else Color.Transparent,
+                                            if (isSelected) colors.honey else Color.Transparent,
                                             CircleShape
                                         )
                                         .border(
                                             1.5.dp,
-                                            if (isSelected) colors.accentTactical else colors.borderSubtle,
+                                            if (isSelected) colors.honey else colors.borderSubtle,
                                             CircleShape
                                         ),
                                     contentAlignment = Alignment.Center
@@ -1320,7 +1307,7 @@ private fun FilterPillsRow(
                 label = { Text("✨ Common 10", style = typo.labelLarge) },
                 colors = FilterChipDefaults.filterChipColors(
                     containerColor = colors.surfaceLow,
-                    labelColor = colors.accentTactical
+                    labelColor = colors.honey
                 ),
                 shape = RoundedCornerShape(50)
             )
@@ -1332,7 +1319,7 @@ private fun FilterPillsRow(
                 label = { Text("Select All 30", style = typo.labelLarge) },
                 colors = FilterChipDefaults.filterChipColors(
                     containerColor = colors.surfaceLow,
-                    labelColor = colors.accentTactical
+                    labelColor = colors.honey
                 ),
                 shape = RoundedCornerShape(50)
             )
@@ -1344,7 +1331,7 @@ private fun FilterPillsRow(
                 label = { Text("Bathroom", style = typo.labelLarge) },
                 colors = FilterChipDefaults.filterChipColors(
                     containerColor = colors.surfaceLow,
-                    labelColor = colors.accentTactical
+                    labelColor = colors.honey
                 ),
                 shape = RoundedCornerShape(50)
             )
@@ -1356,7 +1343,7 @@ private fun FilterPillsRow(
                 label = { Text("Desk & Tech", style = typo.labelLarge) },
                 colors = FilterChipDefaults.filterChipColors(
                     containerColor = colors.surfaceLow,
-                    labelColor = colors.accentTactical
+                    labelColor = colors.honey
                 ),
                 shape = RoundedCornerShape(50)
             )
@@ -1368,7 +1355,7 @@ private fun FilterPillsRow(
                 label = { Text("Kitchen", style = typo.labelLarge) },
                 colors = FilterChipDefaults.filterChipColors(
                     containerColor = colors.surfaceLow,
-                    labelColor = colors.accentTactical
+                    labelColor = colors.honey
                 ),
                 shape = RoundedCornerShape(50)
             )
@@ -1438,7 +1425,7 @@ private fun AnimatedWaveform(
                     .width(6.dp)
                     .height((50 * heightFraction).dp)
                     .background(
-                        color = if (isRecording) colors.accentTactical else colors.borderSubtle,
+                        color = if (isRecording) colors.honey else colors.borderSubtle,
                         shape = RoundedCornerShape(3.dp)
                     )
             )

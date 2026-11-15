@@ -45,12 +45,12 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -84,19 +84,6 @@ import kotlinx.coroutines.launch
  * The last answer is free text with real input behaviour: keyboard-aware compaction, a shake plus
  * inline error on empty submit, and a counter that warns before the cap.
  */
-
-internal object QuestionsTokens {
-    val ground: Color get() = MorroColors.Canvas
-    val surfaceCard: Color get() = MorroColors.SurfaceCard
-    val surfaceQuiet: Color get() = MorroColors.SurfaceElevated
-    val borderIdle: Color get() = MorroColors.BorderSubtle
-    val accent: Color get() = MorroColors.AccentTactical
-    val accentPink: Color get() = MorroColors.AccentTactical
-    val error: Color get() = MorroColors.Error
-    val inkPrimary: Color get() = MorroColors.TextPrimary
-    val inkSecondary: Color get() = MorroColors.TextSecondary
-    val inkMuted: Color get() = MorroColors.TextTertiary
-}
 
 internal enum class CardVariant { Unselected, Selected, Disabled }
 
@@ -261,7 +248,7 @@ fun PersonalizedQuestions(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = "Question ${index + 1} of $TotalQuestions",
-                    color = QuestionsTokens.inkSecondary,
+                    color = MorroColors.TextSecondary,
                     fontFamily = FontFamily.SansSerif,
                     fontSize = 12.sp,
                     letterSpacing = 0.2.sp
@@ -270,7 +257,7 @@ fun PersonalizedQuestions(
                 TextButton(onClick = { finish() }) {
                     Text(
                         text = "Skip",
-                        color = QuestionsTokens.inkSecondary,
+                        color = MorroColors.TextSecondary,
                         fontFamily = FontFamily.SansSerif,
                         fontSize = 13.sp
                     )
@@ -356,7 +343,7 @@ private fun QuestionBody(
         Text(
             text = question.prompt,
             style = TextStyle(
-                color = QuestionsTokens.inkPrimary,
+                color = MorroColors.TextPrimary,
                 fontFamily = FontFamily.SansSerif,
                 fontSize = 26.sp,
                 lineHeight = 33.sp,
@@ -370,7 +357,7 @@ private fun QuestionBody(
             Text(
                 text = question.helper,
                 style = TextStyle(
-                    color = QuestionsTokens.inkSecondary,
+                    color = MorroColors.TextSecondary,
                     fontFamily = FontFamily.SansSerif,
                     fontSize = 14.sp,
                     lineHeight = 21.sp
@@ -386,11 +373,11 @@ private fun QuestionBody(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(MorroShapes.Card)
-                        .background(QuestionsTokens.surfaceCard)
+                        .background(MorroColors.SurfaceCard)
                         .morroHairline(
                             radius = 16.dp,
                             color = when {
-                                errorVisible -> QuestionsTokens.error.copy(alpha = 0.6f)
+                                errorVisible -> MorroColors.Error.copy(alpha = 0.6f)
                                 promise.isNotBlank() -> MorroColors.BorderStrong
                                 else -> MorroColors.BorderSubtle
                             }
@@ -409,7 +396,7 @@ private fun QuestionBody(
                 AnimatedVisibility(visible = errorVisible) {
                     Text(
                         text = "Write something to continue",
-                        color = QuestionsTokens.error,
+                        color = MorroColors.Error,
                         fontFamily = FontFamily.SansSerif,
                         fontSize = 12.sp,
                         modifier = Modifier.padding(top = 10.dp, start = 4.dp)
@@ -471,7 +458,7 @@ private fun AnswerCard(
                 scaleY = scale
             }
             .clip(shape)
-            .background(if (selected) QuestionsTokens.surfaceQuiet else QuestionsTokens.surfaceCard)
+            .background(if (selected) MorroColors.SurfaceElevated else MorroColors.SurfaceCard)
             .morroHairline(
                 radius = 16.dp,
                 color = if (selected) MorroColors.BorderActive else MorroColors.BorderSubtle
@@ -495,7 +482,7 @@ private fun AnswerCard(
             Text(
                 text = label,
                 style = TextStyle(
-                    color = if (selected) QuestionsTokens.inkPrimary else QuestionsTokens.inkSecondary,
+                    color = if (selected) MorroColors.TextPrimary else MorroColors.TextSecondary,
                     fontFamily = FontFamily.SansSerif,
                     fontSize = 16.sp,
                     lineHeight = 22.sp,
@@ -506,13 +493,13 @@ private fun AnswerCard(
                 Box(
                     modifier = Modifier
                         .size(22.dp)
-                        .background(QuestionsTokens.accent.copy(alpha = 0.14f), CircleShape),
+                        .background(MorroColors.Honey.copy(alpha = 0.14f), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Check,
                         contentDescription = null,
-                        tint = QuestionsTokens.accent,
+                        tint = MorroColors.Honey,
                         modifier = Modifier.size(15.dp)
                     )
                 }
@@ -546,8 +533,8 @@ private fun ContinueButton(active: Boolean, onClick: () -> Unit) {
             }
             .clip(MorroShapes.Button)
             .background(
-                if (active) QuestionsTokens.inkPrimary
-                else QuestionsTokens.surfaceQuiet
+                if (active) MorroColors.TextPrimary
+                else MorroColors.SurfaceElevated
             )
             .morroHairline(
                 radius = 12.dp,
@@ -564,7 +551,7 @@ private fun ContinueButton(active: Boolean, onClick: () -> Unit) {
     ) {
         Text(
             text = "Continue",
-            color = if (active) MorroColors.Canvas else QuestionsTokens.inkMuted,
+            color = if (active) MorroColors.Canvas else MorroColors.TextTertiary,
             fontFamily = FontFamily.SansSerif,
             fontSize = 15.sp,
             fontWeight = FontWeight.Medium

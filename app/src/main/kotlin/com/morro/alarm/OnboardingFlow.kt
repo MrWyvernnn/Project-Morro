@@ -42,7 +42,6 @@ import com.morro.alarm.ui.components.MorroPrimaryButton
 import com.morro.alarm.ui.components.MorroPrivacyPolicySheet
 import com.morro.alarm.ui.components.ProceduralOrbitBackground
 import com.morro.alarm.ui.theme.MorroShapes
-import com.morro.alarm.ui.theme.MorroTokens
 import com.morro.alarm.ui.theme.morroColors
 import com.morro.alarm.ui.theme.morroTypography
 import com.morro.alarm.ui.theme.morroShapes
@@ -212,7 +211,7 @@ private fun ScreenPainHook(onNext: () -> Unit) {
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
                     text = "Morro.",
-                    style = morroTypography().headlineLarge.copy(color = morroColors().accentTactical),
+                    style = morroTypography().headlineLarge.copy(color = morroColors().honey),
                     textAlign = TextAlign.Center
                 )
             }
@@ -243,7 +242,7 @@ private fun ScreenExactTiming(onNext: () -> Unit) {
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 2.sp
                 ),
-                color = colors.accentTactical
+                color = colors.honey
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
@@ -268,8 +267,8 @@ private fun ScreenExactTiming(onNext: () -> Unit) {
                         .weight(1f)
                         .height(4.dp)
                         .background(
-                            if (isCompleted) colors.accentTactical
-                            else if (isActive) colors.accentTactical
+                            if (isCompleted) colors.honey
+                            else if (isActive) colors.honey
                             else colors.borderSubtle,
                             RoundedCornerShape(2.dp)
                         )
@@ -296,7 +295,7 @@ private fun ScreenExactTiming(onNext: () -> Unit) {
                         text = "2. Exact Timing",
                         style = typo.headlineMedium.copy(
                             fontWeight = FontWeight.Bold,
-                            color = colors.accentTactical
+                            color = colors.honey
                         ),
                         textAlign = TextAlign.Center
                     )
@@ -373,7 +372,7 @@ private fun ScreenBatteryHardening(onNext: () -> Unit) {
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 2.sp
                 ),
-                color = colors.accentTactical
+                color = colors.honey
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
@@ -398,8 +397,8 @@ private fun ScreenBatteryHardening(onNext: () -> Unit) {
                         .weight(1f)
                         .height(4.dp)
                         .background(
-                            if (isCompleted) colors.accentTactical
-                            else if (isActive) colors.accentTactical
+                            if (isCompleted) colors.honey
+                            else if (isActive) colors.honey
                             else colors.borderSubtle,
                             RoundedCornerShape(2.dp)
                         )
@@ -424,7 +423,7 @@ private fun ScreenBatteryHardening(onNext: () -> Unit) {
                         text = "3. Battery Hardening",
                         style = typo.headlineMedium.copy(
                             fontWeight = FontWeight.Bold,
-                            color = colors.accentTactical
+                            color = colors.honey
                         ),
                         textAlign = TextAlign.Center
                     )
@@ -511,7 +510,7 @@ private fun ScreenMissionAndClockHub(
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 2.sp
                 ),
-                color = colors.accentTactical
+                color = colors.honey
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
@@ -536,8 +535,8 @@ private fun ScreenMissionAndClockHub(
                         .weight(1f)
                         .height(4.dp)
                         .background(
-                            if (isCompleted) colors.accentTactical
-                            else if (isActive) colors.accentTactical
+                            if (isCompleted) colors.honey
+                            else if (isActive) colors.honey
                             else colors.borderSubtle,
                             RoundedCornerShape(2.dp)
                         )
@@ -562,7 +561,7 @@ private fun ScreenMissionAndClockHub(
                         text = "4. Choose Your Wake-Up Mission",
                         style = typo.headlineMedium.copy(
                             fontWeight = FontWeight.Bold,
-                            color = colors.accentTactical
+                            color = colors.honey
                         ),
                         textAlign = TextAlign.Center
                     )
@@ -618,7 +617,7 @@ private fun ScreenMissionAndClockHub(
                         text = String.format(Locale.getDefault(), "%02d:%02d", wakeHour, wakeMinute),
                         style = typo.displayLarge.copy(
                             fontWeight = FontWeight.Bold,
-                            color = colors.accentTactical
+                            color = colors.honey
                         )
                     )
 
@@ -673,12 +672,12 @@ private fun MissionOptionChip(
         modifier = Modifier
             .fillMaxWidth()
             .background(
-                if (isSelected) colors.accentTactical.copy(alpha = 0.10f) else colors.surfaceVariant,
+                if (isSelected) colors.honey.copy(alpha = 0.10f) else colors.surfaceVariant,
                 shapes.Card
             )
             .border(
                 if (isSelected) 2.dp else 1.dp,
-                if (isSelected) colors.accentTactical else colors.borderSubtle,
+                if (isSelected) colors.honey else colors.borderSubtle,
                 shapes.Card
             )
             .clip(shapes.Card)
@@ -699,7 +698,7 @@ private fun MissionOptionChip(
                     modifier = Modifier
                         .size(44.dp)
                         .background(
-                            if (isSelected) colors.accentTactical else colors.surfaceLow,
+                            if (isSelected) colors.honey else colors.surfaceLow,
                             RoundedCornerShape(12.dp)
                         ),
                     contentAlignment = Alignment.Center
@@ -716,7 +715,7 @@ private fun MissionOptionChip(
                         text = title,
                         style = typo.titleMedium.copy(
                             fontWeight = FontWeight.Bold,
-                            color = if (isSelected) colors.accentTactical else colors.textPrimary
+                            color = if (isSelected) colors.honey else colors.textPrimary
                         )
                     )
                     Text(
@@ -730,7 +729,7 @@ private fun MissionOptionChip(
                 Box(
                     modifier = Modifier
                         .size(24.dp)
-                        .background(colors.accentTactical, RoundedCornerShape(50)),
+                        .background(colors.honey, RoundedCornerShape(50)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -791,7 +790,7 @@ private fun ScreenPlaceboLoader(onNext: () -> Unit) {
             ) {
                 CircularProgressIndicator(
                     modifier = Modifier.fillMaxSize(),
-                    color = morroColors().accentTactical,
+                    color = morroColors().honey,
                     strokeWidth = 2.dp
                 )
                 Box(modifier = Modifier.background(Color.Transparent)) {
@@ -903,7 +902,7 @@ private fun ScreenContract(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(colors.surfaceVariant, shapes.Card)
-                    .border(1.5.dp, colors.accentTactical, shapes.Card)
+                    .border(1.5.dp, colors.honey, shapes.Card)
                     .padding(20.dp)
             ) {
                 Column(
@@ -921,7 +920,7 @@ private fun ScreenContract(
                     Text(
                         text = "MISSION: ${target.uppercase()} • ${missionType.name.replace('_', ' ')}",
                         style = typo.headlineSmall.copy(
-                            color = colors.accentTactical,
+                            color = colors.honey,
                             fontWeight = FontWeight.Bold
                         ),
                         textAlign = TextAlign.Center
@@ -938,7 +937,7 @@ private fun ScreenContract(
                     style = typo.bodyMedium.copy(
                         textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline
                     ),
-                    color = colors.accentTactical
+                    color = colors.honey
                 )
             }
         }

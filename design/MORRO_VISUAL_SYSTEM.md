@@ -27,12 +27,15 @@ One warm neutral ramp. Nothing tints the ground.
 | Text secondary | `#A79E8D` |
 | Text tertiary | `#7C7466` |
 | Honey highlight (arc, armed dot, second hand) | `#E8C58F` |
+| Mascot eyes only (dusty rose) | `#E8B4AE` |
 | Hairline | text primary at 8% (`#14EFE7D6`) |
 | Hairline, strong / active | 18% / 35% |
 
 Rules:
 
 - The only warm mark on a screen is the honey highlight, and it appears once or twice.
+- Dusty rose is reserved for the mascot's eyes and nowhere else: no chrome, no status, no text.
+  It is deliberately not part of `MorroColorPalette`, so a screen cannot reach it by accident.
 - Primary actions are a warm off-white fill with near-black text. That is the hierarchy on black.
 - Status is tonal. "Armed" is a honey dot plus the word; nothing turns green or red at rest.
 - No gradient runs from one hue to another anywhere. A single-neutral tone shift is the only

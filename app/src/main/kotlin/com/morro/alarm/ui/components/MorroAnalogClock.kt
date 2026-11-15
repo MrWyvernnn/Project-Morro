@@ -62,7 +62,7 @@ fun MorroAnalogClock(
 
             // Elapsed-hour arc: 0 at twelve, filling clockwise. The one warm mark on the dial.
             drawArc(
-                color = MorroColors.AccentTactical.copy(alpha = 0.55f),
+                color = MorroColors.Honey.copy(alpha = 0.55f),
                 startAngle = -90f,
                 sweepAngle = ((minuteFloat / 60f) * 360f),
                 useCenter = false,
@@ -125,7 +125,7 @@ fun MorroAnalogClock(
             // Second hand: honey, hairline, with a counterweight.
             rotate(degrees = second * 6f, pivot = center) {
                 drawLine(
-                    color = MorroColors.AccentTactical.copy(alpha = 0.85f),
+                    color = MorroColors.Honey.copy(alpha = 0.85f),
                     start = Offset(center.x, center.y + radius * 0.16f),
                     end = Offset(center.x, center.y - radius * 0.78f),
                     strokeWidth = 1.2.dp.toPx(),

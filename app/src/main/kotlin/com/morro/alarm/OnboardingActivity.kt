@@ -33,7 +33,6 @@ import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -43,16 +42,13 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -69,9 +65,9 @@ import com.morro.alarm.ui.theme.morroHairline
 /**
  * Permissions onboarding — one screen, two rows, one optional hardening card.
  *
- * The old four-step wizard is gone. Each row requests its own permission inline and flips to a
- * pink "Granted" pill the moment the system returns. Battery optimisation and exact-alarm access
- * live in a compact terminal card: they matter for reliability, so they are surfaced clearly, but
+ * The old four-step wizard is gone. Each row requests its own permission inline and flips to an
+ * "Allowed" check the moment the system returns. Battery optimisation and exact-alarm access live
+ * in a compact reliability card: they matter for reliability, so they are surfaced clearly, but
  * they can never block the person from reaching the dashboard.
  *
  * Writing `onboarding_completed` happens only on Continue, so a returning user who finished the
@@ -399,13 +395,13 @@ private fun PermissionRow(
                 Icon(
                     imageVector = Icons.Filled.Check,
                     contentDescription = null,
-                    tint = MorroColors.AccentTactical,
+                    tint = MorroColors.Honey,
                     modifier = Modifier.size(14.dp)
                 )
                 Spacer(modifier = Modifier.width(5.dp))
                 Text(
                     text = "Allowed",
-                    color = MorroColors.AccentTactical,
+                    color = MorroColors.Honey,
                     fontSize = 12.sp
                 )
             }
@@ -471,7 +467,7 @@ private fun SystemAccessCard(
                     TextButton(onClick = onRequestExactAlarm) {
                         Text(
                             text = "Allow timing",
-                            color = MorroColors.AccentTactical,
+                            color = MorroColors.Honey,
                             fontSize = 12.sp
                         )
                     }
@@ -480,7 +476,7 @@ private fun SystemAccessCard(
                     TextButton(onClick = onRequestBattery) {
                         Text(
                             text = "Unrestrict battery",
-                            color = MorroColors.AccentTactical,
+                            color = MorroColors.Honey,
                             fontSize = 12.sp
                         )
                     }
@@ -513,7 +509,7 @@ private fun TerminalLine(label: String, value: String, ok: Boolean) {
         )
         Text(
             text = value,
-            color = if (ok) MorroColors.TextPrimary else MorroColors.AccentTactical,
+            color = if (ok) MorroColors.TextPrimary else MorroColors.Honey,
             fontFamily = FontFamily.Monospace,
             fontSize = 12.sp
         )

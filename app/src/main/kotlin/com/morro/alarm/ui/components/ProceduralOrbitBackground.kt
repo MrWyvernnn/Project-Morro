@@ -73,8 +73,8 @@ private fun DrawScope.drawOrbitalRings(
     alpha: Float,
     colors: com.morro.alarm.ui.theme.MorroColorPalette
 ) {
-    // Use AccentTactical with very low alpha for subtle warm orbits on light canvas
-    val orbitColor = colors.accentTactical.copy(alpha = alpha * 0.05f)
+    // Use Honey with very low alpha for subtle warm orbits on light canvas
+    val orbitColor = colors.honey.copy(alpha = alpha * 0.05f)
 
     // Ring 1: Large outer ring
     drawOrbit(
@@ -141,8 +141,8 @@ private fun DrawScope.drawOrbitingParticles(
     alpha: Float,
     colors: com.morro.alarm.ui.theme.MorroColorPalette
 ) {
-    // Use AccentBubbly for orbiting particles (glow only)
-    val particleColor = colors.accentBubbly.copy(alpha = alpha * 0.8f)
+    // Use Honey for orbiting particles (glow only)
+    val particleColor = colors.honey.copy(alpha = alpha * 0.8f)
     val particleRadius = 3.dp.toPx()
 
     // Particle 1: Outer ring orbit

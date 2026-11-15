@@ -38,13 +38,13 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -69,7 +69,6 @@ import com.morro.alarm.ui.onboarding.OnboardingGate
 import com.morro.alarm.ui.onboarding.PersonalizationStorage
 import com.morro.alarm.ui.onboarding.PersonalizedQuestions
 import com.morro.alarm.ui.splash.MorroGhostSplash
-import com.morro.alarm.ui.theme.MorroColors
 import com.morro.alarm.ui.theme.MorroShapes
 import com.morro.alarm.ui.theme.MorroTheme
 import com.morro.alarm.ui.theme.morroColors
@@ -126,11 +125,16 @@ class MainActivity : ComponentActivity() {
                     )
 
                     !hasOnboarded -> {
-                        val intent = Intent(this@MainActivity, OnboardingActivity::class.java).apply {
-                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                        // Launch from an effect, not from the composition body: a recomposition
+                        // before finish() lands would otherwise start the screen twice.
+                        LaunchedEffect(Unit) {
+                            startActivity(
+                                Intent(this@MainActivity, OnboardingActivity::class.java).apply {
+                                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                                }
+                            )
+                            finish()
                         }
-                        startActivity(intent)
-                        finish()
                     }
 
                     else -> MainAlarmScreen(context = this@MainActivity)
@@ -268,7 +272,7 @@ fun MainAlarmScreen(context: Context) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.VolumeOff,
                         contentDescription = null,
-                        tint = colors.accentTactical,
+                        tint = colors.honey,
                         modifier = Modifier.size(17.dp)
                     )
                     Spacer(modifier = Modifier.width(12.dp))
@@ -418,7 +422,7 @@ private fun AlarmDock(
                     modifier = Modifier
                         .size(6.dp)
                         .background(
-                            if (armed) colors.accentTactical else colors.textDisabled,
+                            if (armed) colors.honey else colors.textDisabled,
                             CircleShape
                         )
                 )
@@ -452,7 +456,7 @@ private fun AlarmDock(
                     onCheckedChange = onArmToggle,
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = colors.canvas,
-                        checkedTrackColor = colors.accentTactical,
+                        checkedTrackColor = colors.honey,
                         uncheckedThumbColor = colors.textSecondary,
                         uncheckedTrackColor = colors.surfaceLow
                     )

@@ -599,13 +599,13 @@ class AlarmActivity : ComponentActivity() {
                                                 unfocusedContainerColor = Color.Unspecified,
                                                 disabledContainerColor = Color.Unspecified,
                                                 errorContainerColor = Color.Unspecified,
-                                                cursorColor = colors.accentTactical,
+                                                cursorColor = colors.honey,
                                                 errorCursorColor = colors.error,
                                                 selectionColors = TextSelectionColors(
-                                                    handleColor = colors.accentTactical,
-                                                    backgroundColor = colors.accentTactical.copy(alpha = 0.3f)
+                                                    handleColor = colors.honey,
+                                                    backgroundColor = colors.honey.copy(alpha = 0.3f)
                                                 ),
-                                                focusedIndicatorColor = colors.accentTactical,
+                                                focusedIndicatorColor = colors.honey,
                                                 unfocusedIndicatorColor = colors.borderSubtle,
                                                 disabledIndicatorColor = Color.Unspecified,
                                                 errorIndicatorColor = colors.error,
@@ -658,7 +658,7 @@ class AlarmActivity : ComponentActivity() {
                                                 modifier = Modifier.weight(1f),
                                                 enabled = userInput.isNotBlank(),
                                                 colors = ButtonDefaults.buttonColors(
-                                                    containerColor = colors.accentTactical,
+                                                    containerColor = colors.honey,
                                                     contentColor = Color.White
                                                 )
                                             ) {
@@ -719,7 +719,7 @@ class AlarmActivity : ComponentActivity() {
                                 Text(
                                     text = "No skip, no seek.",
                                     style = typo.bodyMedium,
-                                    color = colors.accentTactical,
+                                    color = colors.honey,
                                     fontWeight = FontWeight.Bold
                                 )
                             }
@@ -767,7 +767,7 @@ class AlarmActivity : ComponentActivity() {
                     fontFamily = FontFamily.Monospace,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
-                    color = if (isGraceActive) colors.accentTactical else colors.error,
+                    color = if (isGraceActive) colors.honey else colors.error,
                     letterSpacing = 1.sp
                 )
                 Text(
@@ -780,7 +780,7 @@ class AlarmActivity : ComponentActivity() {
             if (!isGraceActive) {
                 Box(
                     modifier = Modifier
-                        .background(colors.accentTactical, RoundedCornerShape(10.dp))
+                        .background(colors.honey, RoundedCornerShape(10.dp))
                         .clip(RoundedCornerShape(10.dp))
                         .clickable(onClick = onRestartGrace)
                         .padding(horizontal = 12.dp, vertical = 6.dp)
@@ -798,7 +798,7 @@ class AlarmActivity : ComponentActivity() {
 
     /**
      * RecordingGateUI: Sleek screen asking the user to "Record tomorrow's commitment"
-     * with a massive AccentTactical Record button and low-contrast Skip button.
+     * with a massive Honey Record button and low-contrast Skip button.
      */
     @Composable
     private fun RecordingGateUI(
@@ -841,7 +841,7 @@ class AlarmActivity : ComponentActivity() {
                     Text(
                         text = "Recording: $countdown s",
                         style = typo.headlineMedium,
-                        color = colors.accentTactical,
+                        color = colors.honey,
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.height(8.dp))
@@ -870,7 +870,7 @@ class AlarmActivity : ComponentActivity() {
                             .fillMaxWidth()
                             .height(64.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = colors.accentTactical,
+                            containerColor = colors.honey,
                             contentColor = Color.White
                         ),
                         shape = RoundedCornerShape(16.dp)

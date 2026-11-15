@@ -113,13 +113,13 @@ fun AffirmationGate(
                 unfocusedContainerColor = Color.Unspecified,
                 disabledContainerColor = Color.Unspecified,
                 errorContainerColor = Color.Unspecified,
-                cursorColor = colors.accentTactical,
+                cursorColor = colors.honey,
                 errorCursorColor = colors.error,
                 textSelectionColors = TextSelectionColors(
-                    handleColor = colors.accentTactical,
-                    backgroundColor = colors.accentTactical.copy(alpha = 0.3f)
+                    handleColor = colors.honey,
+                    backgroundColor = colors.honey.copy(alpha = 0.3f)
                 ),
-                focusedIndicatorColor = colors.accentTactical,
+                focusedIndicatorColor = colors.honey,
                 unfocusedIndicatorColor = colors.borderSubtle,
                 disabledIndicatorColor = Color.Unspecified,
                 errorIndicatorColor = colors.error,
@@ -179,7 +179,7 @@ fun AffirmationGate(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(4.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = colors.accentTactical,
+                containerColor = colors.honey,
                 contentColor = Color.White
             )
         ) {
@@ -192,7 +192,7 @@ fun AffirmationGate(
             onClick = onSnooze,
             shape = RoundedCornerShape(4.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = colors.accentTactical,
+                containerColor = colors.honey,
                 contentColor = Color.White
             )
         ) {

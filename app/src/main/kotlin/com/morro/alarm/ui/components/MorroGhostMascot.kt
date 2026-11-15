@@ -29,11 +29,12 @@ import kotlin.math.PI
 import kotlin.math.sin
 
 /**
- * MorroGhostMascot — a small, soft, black-on-black ghost with a honey face.
+ * MorroGhostMascot — a small, soft, black-on-black ghost with dusty-rose eyes.
  *
  * Depth comes from three neutral layers, not from colour: a warm bloom behind it, a lifted body
  * gradient, and a rim light along the top edge. That makes the silhouette readable at 120dp on a
- * pure black screen without drawing a white sticker.
+ * pure black screen without drawing a white sticker. The eyes are the only dusty rose in the app;
+ * everything else on the screen stays monochrome.
  *
  * Motion is a hop cycle with anticipation, stretch in the air and a landing squash, on top of a
  * slow breath. It is deliberately bouncy — the mascot is the one playful thing on the screen — but
@@ -83,7 +84,7 @@ fun MorroGhostMascot(
                 brush = Brush.radialGradient(
                     colors = listOf(
                         MorroColors.TextPrimary.copy(alpha = 0.06f),
-                        MorroColors.AccentTactical.copy(alpha = 0.10f),
+                        MorroColors.Honey.copy(alpha = 0.10f),
                         Color.Transparent
                     ),
                     center = Offset(centerX, size.height * 0.50f),
@@ -102,7 +103,7 @@ fun MorroGhostMascot(
                     canvasSize = size,
                     centerYOffset = lift,
                     bodyColor = MorroColors.SurfaceElevated,
-                    eyeColor = MorroColors.TextPrimary,
+                    eyeColor = MorroColors.EyeRose,
                     happy = happy,
                     blink = blink
                 )
@@ -137,14 +138,15 @@ private fun blinkAmount(t: Float): Float = when {
 /**
  * Draws the ghost inside [canvasSize].
  *
- * The body is a warm near-black gradient with a hairline rim; the face is honey white with a small
- * bloom under each eye so it reads as light rather than paint.
+ * The body is a warm near-black gradient with a hairline rim, so it has weight without turning
+ * into a white sticker. The eyes are a soft dusty rose with a small bloom so they read as light
+ * rather than paint; the smile stays honey white, which keeps the face monochrome apart from them.
  */
-fun DrawScope.drawGhost(
+private fun DrawScope.drawGhost(
     canvasSize: Size,
     centerYOffset: Float = 0f,
     bodyColor: Color = MorroColors.SurfaceElevated,
-    eyeColor: Color = MorroColors.TextPrimary,
+    eyeColor: Color = MorroColors.EyeRose,
     happy: Boolean = true,
     blink: Float = 1f,
 ) {
@@ -186,7 +188,7 @@ fun DrawScope.drawGhost(
         path = body,
         brush = Brush.verticalGradient(
             colors = listOf(
-                bodyColor.copy(alpha = 1f).let { Color(0xFF211D18) },
+                bodyColor,
                 Color(0xFF100E0C),
                 Color(0xFF070706)
             ),
@@ -258,7 +260,7 @@ fun DrawScope.drawGhost(
     }
     drawPath(
         path = smile,
-        color = eyeColor.copy(alpha = 0.72f),
+        color = MorroColors.Honey.copy(alpha = 0.55f),
         style = Stroke(width = bodyWidth * 0.018f, cap = StrokeCap.Round)
     )
 }
@@ -278,14 +280,3 @@ private fun rememberReducedMotionSafely(): Boolean {
         ) == 0f
     }
 }
-
-/** Small helper for future illustrations: a point on a cubic bezier. */
-internal fun bezierPoint(t: Float, a: Offset, b: Offset, c: Offset, d: Offset): Offset {
-    val u = 1f - t
-    val x = u * u * u * a.x + 3f * u * u * t * b.x + 3f * u * t * t * c.x + t * t * t * d.x
-    val y = u * u * u * a.y + 3f * u * u * t * b.y + 3f * u * t * t * c.y + t * t * t * d.y
-    return Offset(x, y)
-}
-
-/** Unused-but-exported wobble kept for the onboarding illustrations. */
-internal fun wobble(phase: Float): Float = sin(phase * 2f * PI.toFloat()) * 0.5f

@@ -107,7 +107,7 @@ fun MissionSelectScreen(
                         tagLabel = "VOICE",
                         title = "Voice Memo",
                         subtitle = "15s personal commitment",
-                        accent = colors.accentTactical,
+                        accent = colors.honey,
                         onClick = onAlarmBuilder,
                         modifier = Modifier.weight(1f, fill = true)
                     )
@@ -115,7 +115,7 @@ fun MissionSelectScreen(
                         tagLabel = "QR",
                         title = "QR / Barcode",
                         subtitle = "Scan to dismiss",
-                        accent = colors.accentBubbly,
+                        accent = colors.honey,
                         onClick = onAlarmBuilder,
                         modifier = Modifier.weight(1f, fill = true)
                     )
@@ -126,7 +126,7 @@ fun MissionSelectScreen(
                     tagLabel = "PHOTO",
                     title = "Object Hunt",
                     subtitle = "30-item household pool",
-                    accent = colors.accentTactical,
+                    accent = colors.honey,
                     onClick = onAlarmBuilder,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -215,7 +215,7 @@ private fun BentoHeroCard(
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 0.12f.sp
                         ),
-                        color = colors.accentTactical
+                        color = colors.honey
                     )
                 }
 
@@ -245,14 +245,14 @@ private fun BentoHeroCard(
                     Icon(
                         imageVector = Icons.Outlined.PlayCircleOutline,
                         contentDescription = "Mission active",
-                        tint = colors.accentTactical,
+                        tint = colors.honey,
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "ARMED — RING AT 7:00 AM",
                         style = typo.labelLarge,
-                        color = colors.accentTactical,
+                        color = colors.honey,
                         modifier = Modifier.weight(1f, fill = true)
                     )
                     Icon(
@@ -381,7 +381,7 @@ private fun BentoQuoteCard(
                     style = typo.labelLarge.copy(
                         fontWeight = FontWeight.Bold
                     ),
-                    color = colors.accentTactical
+                    color = colors.honey
                 )
             }
         }

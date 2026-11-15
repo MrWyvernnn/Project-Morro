@@ -1,11 +1,5 @@
 package com.morro.alarm.ui.onboarding
 
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,7 +8,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
@@ -65,7 +58,7 @@ fun PromiseInput(
             },
             modifier = Modifier.fillMaxWidth(),
             textStyle = textStyle,
-            cursorBrush = SolidColor(MorroColors.AccentTactical),
+            cursorBrush = SolidColor(MorroColors.Honey),
             singleLine = false,
             decorationBox = { innerTextField ->
                 Box {
@@ -84,7 +77,7 @@ fun PromiseInput(
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             Text(
                 text = "${value.length}/$maxLength",
-                color = if (nearLimit) MorroColors.AccentTactical else MorroColors.TextTertiary,
+                color = if (nearLimit) MorroColors.Honey else MorroColors.TextTertiary,
                 fontFamily = FontFamily.Monospace,
                 fontSize = 12.sp
             )

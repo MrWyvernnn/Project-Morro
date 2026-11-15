@@ -70,7 +70,7 @@ fun MorroCard(
                 if (ringAlpha > 0f) {
                     val inset = 2f * density
                     drawRoundRect(
-                        color = MorroColors.AccentTactical.copy(alpha = ringAlpha),
+                        color = MorroColors.Honey.copy(alpha = ringAlpha),
                         topLeft = Offset(inset, inset),
                         size = Size(size.width - inset * 2f, size.height - inset * 2f),
                         cornerRadius = CornerRadius(radius - inset, radius - inset),

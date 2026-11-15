@@ -94,7 +94,7 @@ fun BatteryOptimizationDebugScreen(
         Text(
             text = "OEM Battery Hardening (Debug)",
             style = typo.headlineMedium,
-            color = colors.accentTactical,
+            color = colors.honey,
             fontSize = 22.sp
         )
 
@@ -139,7 +139,7 @@ fun BatteryOptimizationDebugScreen(
             onClick = onRequestWhitelist,
             modifier = Modifier.fillMaxWidth(),
             colors = ButtonDefaults.buttonColors(
-                containerColor = colors.accentTactical,
+                containerColor = colors.honey,
                 contentColor = Color.White
             ),
             shape = MorroShapes.Button
