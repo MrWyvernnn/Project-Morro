@@ -2,7 +2,6 @@ package com.morro.alarm.ui.theme
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.SpringSpec
 import androidx.compose.animation.core.spring
 import androidx.compose.material3.MaterialTheme
@@ -13,7 +12,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -25,64 +23,68 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /**
- * Morro Design Tokens — one source of truth.
+ * Morro design tokens — one warm monochrome ramp on pure black.
  *
- * The identity is a pure-AMOLED stage: #000000 everywhere, near-black panels a single step up
- * from it, and a single warm signal — tactical orange (#FF5500) bleeding into bubbly pink
- * (#FF66A3) — used for progress, active borders, the second hand and every primary action.
+ * Direction: calm, warm, a little stubborn. The world is a windowsill before sunrise: black glass,
+ * warm paper-white light, and soft edges. Colour is not the brand here — light is. Every surface is
+ * a step of one warm neutral ramp, every border is the text colour at 8% opacity, and the only
+ * "accent" is the honey-white the text is already made of.
  *
- * Rules that survive every screen:
- *  - Canvas is #000000. No cream, no light theme, no navy cards.
- *  - Surfaces separate by a small step in tone, never by a heavy shadow.
- *  - Orange -> pink is the only gradient. It is a signature, not decoration, so it appears on
- *    progress, selected states and the primary action.
- *  - Text is white, #A0A0AB (secondary) or #6B6B76 (tertiary labels only, never body copy).
- *  - Interactive corners are squarcles: cards 20dp, buttons 16dp, pills fully round.
+ * Rules:
+ *  - Canvas is #000000. Nothing tints the ground.
+ *  - Depth comes from surface steps plus a hairline, never from shadows, glows or gradients.
+ *  - No hue-to-hue gradients anywhere. A single-neutral tone shift is the only gradient allowed.
+ *  - Text has three roles: honey white, warm grey, muted. No fourth.
+ *  - One bright thing per screen carries the character (the mascot on splash, the dial on the
+ *    dashboard). Chrome stays quiet.
  */
 
 // ── Geometry ──────────────────────────────────────────────────────────────
 object MorroShapes {
-    val Card = androidx.compose.foundation.shape.RoundedCornerShape(20.dp)
-    val Button = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
-    val Chip = androidx.compose.foundation.shape.RoundedCornerShape(50)
+    val Card = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
+    val Button = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+    val Chip = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
     val Pill = androidx.compose.foundation.shape.RoundedCornerShape(50)
-    val Sheet = androidx.compose.foundation.shape.RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+    val Sheet = androidx.compose.foundation.shape.RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
     val FocusRing = 2.dp
 }
 
-// ── Colors ────────────────────────────────────────────────────────────────
+// ── Colours ───────────────────────────────────────────────────────────────
 object MorroColors {
-    // Canvas & surface layers (steps, not shadows)
-    val Canvas          = Color(0xFF000000) // root background — pure AMOLED black
-    val Surface         = Color(0xFF07070B) // sheets, large panels
-    val SurfaceElevated = Color(0xFF0D0D12) // bento cards, answer cards
-    val SurfaceCard     = Color(0xFF09090D) // rows, quiet containers
-    val SurfaceLow      = Color(0xFF12121A) // legacy raised tile (pills, handles)
-    val SurfaceVariant  = SurfaceElevated
+    // Warm neutral ramp
+    val Canvas           = Color(0xFF000000)
+    val Surface          = Color(0xFF0B0A08)
+    val SurfaceCard      = Color(0xFF121110)
+    val SurfaceElevated  = Color(0xFF1A1714)
+    val SurfaceLow       = Color(0xFF231F19)
+    val SurfaceVariant   = SurfaceCard
 
-    // Typography
-    val TextPrimary   = Color(0xFFFFFFFF)
-    val TextSecondary = Color(0xFFA0A0AB)
-    val TextTertiary  = Color(0xFF6B6B76)
-    val TextDisabled  = Color(0xFF6B6B76)
+    // Text roles
+    val TextPrimary      = Color(0xFFEFE7D6) // honey white, never pure #FFFFFF
+    val TextSecondary    = Color(0xFFA79E8D)
+    val TextTertiary     = Color(0xFF7C7466)
+    val TextDisabled     = Color(0xFF6B6458)
 
-    // The warm signal: orange -> pink
-    val AccentTactical   = Color(0xFFFF5500) // primary action, focus, active states
-    val AccentBubbly     = Color(0xFFFF66A3) // secondary accent, glow, live states
-    val AccentBubblySoft = Color(0xFFFF85B3)
-    val AccentBubblyDeep = Color(0xFFFF5E9E)
-    val WarmYellow       = Color(0xFFFFC94A) // armed / positive status only
+    /**
+     * Warm highlight. The old accent names are kept so every call site compiles, but they all point
+     * at the same honey tone: the product no longer has a second hue.
+     */
+    val AccentTactical   = Color(0xFFE8C58F)
+    val AccentBubbly     = Color(0xFFE8C58F)
+    val AccentBubblySoft = Color(0xFFD8B581)
+    val AccentBubblyDeep = Color(0xFFC99B63)
+    val WarmYellow       = Color(0xFFE8C58F)
 
-    // Borders
-    val BorderSubtle  = Color(0x1FFFFFFF) // white at 12%
-    val BorderStrong  = Color(0x33FFFFFF) // white at 20%
-    val BorderActive  = AccentTactical
+    // Hairlines: the text colour at low alpha, never a coloured border
+    val BorderSubtle     = Color(0x14EFE7D6) // 8%
+    val BorderStrong     = Color(0x2EEFE7D6) // 18%
+    val BorderActive     = Color(0x59EFE7D6) // 35%
 
-    // Status
-    val Success = Color(0xFF2E7D32)
-    val Error   = Color(0xFFFF4D5E)
+    // Status is tonal, not chromatic: the interface stays monochrome
+    val Success          = Color(0xFFB9C4A6)
+    val Error            = Color(0xFFD8C1A4)
 
-    // Legacy aliases (kept so older call sites compile)
+    // Legacy aliases
     val CanvasRoot = Canvas
     val SurfaceDark = Surface
     val TextPrimaryDark = TextPrimary
@@ -90,110 +92,70 @@ object MorroColors {
     val Border = BorderActive
 }
 
-/** The signature ribbon gradient. One gradient, used with intent. */
-object MorroGradients {
-    val Ribbon: List<Color> = listOf(MorroColors.AccentTactical, MorroColors.AccentBubbly)
-
-    /** Horizontal orange -> pink, for progress fills, borders and the primary action. */
-    fun horizontal(alpha: Float = 1f): Brush = Brush.horizontalGradient(
-        colors = listOf(
-            MorroColors.AccentTactical.copy(alpha = alpha),
-            MorroColors.AccentBubbly.copy(alpha = alpha)
-        )
-    )
-
-    /** Diagonal variant, for ambient light ribbons sweeping across the black canvas. */
-    fun diagonal(alpha: Float = 1f): Brush = Brush.linearGradient(
-        colors = listOf(
-            MorroColors.AccentTactical.copy(alpha = alpha),
-            MorroColors.AccentBubblySoft.copy(alpha = alpha * 0.9f),
-            MorroColors.AccentBubbly.copy(alpha = alpha * 0.6f)
-        )
-    )
-
-    /** Soft text/icon wash so pink accents never sit flat on black. */
-    fun glow(alpha: Float = 0.22f): Brush = Brush.radialGradient(
-        colors = listOf(
-            MorroColors.AccentBubbly.copy(alpha = alpha),
-            MorroColors.AccentTactical.copy(alpha = alpha * 0.45f),
-            Color.Transparent
-        )
-    )
-}
-
 /**
- * Draws a 1dp orange -> pink border inside the component's bounds.
+ * A hairline border drawn inside the component's own bounds.
  *
- * A modifier rather than a `border(...)` call because Compose's border only takes a solid colour.
- * Drawn inside the clip so the radius matches the surface exactly; no ring ever escapes the card.
+ * Compose's `border` only takes a solid colour and sits on top of the clip; drawing it ourselves
+ * keeps the radius concentric with the surface, which is what makes nested cards look machined
+ * rather than stuck on.
  */
-fun Modifier.morroGradientBorder(
-    shape: Shape,
+fun Modifier.morroHairline(
+    radius: Dp = 16.dp,
     width: Dp = 1.dp,
-    brush: Brush = MorroGradients.horizontal(),
+    color: Color = MorroColors.BorderSubtle,
 ): Modifier = this.drawBehind {
-    val radius = cornerRadiusFor(shape, size, this)
+    val r = radius.toPx()
     drawRoundRect(
-        brush = brush,
-        cornerRadius = radius,
+        color = color,
+        cornerRadius = CornerRadius(r, r),
         style = Stroke(width = width.toPx())
     )
 }
 
-/** Reads a rounded shape's corner size so the border follows the same squarcle as the clip. */
-private fun cornerRadiusFor(
-    shape: Shape,
-    size: Size,
-    density: androidx.compose.ui.unit.Density,
-): CornerRadius {
-    val rounded = shape as? androidx.compose.foundation.shape.RoundedCornerShape
-    val px = rounded?.topStart?.toPx(size, density) ?: 0f
-    return CornerRadius(px, px)
-}
 
 // ── Typography ────────────────────────────────────────────────────────────
-// System faces only: the app ships no font assets and makes no network calls.
+// System faces only: no font assets ship and nothing is fetched.
+// Hierarchy comes from size and colour. Weights stay at 400/500, 600 for a rare emphasis.
 private val FontDisplay = FontFamily.SansSerif
-private val FontMono    = FontFamily.Monospace
 private val FontBody    = FontFamily.SansSerif
 
 object MorroTypography {
     val DisplayHero = TextStyle(
         fontFamily = FontDisplay,
-        fontWeight = FontWeight.Bold,
-        fontSize = 56.sp,
-        lineHeight = 56.sp,
-        letterSpacing = (-0.04f).sp
+        fontWeight = FontWeight.Medium,
+        fontSize = 40.sp,
+        lineHeight = 44.sp,
+        letterSpacing = (-0.6).sp
     )
 
     val DisplayLarge = TextStyle(
         fontFamily = FontDisplay,
-        fontWeight = FontWeight.Bold,
-        fontSize = 36.sp,
-        lineHeight = 40.sp,
-        letterSpacing = (-0.03f).sp
+        fontWeight = FontWeight.Medium,
+        fontSize = 32.sp,
+        lineHeight = 38.sp,
+        letterSpacing = (-0.4).sp
     )
 
     val HeadlineLarge = TextStyle(
         fontFamily = FontDisplay,
-        fontWeight = FontWeight.Bold,
-        fontSize = 28.sp,
-        lineHeight = 34.sp,
-        letterSpacing = (-0.02f).sp
+        fontWeight = FontWeight.Medium,
+        fontSize = 26.sp,
+        lineHeight = 32.sp,
+        letterSpacing = (-0.3).sp
     )
 
     val HeadlineMedium = TextStyle(
         fontFamily = FontDisplay,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 22.sp,
+        fontWeight = FontWeight.Medium,
+        fontSize = 21.sp,
         lineHeight = 28.sp,
-        letterSpacing = (-0.01f).sp
+        letterSpacing = (-0.1).sp
     )
 
     val HeadlineSmall = TextStyle(
         fontFamily = FontDisplay,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 18.sp,
+        fontWeight = FontWeight.Medium,
+        fontSize = 17.sp,
         lineHeight = 24.sp,
         letterSpacing = 0.sp
     )
@@ -201,42 +163,42 @@ object MorroTypography {
     val TitleMedium = TextStyle(
         fontFamily = FontDisplay,
         fontWeight = FontWeight.Medium,
-        fontSize = 16.sp,
-        lineHeight = 24.sp,
+        fontSize = 15.sp,
+        lineHeight = 22.sp,
         letterSpacing = 0.sp
     )
 
     val BodyLarge = TextStyle(
         fontFamily = FontBody,
         fontWeight = FontWeight.Normal,
-        fontSize = 16.sp,
-        lineHeight = 24.sp,
-        letterSpacing = 0.02f.sp
+        fontSize = 15.sp,
+        lineHeight = 23.sp,
+        letterSpacing = 0.1.sp
     )
 
     val BodyMedium = TextStyle(
         fontFamily = FontBody,
         fontWeight = FontWeight.Normal,
-        fontSize = 14.sp,
-        lineHeight = 21.sp,
-        letterSpacing = 0.04f.sp
+        fontSize = 13.sp,
+        lineHeight = 19.sp,
+        letterSpacing = 0.1.sp
     )
 
-    // Labels / eyebrows (mono, tracked) — used sparingly, never over a headline.
+    /** Small metadata. Sentence case; pair with Monospace at the call site for figures. */
     val LabelLarge = TextStyle(
-        fontFamily = FontMono,
-        fontWeight = FontWeight.Bold,
+        fontFamily = FontDisplay,
+        fontWeight = FontWeight.Medium,
         fontSize = 12.sp,
         lineHeight = 16.sp,
-        letterSpacing = 0.12f.sp
+        letterSpacing = 0.1.sp
     )
 
     val LabelSmall = TextStyle(
-        fontFamily = FontMono,
-        fontWeight = FontWeight.Medium,
-        fontSize = 10.sp,
-        lineHeight = 13.sp,
-        letterSpacing = 0.08f.sp
+        fontFamily = FontDisplay,
+        fontWeight = FontWeight.Normal,
+        fontSize = 11.sp,
+        lineHeight = 15.sp,
+        letterSpacing = 0.2.sp
     )
 }
 
@@ -260,43 +222,40 @@ internal val MaterialColorScheme = androidx.compose.material3.darkColorScheme(
     onBackground    = MorroColors.TextPrimary,
     onSurface       = MorroColors.TextPrimary,
     onSurfaceVariant = MorroColors.TextSecondary,
-    primary         = MorroColors.AccentTactical,
-    onPrimary       = Color.Black,
+    primary         = MorroColors.TextPrimary,
+    onPrimary       = MorroColors.Canvas,
     primaryContainer = MorroColors.SurfaceElevated,
     onPrimaryContainer = MorroColors.TextPrimary,
-    secondary       = MorroColors.AccentBubbly,
-    onSecondary     = Color.Black,
+    secondary       = MorroColors.TextSecondary,
+    onSecondary     = MorroColors.Canvas,
     secondaryContainer = MorroColors.SurfaceLow,
     onSecondaryContainer = MorroColors.TextPrimary,
-    tertiary        = MorroColors.AccentBubbly,
-    onTertiary      = Color.Black,
+    tertiary        = MorroColors.TextSecondary,
+    onTertiary      = MorroColors.Canvas,
     error           = MorroColors.Error,
-    onError         = Color.Black,
+    onError         = MorroColors.Canvas,
     outline         = MorroColors.BorderSubtle,
     outlineVariant  = MorroColors.BorderSubtle,
     inverseSurface  = MorroColors.TextPrimary,
     inverseOnSurface = MorroColors.Canvas,
-    inversePrimary  = MorroColors.AccentTactical,
-    surfaceTint     = MorroColors.AccentTactical,
+    inversePrimary  = MorroColors.TextSecondary,
+    surfaceTint     = Color.Transparent,
 )
 
-// ── Spring specs ──────────────────────────────────────────────────────────
+// ── Motion ────────────────────────────────────────────────────────────────
 /**
- * Apple's damping/response pair expressed as Compose springs (mass 1):
- * stiffness = (2π / response)^2.
- *
- *  - default   damping 1.0  / response 0.35s  — settles with no overshoot
- *  - momentum  damping 0.82 / response 0.32s  — only for gestures that carried velocity
- *  - press     damping 1.0  / response 0.12s  — instant acknowledgement on touch-down
+ * Springs carry the feel. Damping/response pairs, translated to stiffness with mass 1:
+ *   default  1.00 / 0.35s -> 322   settles, no overshoot
+ *   momentum 0.82 / 0.32s -> 386   only after a gesture carried velocity
+ *   press    1.00 / 0.12s -> 2741  instant acknowledgement
+ *   playful  0.55 / 0.30s -> 438   the mascot and button pops, where a small bounce is the point
  */
 object MorroSpring {
     val FloatSpringDefault: SpringSpec<Float> = spring(dampingRatio = 1f, stiffness = 322f)
     val FloatSpringMomentum: SpringSpec<Float> = spring(dampingRatio = 0.82f, stiffness = 386f)
     val FloatSpringPress: SpringSpec<Float> = spring(dampingRatio = 1f, stiffness = 2741f)
-    val DpSpringDefault: SpringSpec<androidx.compose.ui.unit.Dp> = spring(
-        dampingRatio = 1f,
-        stiffness = 322f
-    )
+    val FloatSpringPlayful: SpringSpec<Float> = spring(dampingRatio = 0.55f, stiffness = 438f)
+    val DpSpringDefault: SpringSpec<Dp> = spring(dampingRatio = 1f, stiffness = 322f)
     const val ReducedMotionMillis = 150
     const val ScreenTransitionMillis = 300
 }
@@ -348,11 +307,7 @@ data class MorroTextPalette(
 fun rememberMorroSpring(
     initialValue: Float,
     spec: SpringSpec<Float> = MorroSpring.FloatSpringDefault
-): Animatable<Float, AnimationVector1D> {
-    // `spec` is accepted so call sites can name their intent; the Animatable itself is retargeted
-    // with that spec by animateTo(...), keeping one Animatable per component.
-    return remember { Animatable(initialValue) }
-}
+): Animatable<Float, AnimationVector1D> = remember { Animatable(initialValue) }
 
 fun lerpColor(from: Color, to: Color, t: Float): Color {
     val p = t.coerceIn(0f, 1f)
@@ -385,7 +340,7 @@ fun springToDp(spring: Animatable<Float, AnimationVector1D>, from: Dp, to: Dp): 
 fun derivedSpringValue(spring: Animatable<Float, AnimationVector1D>, calc: (Float) -> Dp): Dp =
     calc(spring.value.coerceIn(0f, 1f))
 
-// ── Legacy compatibility ──────────────────────────────────────────────────
+// ── Compatibility ─────────────────────────────────────────────────────────
 object MorroTokens {
     val CanvasRoot: Color = MorroColors.Canvas
     val buttonShape = MorroShapes.Button
@@ -400,7 +355,6 @@ fun morroTypography(): MorroTextPalette = MorroCompositionLocals.LocalMorroTypog
 @Composable
 fun morroShapes(): MorroShapes = MorroCompositionLocals.LocalMorroShapes.current
 
-/** Applies the full Morro system. MaterialTheme is kept in sync for stock components. */
 @Composable
 fun MorroTheme(content: @Composable () -> Unit) {
     CompositionLocalProvider(

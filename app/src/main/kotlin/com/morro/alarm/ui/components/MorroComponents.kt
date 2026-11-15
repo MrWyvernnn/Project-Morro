@@ -34,6 +34,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.morro.alarm.ui.theme.MorroColors
 import com.morro.alarm.ui.theme.MorroShapes
 import com.morro.alarm.ui.theme.MorroSpring
 import com.morro.alarm.ui.theme.morroColors
@@ -184,7 +185,7 @@ fun PipIndicator(
             Icon(
                 imageVector = Icons.Filled.Check,
                 contentDescription = "Selected",
-                tint = Color(0xFFFFFFFF), // White check on tactical orange background
+                tint = MorroColors.Canvas, // Dark check on the warm pip
                 modifier = Modifier.size(12.dp)
             )
         }

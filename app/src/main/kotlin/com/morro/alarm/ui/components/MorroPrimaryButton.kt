@@ -1,5 +1,6 @@
 package com.morro.alarm.ui.components
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -7,7 +8,6 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -15,7 +15,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
@@ -23,22 +22,22 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.morro.alarm.ui.theme.MorroGradients
+import com.morro.alarm.ui.theme.MorroColors
 import com.morro.alarm.ui.theme.MorroSpring
+import com.morro.alarm.ui.theme.lerpColor
 import com.morro.alarm.ui.theme.morroColors
 import com.morro.alarm.ui.theme.morroShapes
 import com.morro.alarm.ui.theme.morroTypography
-import androidx.compose.animation.core.animateFloatAsState
 
 /**
- * MorroPrimaryButton — the one full-width action on a screen.
+ * MorroPrimaryButton — the one filled action on a screen.
  *
- * 56dp tall, 16dp squarcle, filled with the signature orange -> pink ribbon. Label is black:
- * black on either end of the gradient measures 6.55:1 and 7.68:1, so it survives both the
- * accessibility check and the founder's "no muddy text" rule.
+ * On a black interface the most deliberate primary is not a colour, it is light: a warm off-white
+ * fill with near-black text. It reads as the brightest thing on the screen without adding a hue.
  *
- * Press feedback is a 0.97 scale on a critically damped 0.12s spring, matching Apple's press
- * response. Disabled is a flat charcoal fill with tertiary text, never a faded gradient.
+ * Press feel: the button dips to 0.96 on a critically damped spring (instant, no lag), then returns
+ * on an under-damped spring so it overshoots by about 1% and settles. That small pop is the whole
+ * playfulness here — a bigger bounce would read as a toy.
  */
 @Composable
 fun MorroPrimaryButton(
@@ -54,28 +53,31 @@ fun MorroPrimaryButton(
 
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
+
+    // Press: fast and exact. Release: playful, so it lands with a 1% overshoot.
     val pressScale by animateFloatAsState(
-        targetValue = if (isPressed && enabled) 0.97f else 1f,
-        animationSpec = MorroSpring.FloatSpringPress,
+        targetValue = if (isPressed && enabled) 0.96f else 1f,
+        animationSpec = if (isPressed) MorroSpring.FloatSpringPress else MorroSpring.FloatSpringPlayful,
         label = "primaryPress"
     )
 
-    val fill: Brush = if (enabled) {
-        MorroGradients.horizontal()
-    } else {
-        Brush.horizontalGradient(listOf(colors.surfaceElevated, colors.surfaceElevated))
+    val fill = when {
+        !enabled -> colors.surfaceElevated
+        isPressed -> lerpColor(colors.textPrimary, Color(0xFFDFD3BC), 0.55f)
+        else -> colors.textPrimary
     }
 
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(56.dp)
+            .height(52.dp)
             .graphicsLayer {
                 scaleX = pressScale
                 scaleY = pressScale
+                translationY = if (isPressed) 1f else 0f
             }
             .clip(shapes.Button)
-            .background(fill, shapes.Button)
+            .background(fill)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -87,11 +89,9 @@ fun MorroPrimaryButton(
     ) {
         Text(
             text = text,
-            style = typo.titleMedium.copy(
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 0.8.sp
-            ),
-            color = if (enabled) Color.Black else colors.textTertiary,
+            style = typo.titleMedium.copy(fontWeight = FontWeight.Medium),
+            color = if (enabled) MorroColors.Canvas else colors.textTertiary,
+            fontSize = 15.sp,
             textAlign = TextAlign.Center
         )
     }
