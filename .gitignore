@@ -39,3 +39,6 @@ captures/
 
 # Google Services (Firebase)
 google-services.json
+
+# Local mirror of project skills for the Freebuff agent
+.freebuff/skills/
