@@ -60,12 +60,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.morro.alarm.ui.components.MorroPrimaryButton
-import com.morro.alarm.ui.onboarding.AmbientGlow
+import com.morro.alarm.ui.components.DriftingClouds
 import com.morro.alarm.ui.theme.MorroColors
-import com.morro.alarm.ui.theme.MorroGradients
 import com.morro.alarm.ui.theme.MorroShapes
 import com.morro.alarm.ui.theme.MorroTheme
-import com.morro.alarm.ui.theme.morroGradientBorder
+import com.morro.alarm.ui.theme.morroHairline
 
 /**
  * Permissions onboarding — one screen, two rows, one optional hardening card.
@@ -249,7 +248,7 @@ fun PermissionsScreen(
     onContinue: () -> Unit
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
-        AmbientGlow()
+        DriftingClouds(intensity = 0.75f)
 
         Column(
             modifier = Modifier
@@ -258,35 +257,24 @@ fun PermissionsScreen(
                 .padding(horizontal = 24.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            Spacer(modifier = Modifier.height(20.dp))
-
-            Text(
-                text = "MORRO • ACCESS",
-                color = MorroColors.AccentTactical,
-                fontFamily = FontFamily.Monospace,
-                fontSize = 11.sp,
-                letterSpacing = 2.2.sp,
-                fontWeight = FontWeight.Medium
-            )
-
             Spacer(modifier = Modifier.height(28.dp))
 
             Text(
-                text = "Two quick permissions",
+                text = "Two permissions",
                 color = MorroColors.TextPrimary,
-                fontSize = 28.sp,
-                lineHeight = 34.sp,
-                letterSpacing = (-0.5).sp,
-                fontWeight = FontWeight.Bold
+                fontSize = 30.sp,
+                lineHeight = 37.sp,
+                letterSpacing = (-0.4).sp,
+                fontWeight = FontWeight.Medium
             )
 
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "One wakes you. One hears your promise.",
+                text = "One wakes you, one hears your promise.",
                 color = MorroColors.TextSecondary,
                 fontSize = 14.sp,
-                lineHeight = 20.sp
+                lineHeight = 21.sp
             )
 
             Spacer(modifier = Modifier.height(28.dp))
@@ -345,11 +333,10 @@ fun PermissionsScreen(
             Spacer(modifier = Modifier.height(12.dp))
 
             Text(
-                text = "100% offline • no accounts • stored on this phone",
-                color = MorroColors.TextSecondary,
-                fontFamily = FontFamily.Monospace,
-                fontSize = 10.sp,
-                letterSpacing = 0.6.sp,
+                text = "Offline only. No accounts, everything stays on this phone.",
+                color = MorroColors.TextTertiary,
+                fontSize = 12.sp,
+                lineHeight = 18.sp,
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -372,40 +359,31 @@ private fun PermissionRow(
             .fillMaxWidth()
             .clip(MorroShapes.Card)
             .background(MorroColors.SurfaceCard)
-            .morroGradientBorder(
-                shape = MorroShapes.Card,
-                width = 1.dp,
-                brush = MorroGradients.horizontal(if (granted) 0.85f else 0.35f)
+            .morroHairline(
+                radius = 16.dp,
+                color = if (granted) MorroColors.BorderStrong else MorroColors.BorderSubtle
             )
             .clickable(enabled = !granted, onClick = onAllow)
-            .padding(16.dp),
+            .padding(18.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            modifier = Modifier
-                .size(40.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(MorroColors.AccentTactical.copy(alpha = 0.12f)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = MorroColors.AccentTactical,
-                modifier = Modifier.size(20.dp)
-            )
-        }
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = MorroColors.TextSecondary,
+            modifier = Modifier.size(20.dp)
+        )
 
-        Spacer(modifier = Modifier.width(14.dp))
+        Spacer(modifier = Modifier.width(16.dp))
 
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
                 color = MorroColors.TextPrimary,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Medium
             )
-            Spacer(modifier = Modifier.height(2.dp))
+            Spacer(modifier = Modifier.height(3.dp))
             Text(
                 text = why,
                 color = MorroColors.TextSecondary,
@@ -417,39 +395,30 @@ private fun PermissionRow(
         Spacer(modifier = Modifier.width(10.dp))
 
         if (granted) {
-            Row(
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .background(MorroColors.AccentBubbly.copy(alpha = 0.14f))
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     imageVector = Icons.Filled.Check,
                     contentDescription = null,
-                    tint = MorroColors.AccentBubbly,
-                    modifier = Modifier.size(13.dp)
+                    tint = MorroColors.AccentTactical,
+                    modifier = Modifier.size(14.dp)
                 )
-                Spacer(modifier = Modifier.width(4.dp))
+                Spacer(modifier = Modifier.width(5.dp))
                 Text(
-                    text = "Granted",
-                    color = MorroColors.AccentBubbly,
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold
+                    text = "Allowed",
+                    color = MorroColors.AccentTactical,
+                    fontSize = 12.sp
                 )
             }
         } else {
             Text(
                 text = "Allow",
-                color = MorroColors.AccentTactical,
-                fontFamily = FontFamily.Monospace,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
+                color = MorroColors.TextPrimary,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
                 modifier = Modifier
-                    .clip(CircleShape)
-                    .border(1.dp, MorroColors.AccentTactical.copy(alpha = 0.6f), CircleShape)
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .border(1.dp, MorroColors.BorderStrong, RoundedCornerShape(8.dp))
+                    .padding(horizontal = 12.dp, vertical = 7.dp)
             )
         }
     }
@@ -472,28 +441,26 @@ private fun SystemAccessCard(
             .clip(MorroShapes.Card)
             .background(MorroColors.SurfaceCard)
             .border(1.dp, MorroColors.BorderSubtle, MorroShapes.Card)
-            .padding(16.dp)
+            .padding(18.dp)
     ) {
         Text(
-            text = "SYSTEM CHECK",
-            color = MorroColors.TextTertiary,
-            fontFamily = FontFamily.Monospace,
-            fontSize = 10.sp,
-            letterSpacing = 1.4.sp,
-            fontWeight = FontWeight.Bold
+            text = "Keep the alarm reliable",
+            color = MorroColors.TextPrimary,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium
         )
 
         Spacer(modifier = Modifier.height(10.dp))
 
         TerminalLine(
-            label = "exact timing",
-            value = if (hasExactAlarmPermission) "ACTIVE" else "NEEDED",
+            label = "Exact timing",
+            value = if (hasExactAlarmPermission) "On" else "Needed",
             ok = hasExactAlarmPermission
         )
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(6.dp))
         TerminalLine(
-            label = "battery",
-            value = if (isBatteryIgnored) "UNRESTRICTED" else "OPTIMISED",
+            label = "Battery",
+            value = if (isBatteryIgnored) "Unrestricted" else "Restricted",
             ok = isBatteryIgnored
         )
 
@@ -503,20 +470,18 @@ private fun SystemAccessCard(
                 if (!hasExactAlarmPermission) {
                     TextButton(onClick = onRequestExactAlarm) {
                         Text(
-                            text = "Fix timing",
+                            text = "Allow timing",
                             color = MorroColors.AccentTactical,
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 11.sp
+                            fontSize = 12.sp
                         )
                     }
                 }
                 if (!isBatteryIgnored) {
                     TextButton(onClick = onRequestBattery) {
                         Text(
-                            text = "Optimise battery",
+                            text = "Unrestrict battery",
                             color = MorroColors.AccentTactical,
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 11.sp
+                            fontSize = 12.sp
                         )
                     }
                 }
@@ -542,17 +507,15 @@ private fun TerminalLine(label: String, value: String, ok: Boolean) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = "> $label",
+            text = label,
             color = MorroColors.TextSecondary,
-            fontFamily = FontFamily.Monospace,
-            fontSize = 11.sp
+            fontSize = 12.sp
         )
         Text(
             text = value,
-            color = if (ok) MorroColors.AccentBubbly else MorroColors.AccentTactical,
+            color = if (ok) MorroColors.TextPrimary else MorroColors.AccentTactical,
             fontFamily = FontFamily.Monospace,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold
+            fontSize = 12.sp
         )
     }
 }

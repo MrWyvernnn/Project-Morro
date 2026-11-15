@@ -7,15 +7,9 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.keyframes
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -36,7 +30,6 @@ import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
@@ -61,7 +54,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -73,36 +65,37 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.morro.alarm.ui.components.DriftingClouds
 import com.morro.alarm.ui.theme.MorroColors
-import com.morro.alarm.ui.theme.MorroGradients
 import com.morro.alarm.ui.theme.MorroShapes
 import com.morro.alarm.ui.theme.MorroSpring
-import com.morro.alarm.ui.theme.morroGradientBorder
+import com.morro.alarm.ui.theme.morroHairline
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * Five quiet questions between the splash and the how-it-works slides.
+ * Five questions between the splash and the permissions screen.
  *
- * Editorial, not a wizard: the top bar says where you are in mono, the progress strip is the only
- * gradient, and each screen gives one question, one helper line and one column of answers. The
- * selected answer takes an orange -> pink border and a pink check; nothing else on screen is warm.
+ * The layout is a single column with one question at a time. There is no wizard chrome: a quiet
+ * "Question 1 of 5", a two-pixel progress rail, the question at 26sp, then answers. Answer rows are
+ * flat cards with a hairline; selection is a honey border plus a check, so it is never signalled by
+ * colour alone and never by a gradient.
  *
- * The final answer is free text and gets real input behaviour: keyboard-aware compaction, a shake
- * plus inline error on empty submit, and a counter that warns before the cap.
+ * The last answer is free text with real input behaviour: keyboard-aware compaction, a shake plus
+ * inline error on empty submit, and a counter that warns before the cap.
  */
 
 internal object QuestionsTokens {
-    val ground: Color = MorroColors.Canvas
-    val surfaceCard: Color = MorroColors.SurfaceElevated
-    val surfaceQuiet: Color = MorroColors.SurfaceCard
-    val borderIdle: Color = MorroColors.BorderSubtle
-    val accent: Color = MorroColors.AccentTactical
-    val accentPink: Color = MorroColors.AccentBubbly
-    val error: Color = MorroColors.AccentBubblyDeep
-    val inkPrimary: Color = MorroColors.TextPrimary
-    val inkSecondary: Color = MorroColors.TextSecondary
-    val inkMuted: Color = MorroColors.TextTertiary
+    val ground: Color get() = MorroColors.Canvas
+    val surfaceCard: Color get() = MorroColors.SurfaceCard
+    val surfaceQuiet: Color get() = MorroColors.SurfaceElevated
+    val borderIdle: Color get() = MorroColors.BorderSubtle
+    val accent: Color get() = MorroColors.AccentTactical
+    val accentPink: Color get() = MorroColors.AccentTactical
+    val error: Color get() = MorroColors.Error
+    val inkPrimary: Color get() = MorroColors.TextPrimary
+    val inkSecondary: Color get() = MorroColors.TextSecondary
+    val inkMuted: Color get() = MorroColors.TextTertiary
 }
 
 internal enum class CardVariant { Unselected, Selected, Disabled }
@@ -116,33 +109,33 @@ private data class OnboardingQuestion(
 )
 
 private const val TotalQuestions = 5
-private const val SelectionSettleMillis = 190L
+private const val SelectionSettleMillis = 210L
 
 private val questions: List<OnboardingQuestion> = listOf(
     OnboardingQuestion(
         key = PersonalizationStorage.KEY_IDENTITY,
         prompt = "What do you want to be known for?",
-        helper = "The word you'd want on the door.",
+        helper = "The word you would want on the door.",
         options = listOf("Discipline", "Creativity", "Kindness", "Growth"),
         fallback = "Growth"
     ),
     OnboardingQuestion(
         key = PersonalizationStorage.KEY_ENERGY,
         prompt = "When do you feel most alive?",
-        helper = "Morro will aim its harder moments here.",
-        options = listOf("Early morning", "Late night", "Midday", "Whenever I'm moving"),
+        helper = "Morro aims its harder moments there.",
+        options = listOf("Early morning", "Late night", "Midday", "When I am moving"),
         fallback = "Early morning"
     ),
     OnboardingQuestion(
         key = PersonalizationStorage.KEY_STRUGGLE,
-        prompt = "What's your biggest morning struggle?",
+        prompt = "What is your biggest morning struggle?",
         helper = "Naming it is most of the work.",
         options = listOf("Hitting snooze", "No motivation", "Racing thoughts", "Phone scrolling"),
         fallback = "Hitting snooze"
     ),
     OnboardingQuestion(
         key = PersonalizationStorage.KEY_TONE,
-        prompt = "How do you want Morro to talk to you?",
+        prompt = "How should Morro talk to you?",
         helper = "You can change this later.",
         options = listOf("Gentle nudge", "Firm accountability", "Quiet reminder", "Encouraging coach"),
         fallback = "Gentle nudge"
@@ -224,12 +217,12 @@ fun PersonalizedQuestions(
     var promise by remember { mutableStateOf("") }
 
     val topSpace by animateDpAsState(
-        targetValue = if (imeVisible) 6.dp else 20.dp,
+        targetValue = if (imeVisible) 8.dp else 24.dp,
         animationSpec = MorroSpring.DpSpringDefault,
         label = "headerCompact"
     )
     val gapBelowProgress by animateDpAsState(
-        targetValue = if (imeVisible) 12.dp else 26.dp,
+        targetValue = if (imeVisible) 16.dp else 32.dp,
         animationSpec = MorroSpring.DpSpringDefault,
         label = "headerGap"
     )
@@ -255,7 +248,7 @@ fun PersonalizedQuestions(
     BackHandler(enabled = index > 0) { index -= 1 }
 
     Box(modifier = modifier.fillMaxSize().imePadding()) {
-        AmbientGlow()
+        DriftingClouds(intensity = 0.8f)
 
         Column(
             modifier = Modifier
@@ -267,28 +260,26 @@ fun PersonalizedQuestions(
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = "MORRO • 0${index + 1} / 0$TotalQuestions",
-                    color = QuestionsTokens.accent,
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 11.sp,
-                    letterSpacing = 2.2.sp,
-                    fontWeight = FontWeight.Medium
+                    text = "Question ${index + 1} of $TotalQuestions",
+                    color = QuestionsTokens.inkSecondary,
+                    fontFamily = FontFamily.SansSerif,
+                    fontSize = 12.sp,
+                    letterSpacing = 0.2.sp
                 )
                 Spacer(modifier = Modifier.weight(1f))
                 TextButton(onClick = { finish() }) {
                     Text(
-                        text = "SKIP",
+                        text = "Skip",
                         color = QuestionsTokens.inkSecondary,
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 11.sp,
-                        letterSpacing = 2.sp
+                        fontFamily = FontFamily.SansSerif,
+                        fontSize = 13.sp
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
-            ProgressStrip(index = index)
+            ProgressRail(index = index)
 
             Spacer(modifier = Modifier.height(gapBelowProgress))
 
@@ -298,7 +289,7 @@ fun PersonalizedQuestions(
                     .weight(1f)
                     .fillMaxWidth(),
                 animationSpec = tween(
-                    durationMillis = 240,
+                    durationMillis = 260,
                     easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)
                 ),
                 label = "questionFade"
@@ -341,13 +332,13 @@ private fun QuestionBody(
                 shake.animateTo(
                     targetValue = 0f,
                     animationSpec = keyframes {
-                        durationMillis = 420
-                        -10f at 0
-                        10f at 60
-                        -7f at 130
-                        7f at 200
-                        -4f at 280
-                        0f at 420
+                        durationMillis = 400
+                        -8f at 0
+                        8f at 55
+                        -5f at 120
+                        5f at 185
+                        -3f at 255
+                        0f at 400
                     }
                 )
             }
@@ -367,27 +358,27 @@ private fun QuestionBody(
             style = TextStyle(
                 color = QuestionsTokens.inkPrimary,
                 fontFamily = FontFamily.SansSerif,
-                fontSize = 22.sp,
-                lineHeight = 30.sp,
-                letterSpacing = 0.2.sp,
+                fontSize = 26.sp,
+                lineHeight = 33.sp,
+                letterSpacing = (-0.3).sp,
                 fontWeight = FontWeight.Medium
             )
         )
 
         if (!compact) {
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(10.dp))
             Text(
                 text = question.helper,
                 style = TextStyle(
                     color = QuestionsTokens.inkSecondary,
                     fontFamily = FontFamily.SansSerif,
                     fontSize = 14.sp,
-                    lineHeight = 20.sp
+                    lineHeight = 21.sp
                 )
             )
         }
 
-        Spacer(modifier = Modifier.height(if (compact) 16.dp else 26.dp))
+        Spacer(modifier = Modifier.height(if (compact) 18.dp else 30.dp))
 
         if (question.options.isEmpty()) {
             Column(modifier = Modifier.graphicsLayer { translationX = shake.value.dp.toPx() }) {
@@ -396,23 +387,12 @@ private fun QuestionBody(
                         .fillMaxWidth()
                         .clip(MorroShapes.Card)
                         .background(QuestionsTokens.surfaceCard)
-                        .then(
-                            when {
-                                errorVisible -> Modifier.morroGradientBorder(
-                                    shape = MorroShapes.Card,
-                                    width = 1.dp,
-                                    brush = Brush.horizontalGradient(
-                                        listOf(QuestionsTokens.error, QuestionsTokens.error)
-                                    )
-                                )
-                                promise.isNotBlank() -> Modifier.morroGradientBorder(MorroShapes.Card, 1.dp)
-                                else -> Modifier.morroGradientBorder(
-                                    shape = MorroShapes.Card,
-                                    width = 1.dp,
-                                    brush = Brush.horizontalGradient(
-                                        listOf(QuestionsTokens.borderIdle, QuestionsTokens.borderIdle)
-                                    )
-                                )
+                        .morroHairline(
+                            radius = 16.dp,
+                            color = when {
+                                errorVisible -> QuestionsTokens.error.copy(alpha = 0.6f)
+                                promise.isNotBlank() -> MorroColors.BorderStrong
+                                else -> MorroColors.BorderSubtle
                             }
                         )
                         .padding(horizontal = 18.dp, vertical = 16.dp)
@@ -432,13 +412,12 @@ private fun QuestionBody(
                         color = QuestionsTokens.error,
                         fontFamily = FontFamily.SansSerif,
                         fontSize = 12.sp,
-                        letterSpacing = 0.3.sp,
-                        modifier = Modifier.padding(top = 8.dp, start = 4.dp)
+                        modifier = Modifier.padding(top = 10.dp, start = 4.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
             ContinueButton(
                 active = promise.isNotBlank(),
@@ -449,7 +428,7 @@ private fun QuestionBody(
         } else {
             Column(
                 modifier = Modifier.selectableGroup(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 question.options.forEach { option ->
                     AnswerCard(
@@ -464,8 +443,8 @@ private fun QuestionBody(
 }
 
 /**
- * An answer card: 0D0D12, 20dp squarcle, 1dp hairline. Selected takes the gradient border, a 6%
- * warm wash and a pink check — three signals, so colour is never the only carrier of meaning.
+ * An answer row: a flat card, a hairline, and — when chosen — a honey border plus a check.
+ * Three signals, so colour is never the only carrier of meaning.
  */
 @Composable
 private fun AnswerCard(
@@ -477,8 +456,8 @@ private fun AnswerCard(
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.97f else 1f,
-        animationSpec = MorroSpring.FloatSpringPress,
+        targetValue = if (pressed) 0.98f else 1f,
+        animationSpec = MorroSpring.FloatSpringPlayful,
         label = "answerPress"
     )
     val shape = MorroShapes.Card
@@ -492,20 +471,20 @@ private fun AnswerCard(
                 scaleY = scale
             }
             .clip(shape)
-            .background(
-                if (selected) QuestionsTokens.accent.copy(alpha = 0.06f)
-                else QuestionsTokens.surfaceCard
+            .background(if (selected) QuestionsTokens.surfaceQuiet else QuestionsTokens.surfaceCard)
+            .morroHairline(
+                radius = 16.dp,
+                color = if (selected) MorroColors.BorderActive else MorroColors.BorderSubtle
             )
-            .then(if (selected) Modifier.morroGradientBorder(shape, 1.dp) else Modifier)
             .selectable(
                 selected = selected,
                 interactionSource = interactionSource,
-                indication = ripple(color = MorroColors.AccentBubbly),
+                indication = ripple(color = MorroColors.TextPrimary),
                 enabled = variant != CardVariant.Disabled,
                 role = Role.RadioButton,
                 onClick = onClick
             )
-            .padding(start = 18.dp, end = 14.dp, top = 16.dp, bottom = 16.dp),
+            .padding(start = 18.dp, end = 16.dp, top = 16.dp, bottom = 16.dp),
         contentAlignment = Alignment.CenterStart
     ) {
         Row(
@@ -520,20 +499,20 @@ private fun AnswerCard(
                     fontFamily = FontFamily.SansSerif,
                     fontSize = 16.sp,
                     lineHeight = 22.sp,
-                    letterSpacing = 0.2.sp
+                    letterSpacing = 0.1.sp
                 )
             )
             if (selected) {
                 Box(
                     modifier = Modifier
                         .size(22.dp)
-                        .background(QuestionsTokens.accentPink.copy(alpha = 0.16f), CircleShape),
+                        .background(QuestionsTokens.accent.copy(alpha = 0.14f), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Check,
                         contentDescription = null,
-                        tint = QuestionsTokens.accentPink,
+                        tint = QuestionsTokens.accent,
                         modifier = Modifier.size(15.dp)
                     )
                 }
@@ -543,60 +522,41 @@ private fun AnswerCard(
 }
 
 /**
- * Continue: charcoal pill at rest, and once the person has written something the border becomes a
- * breathing orange -> pink line. Tapping it while empty is still allowed, so the screen can explain
+ * Continue is the primary action: a warm off-white fill with near-black text, which is the
+ * clearest hierarchy on a black screen. It stays tappable while empty so the screen can explain
  * itself with a shake instead of a dead button.
  */
 @Composable
 private fun ContinueButton(active: Boolean, onClick: () -> Unit) {
-    val glow = rememberInfiniteTransition(label = "continueGlow").animateFloat(
-        initialValue = 0.5f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1_600, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "continueBorder"
-    ).value
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
         targetValue = if (pressed) 0.97f else 1f,
-        animationSpec = MorroSpring.FloatSpringPress,
+        animationSpec = MorroSpring.FloatSpringPlayful,
         label = "continuePress"
     )
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(56.dp)
+            .height(52.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
             }
-            .clip(MorroShapes.Pill)
-            .background(QuestionsTokens.surfaceCard)
-            .then(
-                if (active) {
-                    Modifier.morroGradientBorder(
-                        shape = MorroShapes.Pill,
-                        width = 1.5.dp,
-                        brush = MorroGradients.horizontal(glow)
-                    )
-                } else {
-                    Modifier.morroGradientBorder(
-                        shape = MorroShapes.Pill,
-                        width = 1.dp,
-                        brush = Brush.horizontalGradient(
-                            listOf(QuestionsTokens.borderIdle, QuestionsTokens.borderIdle)
-                        )
-                    )
-                }
+            .clip(MorroShapes.Button)
+            .background(
+                if (active) QuestionsTokens.inkPrimary
+                else QuestionsTokens.surfaceQuiet
+            )
+            .morroHairline(
+                radius = 12.dp,
+                color = if (active) Color.Transparent else MorroColors.BorderSubtle
             )
             .selectable(
                 selected = false,
                 interactionSource = interactionSource,
-                indication = ripple(color = MorroColors.AccentBubbly),
+                indication = ripple(color = MorroColors.Canvas),
                 role = Role.Button,
                 onClick = onClick
             ),
@@ -604,18 +564,17 @@ private fun ContinueButton(active: Boolean, onClick: () -> Unit) {
     ) {
         Text(
             text = "Continue",
-            color = if (active) QuestionsTokens.inkPrimary else QuestionsTokens.inkMuted,
+            color = if (active) MorroColors.Canvas else QuestionsTokens.inkMuted,
             fontFamily = FontFamily.SansSerif,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Medium,
-            letterSpacing = 0.3.sp
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Medium
         )
     }
 }
 
-/** Five segments; completed and current carry the gradient, the rest stay hairline. */
+/** Five segments: completed and current are filled with the same warm white, the rest stay quiet. */
 @Composable
-private fun ProgressStrip(index: Int) {
+private fun ProgressRail(index: Int) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -625,13 +584,11 @@ private fun ProgressStrip(index: Int) {
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .height(3.dp)
-                    .clip(RoundedCornerShape(2.dp))
+                    .height(2.dp)
+                    .clip(RoundedCornerShape(1.dp))
                     .background(
-                        if (filled) MorroGradients.horizontal()
-                        else Brush.horizontalGradient(
-                            listOf(QuestionsTokens.borderIdle, QuestionsTokens.borderIdle)
-                        )
+                        if (filled) MorroColors.TextPrimary.copy(alpha = 0.75f)
+                        else MorroColors.BorderSubtle
                     )
             )
         }

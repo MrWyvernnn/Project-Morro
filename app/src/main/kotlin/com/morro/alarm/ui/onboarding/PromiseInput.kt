@@ -33,9 +33,9 @@ private const val CounterWarningMargin = 12
 /**
  * Free-text answer for the final question.
  *
- * Borderless on purpose: the surrounding card is the bezel, so the text, the pink caret and the
- * count are the only marks inside it. The counter turns pink and breathes when the person gets
- * within 12 characters of the cap — a warning, not a scold.
+ * Borderless on purpose: the surrounding card is the bezel, so the text, the honey caret and the
+ * count are the only marks inside it. The counter turns honey when the person gets within 12
+ * characters of the cap — a warning, not a scold.
  */
 @Composable
 fun PromiseInput(
@@ -48,22 +48,13 @@ fun PromiseInput(
     val textStyle = TextStyle(
         color = MorroColors.TextPrimary,
         fontFamily = FontFamily.SansSerif,
-        fontSize = 16.sp,
-        lineHeight = 24.sp,
-        letterSpacing = 0.2.sp,
+        fontSize = 17.sp,
+        lineHeight = 26.sp,
+        letterSpacing = 0.sp,
         fontWeight = FontWeight.Normal
     )
 
     val nearLimit = value.length >= maxLength - CounterWarningMargin
-    val pulse = rememberInfiniteTransition(label = "counterPulse").animateFloat(
-        initialValue = 0.55f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 900, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "counterAlpha"
-    ).value
 
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         BasicTextField(
@@ -74,7 +65,7 @@ fun PromiseInput(
             },
             modifier = Modifier.fillMaxWidth(),
             textStyle = textStyle,
-            cursorBrush = SolidColor(MorroColors.AccentBubbly),
+            cursorBrush = SolidColor(MorroColors.AccentTactical),
             singleLine = false,
             decorationBox = { innerTextField ->
                 Box {
@@ -93,14 +84,9 @@ fun PromiseInput(
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             Text(
                 text = "${value.length}/$maxLength",
-                color = if (nearLimit) {
-                    MorroColors.AccentBubbly.copy(alpha = pulse)
-                } else {
-                    MorroColors.TextSecondary
-                },
+                color = if (nearLimit) MorroColors.AccentTactical else MorroColors.TextTertiary,
                 fontFamily = FontFamily.Monospace,
-                fontSize = 11.sp,
-                letterSpacing = 1.2.sp
+                fontSize = 12.sp
             )
         }
     }
