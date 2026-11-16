@@ -294,6 +294,12 @@ class AlarmActivity : ComponentActivity() {
 
     /** End the alarm: release screen keep-on flag, wake lock, cancel scheduled alarm and remove task. */
     private fun finishAlarm() {
+        // The scheduler holds one alarm slot, so the occurrence that just rang must be replaced by
+        // the next one or the alarm never comes back. Read the pending time before cancelling:
+        // cancelAlarm() clears it, and a ring that never had a scheduled alarm (a debug test ring
+        // after the person switched the alarm off) must not silently re-arm it.
+        val wasScheduled = AlarmScheduler.getNextAlarmTime(this) != null
+
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         try {
             wakeLock?.let { if (it.isHeld) it.release() }
@@ -301,7 +307,38 @@ class AlarmActivity : ComponentActivity() {
             Log.w(TAG, "Error releasing wakeLock in finishAlarm", e)
         }
         cancelAlarm()
+
+        if (wasScheduled) {
+            rearmNextWakeUp()
+        }
+
         finishAndRemoveTask()
+    }
+
+    /**
+     * Arms the next daily occurrence from the saved hour and minute.
+     *
+     * `cancelAlarm()` only drops the pending trigger and its timestamp; the chosen hour and minute
+     * survive, so every dismissal can put the alarm back on the calendar. `scheduleDailyAlarm()`
+     * rolls to tomorrow when that time has already passed today, which is always the case once the
+     * alarm has rung.
+     *
+     * A snooze works the same way: it replaces the slot with a trigger ten minutes out, and when
+     * that one ends this path arms tomorrow. That keeps exactly one pending alarm at any moment —
+     * two competing triggers would mean a duplicate ring.
+     */
+    private fun rearmNextWakeUp() {
+        val saved = AlarmScheduler.getSavedAlarmTime(this)
+        if (saved == null) {
+            Log.w(TAG, "No saved wake-up time; nothing to re-arm")
+            return
+        }
+        val armed = AlarmScheduler.scheduleDailyAlarm(this, saved.first, saved.second)
+        if (armed) {
+            Log.i(TAG, "Re-armed next wake-up for ${saved.first}:${saved.second}")
+        } else {
+            Log.w(TAG, "Could not re-arm the next wake-up; exact alarm access may be revoked")
+        }
     }
 
     /** Starts recording tomorrow's commitment memo with 15s monotonic countdown. */
@@ -386,6 +423,9 @@ class AlarmActivity : ComponentActivity() {
         graceJob?.cancel()
         AlarmSoundPlayer.stop()
         MemoPlayer.stopPlayback()
+        // Snooze takes the single alarm slot for ten minutes; the next daily occurrence is armed
+        // when that trigger ends (same path as a normal dismissal), or by BootReceiver if the phone
+        // restarts first. The saved hour and minute are never touched here.
         AlarmScheduler.snoozeAlarm(this, 10)
         cancelForegroundNotification()
         finish()
