@@ -30,6 +30,8 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
@@ -949,7 +951,10 @@ private fun QrExpandedContent(
                 .clip(RoundedCornerShape(12.dp))
                 .morroHairline(radius = 12.dp, color = colors.borderStrong)
                 .clickable { onQrDialogChange(true) }
-                .padding(vertical = 14.dp)
+                // 48dp tall, so the row is a proper target rather than a 47dp near miss.
+                .heightIn(min = 48.dp)
+                .wrapContentHeight(Alignment.CenterVertically)
+                .padding(horizontal = 12.dp)
         )
     }
 

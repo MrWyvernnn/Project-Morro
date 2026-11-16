@@ -2,6 +2,7 @@ package com.morro.alarm
 
 import android.app.AlarmManager
 import android.app.PendingIntent
+import android.graphics.Color as AndroidColor
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
@@ -11,7 +12,9 @@ import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -20,10 +23,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
@@ -84,6 +91,12 @@ import kotlinx.coroutines.delay
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Draw behind the system bars and keep their icons light: the canvas is black in every
+        // state, so the default auto light/dark icons would disappear in light mode.
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT)
+        )
 
         setContent {
             MorroTheme {
@@ -232,7 +245,11 @@ fun MainAlarmScreen(context: Context) {
     ) {
         Column(
             modifier = Modifier
-                .fillMaxSize()
+                // A phone column on a tablet: the clock and dock stay one reading width instead of
+                // stretching to the bezels.
+                .fillMaxHeight()
+                .widthIn(max = 520.dp)
+                .align(Alignment.Center)
                 .padding(horizontal = 24.dp, vertical = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -462,7 +479,11 @@ private fun AlarmDock(
                     lineHeight = 50.sp,
                     fontWeight = FontWeight.Medium,
                     letterSpacing = (-1.6).sp,
-                    color = colors.textPrimary
+                    color = colors.textPrimary,
+                    maxLines = 1,
+                    // Takes the remaining width so a large system font size cannot push the switch
+                    // off the card.
+                    modifier = Modifier.weight(1f, fill = false)
                 )
                 Switch(
                     checked = hasActiveAlarm,
@@ -516,8 +537,12 @@ private fun AlarmDock(
                 color = colors.textTertiary,
                 modifier = Modifier
                     .align(Alignment.End)
+                    .clip(RoundedCornerShape(8.dp))
                     .clickable(onClick = onTestAlarm)
-                    .padding(vertical = 4.dp)
+                    // 48dp minimum target, even for this debug-only shortcut.
+                    .heightIn(min = 48.dp)
+                    .wrapContentHeight(Alignment.CenterVertically)
+                    .padding(horizontal = 8.dp)
             )
         }
     }

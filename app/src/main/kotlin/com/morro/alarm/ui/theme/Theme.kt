@@ -66,7 +66,12 @@ object MorroColors {
     // Text roles
     val TextPrimary   = Color(0xFFEFE7D6) // honey white, never pure #FFFFFF
     val TextSecondary = Color(0xFFA79E8D)
-    val TextTertiary  = Color(0xFF7C7466)
+
+    /**
+     * 5.3:1 on #000000, so 11–12sp metadata clears WCAG AA. The previous value sat at 4.47:1 and
+     * technically failed for text this small.
+     */
+    val TextTertiary  = Color(0xFF877F70)
     val TextDisabled  = Color(0xFF6B6458)
 
     /** The warm highlight: elapsed-hour arc, armed dot, second hand, selection checks. */

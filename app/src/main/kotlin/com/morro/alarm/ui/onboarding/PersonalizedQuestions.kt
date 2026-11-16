@@ -27,8 +27,10 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
@@ -248,7 +250,10 @@ fun PersonalizedQuestions(
 
         Column(
             modifier = Modifier
-                .fillMaxSize()
+                // One reading column, centred on tablets and foldables.
+                .fillMaxHeight()
+                .widthIn(max = 560.dp)
+                .align(Alignment.TopCenter)
                 .windowInsetsPadding(WindowInsets.systemBars)
                 .padding(horizontal = 24.dp)
         ) {
