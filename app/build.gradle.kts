@@ -68,4 +68,7 @@ dependencies {
     implementation("androidx.camera:camera-view:$cameraxVersion")
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
     implementation("com.google.mlkit:image-labeling:17.0.9")
+
+    // Local unit tests only. JUnit is test-scoped and never ships in the APK.
+    testImplementation("junit:junit:4.13.2")
 }

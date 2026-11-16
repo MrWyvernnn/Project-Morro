@@ -164,10 +164,8 @@ class AlarmActivity : ComponentActivity() {
         // Other missions (QR_BARCODE, QR_CODE, PHOTO_OBJECT, PHOTO_MISSION) skip the puzzle gate entirely.
         missionType = when (configuredMission) {
             MissionType.VOICE_COMMITMENT, MissionType.VOICE_MEMO -> AlarmScheduler.MissionType.MATH
-            MissionType.QR_BARCODE, MissionType.QR_CODE, MissionType.PHOTO_OBJECT, MissionType.PHOTO_MISSION -> AlarmScheduler.MissionType.AFFIRMATION
-            MissionType.QR_CODE -> AlarmScheduler.MissionType.AFFIRMATION
-            MissionType.PHOTO_MISSION -> AlarmScheduler.MissionType.AFFIRMATION
-            else -> AlarmScheduler.MissionType.MATH
+            MissionType.QR_CODE, MissionType.QR_BARCODE,
+            MissionType.PHOTO_MISSION, MissionType.PHOTO_OBJECT -> AlarmScheduler.MissionType.AFFIRMATION
         }
 
         // Start alarm and configure initial gate based on MissionType (includes VOICE_COMMITMENT).
