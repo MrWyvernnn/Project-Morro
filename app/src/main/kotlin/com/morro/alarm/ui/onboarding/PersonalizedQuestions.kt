@@ -3,14 +3,20 @@ package com.morro.alarm.ui.onboarding
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -101,14 +107,14 @@ private val questions: List<OnboardingQuestion> = listOf(
     OnboardingQuestion(
         key = PersonalizationStorage.KEY_IDENTITY,
         prompt = "What do you want to be known for?",
-        helper = "The word you would want on the door.",
+        helper = "The word you'd want on the door.",
         options = listOf("Discipline", "Creativity", "Kindness", "Growth"),
         fallback = "Growth"
     ),
     OnboardingQuestion(
         key = PersonalizationStorage.KEY_ENERGY,
         prompt = "When do you feel most alive?",
-        helper = "Morro aims its harder moments there.",
+        helper = "Morro will aim its harder wake-ups there.",
         options = listOf("Early morning", "Late night", "Midday", "When I am moving"),
         fallback = "Early morning"
     ),
@@ -266,16 +272,24 @@ fun PersonalizedQuestions(
 
             Spacer(modifier = Modifier.height(gapBelowProgress))
 
-            Crossfade(
+            AnimatedContent(
                 targetState = index,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
-                animationSpec = tween(
-                    durationMillis = 260,
-                    easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)
-                ),
-                label = "questionFade"
+                transitionSpec = {
+                    // The new question enters from the side you are heading toward, so the flow has
+                    // a direction instead of being a stack of unrelated fades.
+                    val forward = targetState > initialState
+                    val incoming = slideInHorizontally(
+                        animationSpec = tween(320, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+                    ) { width -> if (forward) width / 5 else -width / 5 } + fadeIn(tween(240))
+                    val outgoing = slideOutHorizontally(
+                        animationSpec = tween(260, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+                    ) { width -> if (forward) -width / 8 else width / 8 } + fadeOut(tween(180))
+                    incoming togetherWith outgoing
+                },
+                label = "questionChange"
             ) { questionIndex ->
                 val question = questions[questionIndex]
                 QuestionBody(
@@ -453,6 +467,21 @@ private fun AnswerCard(
         label = "answerPress"
     )
     val shape = MorroShapes.Card
+    val container by animateColorAsState(
+        targetValue = if (selected) MorroColors.SurfaceElevated else MorroColors.SurfaceCard,
+        animationSpec = tween(durationMillis = 200),
+        label = "answerFill"
+    )
+    val border by animateColorAsState(
+        targetValue = if (selected) MorroColors.BorderActive else MorroColors.BorderSubtle,
+        animationSpec = tween(durationMillis = 200),
+        label = "answerBorder"
+    )
+    val lift by animateFloatAsState(
+        targetValue = if (selected) -1.5f else 0f,
+        animationSpec = MorroSpring.FloatSpringPlayful,
+        label = "answerLift"
+    )
 
     Box(
         modifier = Modifier
@@ -461,13 +490,11 @@ private fun AnswerCard(
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
+                translationY = lift
             }
             .clip(shape)
-            .background(if (selected) MorroColors.SurfaceElevated else MorroColors.SurfaceCard)
-            .morroHairline(
-                radius = 16.dp,
-                color = if (selected) MorroColors.BorderActive else MorroColors.BorderSubtle
-            )
+            .background(container)
+            .morroHairline(radius = 16.dp, color = border)
             .selectable(
                 selected = selected,
                 interactionSource = interactionSource,
@@ -494,7 +521,14 @@ private fun AnswerCard(
                     letterSpacing = 0.1.sp
                 )
             )
-            if (selected) {
+            AnimatedVisibility(
+                visible = selected,
+                enter = fadeIn(tween(140)) + scaleIn(
+                    initialScale = 0.5f,
+                    animationSpec = MorroSpring.FloatSpringPlayful
+                ),
+                exit = fadeOut(tween(100))
+            ) {
                 Box(
                     modifier = Modifier
                         .size(22.dp)
@@ -523,9 +557,24 @@ private fun ContinueButton(active: Boolean, onClick: () -> Unit) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.97f else 1f,
+        targetValue = if (pressed) 0.97f else if (active) 1f else 0.99f,
         animationSpec = MorroSpring.FloatSpringPlayful,
         label = "continuePress"
+    )
+    val fill by animateColorAsState(
+        targetValue = if (active) MorroColors.TextPrimary else MorroColors.SurfaceElevated,
+        animationSpec = tween(durationMillis = 200),
+        label = "continueFill"
+    )
+    val labelColor by animateColorAsState(
+        targetValue = if (active) MorroColors.Canvas else MorroColors.TextTertiary,
+        animationSpec = tween(durationMillis = 200),
+        label = "continueLabel"
+    )
+    val border by animateColorAsState(
+        targetValue = if (active) Color.Transparent else MorroColors.BorderSubtle,
+        animationSpec = tween(durationMillis = 200),
+        label = "continueBorder"
     )
 
     Box(
@@ -537,14 +586,8 @@ private fun ContinueButton(active: Boolean, onClick: () -> Unit) {
                 scaleY = scale
             }
             .clip(MorroShapes.Button)
-            .background(
-                if (active) MorroColors.TextPrimary
-                else MorroColors.SurfaceElevated
-            )
-            .morroHairline(
-                radius = 12.dp,
-                color = if (active) Color.Transparent else MorroColors.BorderSubtle
-            )
+            .background(fill)
+            .morroHairline(radius = 12.dp, color = border)
             .selectable(
                 selected = false,
                 interactionSource = interactionSource,
@@ -556,7 +599,7 @@ private fun ContinueButton(active: Boolean, onClick: () -> Unit) {
     ) {
         Text(
             text = "Continue",
-            color = if (active) MorroColors.Canvas else MorroColors.TextTertiary,
+            color = labelColor,
             fontFamily = FontFamily.SansSerif,
             fontSize = 15.sp,
             fontWeight = FontWeight.Medium
@@ -572,16 +615,21 @@ private fun ProgressRail(index: Int) {
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         for (segment in 0 until TotalQuestions) {
-            val filled = segment <= index
+            val fill by animateColorAsState(
+                targetValue = if (segment <= index) {
+                    MorroColors.TextPrimary.copy(alpha = 0.75f)
+                } else {
+                    MorroColors.BorderSubtle
+                },
+                animationSpec = tween(durationMillis = 260),
+                label = "railSegment$segment"
+            )
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .height(2.dp)
                     .clip(RoundedCornerShape(1.dp))
-                    .background(
-                        if (filled) MorroColors.TextPrimary.copy(alpha = 0.75f)
-                        else MorroColors.BorderSubtle
-                    )
+                    .background(fill)
             )
         }
     }

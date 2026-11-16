@@ -23,6 +23,8 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.morro.alarm.ui.theme.MorroColors
 import kotlin.math.PI
@@ -31,28 +33,25 @@ import kotlin.math.sin
 /**
  * MorroGhostMascot — a round, soft, black-on-black ghost with dusty-rose eyes.
  *
- * The silhouette is built from curves only: a wide dome, bulging sides, and three big round
- * scallops along the hem. Nothing on the outline is straight, which is what makes it read as a
- * soft toy rather than a sheet with a zigzag bottom.
+ * Silhouette: curves only. A wide dome, two convex flanks and three deep round hem scallops, so
+ * there is not one straight edge on the whole shape. The body is a single closed path, filled with
+ * a one-neutral tone shift and closed with a 1.6dp rim — no bloom, no halo, no radial glow behind
+ * it. On a black screen the shape itself is the light; anything behind it would only make it fuzzy.
  *
- * Depth comes from three neutral layers, not from colour: a warm bloom behind it, a lifted body
- * gradient, and a rim light along the top edge. The eyes are the only dusty rose in the app;
- * everything else on the screen stays monochrome.
- *
- * Motion is a hop cycle with anticipation, stretch in the air and a landing squash, on top of a
- * slow breath. It is deliberately bouncy — the mascot is the one playful thing on the screen — but
- * the amplitudes stay small so it never feels like a loading spinner.
+ * Motion: a hop with anticipation, airtime, a landing squash and a recovery, plus a slow breath,
+ * a two-frame blink and a light side-to-side sway with a matching tilt, so the mascot is never
+ * perfectly still. Amplitudes stay small enough to read as alive rather than as a loading spinner.
  */
 @Composable
 fun MorroGhostMascot(
     modifier: Modifier = Modifier,
     happy: Boolean = false
 ) {
-    val reduced = rememberReducedMotionSafely()
+    val reduced = rememberReducedMotion()
     val transition = rememberInfiniteTransition(label = "ghostMascot")
 
-    // One linear clock drives the hop; squash and lift are derived from its phase so they can
-    // never desynchronise.
+    // One linear clock drives the hop; squash, lift and sway are derived from its phase so they
+    // can never desynchronise.
     val hop by transition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
@@ -75,27 +74,21 @@ fun MorroGhostMascot(
     val phase = if (reduced) 1f else hop
     val lift = if (reduced) 0f else hopLift(phase)
     val squash = if (reduced) 0f else hopSquash(phase)
+    val sway = if (reduced) 0f else sin(phase * 2f * PI.toFloat()) * 2.4f
+    val tilt = if (reduced) 0f else sin(phase * 2f * PI.toFloat()) * 1.4f
     val breathe = if (reduced) 1f else 0.985f + 0.025f * breath
     val blink = if (reduced) 1f else blinkAmount(phase)
 
     Box(modifier = modifier) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
+        Canvas(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    translationX = sway
+                    rotationZ = tilt
+                }
+        ) {
             val centerX = size.width / 2f
-
-            // Bloom — warm, wide and faint, so the dark body still has a light behind it.
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        MorroColors.TextPrimary.copy(alpha = 0.06f),
-                        MorroColors.Honey.copy(alpha = 0.10f),
-                        Color.Transparent
-                    ),
-                    center = Offset(centerX, size.height * 0.50f),
-                    radius = size.width * 0.95f
-                ),
-                radius = size.width * 0.95f,
-                center = Offset(centerX, size.height * 0.50f)
-            )
 
             scale(
                 scaleX = (1f + squash * 0.55f) * breathe,
@@ -118,17 +111,17 @@ fun MorroGhostMascot(
 /** Height of the hop in px for a 0..1 cycle: crouch, launch, float, land, settle. */
 private fun hopLift(t: Float): Float = when {
     t < 0.16f -> 0f
-    t < 0.60f -> -sin((PI.toFloat()) * (t - 0.16f) / 0.44f) * 13f
+    t < 0.60f -> -sin((PI.toFloat()) * (t - 0.16f) / 0.44f) * 17f
     else -> 0f
 }
 
 /** Positive squashes the body flat, negative stretches it tall. */
 private fun hopSquash(t: Float): Float = when {
-    t < 0.16f -> 0.055f * (t / 0.16f)
-    t < 0.26f -> -0.045f * ((t - 0.16f) / 0.10f)
+    t < 0.16f -> 0.06f * (t / 0.16f)
+    t < 0.26f -> -0.05f * ((t - 0.16f) / 0.10f)
     t < 0.50f -> 0f
-    t < 0.60f -> 0.07f * ((t - 0.50f) / 0.10f)
-    else -> 0.07f * (1f - ((t - 0.60f) / 0.40f))
+    t < 0.60f -> 0.075f * ((t - 0.50f) / 0.10f)
+    else -> 0.075f * (1f - ((t - 0.60f) / 0.40f))
 }
 
 /** A two-frame blink near the end of each cycle. */
@@ -141,9 +134,9 @@ private fun blinkAmount(t: Float): Float = when {
 /**
  * Draws the ghost inside [canvasSize].
  *
- * The body is one closed path of cubics: dome, two bulging sides, three round hem scallops, then
- * back up the other side. The fill is a single-neutral vertical tone shift, lit from above, with a
- * hairline rim so it has weight without turning into a white sticker.
+ * One closed path of cubics: dome, flanks, three round scallops. The widest point is a third of
+ * the way down, so the body is a pear rather than a column, and each scallop is a near-half-circle
+ * so the hem reads as three soft bumps instead of a zigzag.
  */
 private fun DrawScope.drawGhost(
     canvasSize: Size,
@@ -154,43 +147,42 @@ private fun DrawScope.drawGhost(
     blink: Float = 1f,
 ) {
     val centerX = canvasSize.width / 2f
-    val bodyWidth = canvasSize.width * 0.84f
+    val bodyWidth = canvasSize.width * 0.86f
     val halfWidth = bodyWidth / 2f
-    val headTop = canvasSize.height * 0.10f + centerYOffset
-    val headHeight = bodyWidth * 0.58f
-    val hemHeight = bodyWidth * 0.14f
+    val headTop = canvasSize.height * 0.09f + centerYOffset
+    val headHeight = bodyWidth * 0.64f
+    val hemHeight = bodyWidth * 0.17f
     val bodyBottom = canvasSize.height * 0.90f + centerYOffset
     val left = centerX - halfWidth
     val right = centerX + halfWidth
 
-    // The widest point sits a third of the way down: a pear, not a column.
     val waistY = headTop + headHeight * 0.92f
-    val bulge = bodyWidth * 0.055f
+    val bulge = bodyWidth * 0.07f
 
     val body = Path().apply {
         moveTo(left, waistY)
 
-        // Left of the dome.
+        // Left of the dome: a wide, continuous shoulder with no corner at the top.
         cubicTo(
-            left - bulge * 0.5f, headTop + headHeight * 0.34f,
-            left + bodyWidth * 0.10f, headTop,
+            left - bulge * 0.35f, headTop + headHeight * 0.30f,
+            left + bodyWidth * 0.09f, headTop,
             centerX, headTop
         )
         // Right of the dome.
         cubicTo(
-            right - bodyWidth * 0.10f, headTop,
-            right + bulge * 0.5f, headTop + headHeight * 0.34f,
+            right - bodyWidth * 0.09f, headTop,
+            right + bulge * 0.35f, headTop + headHeight * 0.30f,
             right, waistY
         )
 
-        // Right flank: a soft outward belly down to the hem.
+        // Right flank: a full round belly down to the hem.
         cubicTo(
-            right + bulge, waistY + (bodyBottom - waistY) * 0.28f,
-            right + bulge * 0.7f, bodyBottom - hemHeight * 0.8f,
-            right, bodyBottom - hemHeight * 0.45f
+            right + bulge, waistY + (bodyBottom - waistY) * 0.30f,
+            right + bulge * 0.72f, bodyBottom - hemHeight * 0.75f,
+            right, bodyBottom - hemHeight * 0.42f
         )
 
-        // Three round scallops, right to left. Each is a half circle hanging below the hem line.
+        // Three deep scallops, right to left, each one a near half circle.
         val scallop = bodyWidth / 3f
         var startX = right
         var index = 0
@@ -198,14 +190,14 @@ private fun DrawScope.drawGhost(
             val endX = startX - scallop
             val midX = (startX + endX) / 2f
             cubicTo(
-                startX - scallop * 0.12f, bodyBottom + hemHeight * 0.55f,
-                midX + scallop * 0.16f, bodyBottom + hemHeight * 0.55f,
-                midX, bodyBottom + hemHeight * 0.42f
+                startX - scallop * 0.10f, bodyBottom + hemHeight * 0.72f,
+                midX + scallop * 0.16f, bodyBottom + hemHeight * 0.74f,
+                midX, bodyBottom + hemHeight * 0.56f
             )
             cubicTo(
-                midX - scallop * 0.16f, bodyBottom + hemHeight * 0.55f,
-                endX + scallop * 0.12f, bodyBottom + hemHeight * 0.55f,
-                endX, bodyBottom - hemHeight * 0.45f
+                midX - scallop * 0.16f, bodyBottom + hemHeight * 0.74f,
+                endX + scallop * 0.10f, bodyBottom + hemHeight * 0.72f,
+                endX, bodyBottom - hemHeight * 0.42f
             )
             startX = endX
             index++
@@ -213,111 +205,96 @@ private fun DrawScope.drawGhost(
 
         // Left flank back up to the start.
         cubicTo(
-            left - bulge * 0.7f, bodyBottom - hemHeight * 0.8f,
-            left - bulge, waistY + (bodyBottom - waistY) * 0.28f,
+            left - bulge * 0.72f, bodyBottom - hemHeight * 0.75f,
+            left - bulge, waistY + (bodyBottom - waistY) * 0.30f,
             left, waistY
         )
         close()
     }
 
-    // Body: a single-neutral vertical tone shift, lit from above.
     drawPath(
         path = body,
         brush = Brush.verticalGradient(
             colors = listOf(
                 bodyColor,
-                Color(0xFF100E0C),
-                Color(0xFF070706)
+                Color(0xFF0E0C0A),
+                Color(0xFF060605)
             ),
             startY = headTop,
             endY = bodyBottom + hemHeight
         )
     )
 
-    // Rim light: a hairline of the body's own light, fading toward the hem.
+    // Rim: the body's own edge catching light. A hairline, not a halo.
     drawPath(
         path = body,
         brush = Brush.verticalGradient(
             colors = listOf(
-                MorroColors.TextPrimary.copy(alpha = 0.36f),
-                MorroColors.TextPrimary.copy(alpha = 0.12f),
-                MorroColors.TextPrimary.copy(alpha = 0.04f)
+                MorroColors.TextPrimary.copy(alpha = 0.30f),
+                MorroColors.TextPrimary.copy(alpha = 0.10f),
+                MorroColors.TextPrimary.copy(alpha = 0.03f)
             ),
             startY = headTop,
             endY = bodyBottom + hemHeight
         ),
-        style = Stroke(width = 1.6.dp.toPx())
+        style = Stroke(width = 1.4.dp.toPx())
     )
 
-    // Face — low and wide, centred on the dome.
-    val eyeY = headTop + headHeight * 0.56f
-    val eyeSpacing = bodyWidth * 0.185f
-    val eyeWidth = bodyWidth * 0.082f
-    val eyeHeight = bodyWidth * 0.125f * blink.coerceIn(0.08f, 1f)
+    // Face — wide, round and a little low on the dome.
+    val eyeY = headTop + headHeight * 0.55f
+    val eyeSpacing = bodyWidth * 0.19f
+    val eyeWidth = bodyWidth * 0.094f
+    val eyeHeight = bodyWidth * 0.135f * blink.coerceIn(0.08f, 1f)
 
     listOf(-1f, 1f).forEach { side ->
         val cx = centerX + side * eyeSpacing
 
-        // Eye bloom: makes the face glow at small sizes.
-        drawCircle(
-            brush = Brush.radialGradient(
-                colors = listOf(eyeColor.copy(alpha = 0.24f), Color.Transparent),
-                center = Offset(cx, eyeY),
-                radius = eyeWidth * 3.4f
-            ),
-            radius = eyeWidth * 3.4f,
-            center = Offset(cx, eyeY)
-        )
-
         if (happy) {
             val path = Path().apply {
-                moveTo(cx - eyeWidth, eyeY + eyeHeight * 0.30f)
+                moveTo(cx - eyeWidth, eyeY + eyeHeight * 0.32f)
                 cubicTo(
-                    cx - eyeWidth * 0.55f, eyeY - eyeHeight * 0.95f,
-                    cx + eyeWidth * 0.55f, eyeY - eyeHeight * 0.95f,
-                    cx + eyeWidth, eyeY + eyeHeight * 0.30f
+                    cx - eyeWidth * 0.55f, eyeY - eyeHeight * 1.05f,
+                    cx + eyeWidth * 0.55f, eyeY - eyeHeight * 1.05f,
+                    cx + eyeWidth, eyeY + eyeHeight * 0.32f
                 )
             }
             drawPath(
                 path = path,
                 color = eyeColor,
-                style = Stroke(width = eyeHeight * 0.62f, cap = StrokeCap.Round)
+                style = Stroke(width = eyeHeight * 0.60f, cap = StrokeCap.Round)
             )
         } else {
-            // Round pupils read softer than ovals at this size.
+            // Round pupils: the rounder the eye, the softer the face.
             drawCircle(
                 color = eyeColor,
-                radius = minOf(eyeWidth, eyeHeight) * 0.80f,
+                radius = minOf(eyeWidth, eyeHeight) * 0.88f,
                 center = Offset(cx, eyeY)
             )
         }
     }
 
-    // Smile
-    val smileWidth = bodyWidth * 0.20f
-    val smileY = eyeY + bodyWidth * 0.125f
+    // Smile, drawn with one curve so it stays soft at every size.
+    val smileWidth = bodyWidth * 0.205f
+    val smileY = eyeY + bodyWidth * 0.13f
     val smile = Path().apply {
         moveTo(centerX - smileWidth / 2f, smileY)
         cubicTo(
-            centerX - smileWidth * 0.25f, smileY + bodyWidth * 0.070f,
-            centerX + smileWidth * 0.25f, smileY + bodyWidth * 0.070f,
+            centerX - smileWidth * 0.22f, smileY + bodyWidth * 0.062f,
+            centerX + smileWidth * 0.22f, smileY + bodyWidth * 0.062f,
             centerX + smileWidth / 2f, smileY
         )
     }
     drawPath(
         path = smile,
         color = MorroColors.Honey.copy(alpha = 0.55f),
-        style = Stroke(width = bodyWidth * 0.018f, cap = StrokeCap.Round)
+        style = Stroke(width = bodyWidth * 0.017f, cap = StrokeCap.Round)
     )
 }
 
-/**
- * Local reduced-motion probe. The value is read once per composition, which is enough for a system
- * setting that rarely changes while the app is in front.
- */
+/** Reads the system animator scale once; zero means the user asked for no animation. */
 @Composable
-private fun rememberReducedMotionSafely(): Boolean {
-    val context = androidx.compose.ui.platform.LocalContext.current
+private fun rememberReducedMotion(): Boolean {
+    val context = LocalContext.current
     return remember(context) {
         android.provider.Settings.Global.getFloat(
             context.contentResolver,

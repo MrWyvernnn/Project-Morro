@@ -305,7 +305,7 @@ fun AlarmBuilderSheetContent(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Pick a time and the promise you have to keep.",
+                    text = "Set the time and how you want to wake.",
                     style = typo.bodyMedium,
                     color = colors.textSecondary
                 )
@@ -357,12 +357,12 @@ fun AlarmBuilderSheetContent(
         // One row per mission, stacked with a single gap so the list reads as one block.
         Column(
             modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             // 1. Voice Commitment (with record button and yellow checkmark active state)
             MorroOptionChip(
                 title = "Voice Commitment",
-                subtitle = "15s personal commitment recorded in-app",
+                subtitle = "Record a line in your own voice",
                 icon = Icons.Filled.Mic,
                 isSelected = selectedMission == MissionType.VOICE_COMMITMENT || selectedMission == MissionType.VOICE_MEMO,
                 onSelect = { selectedMission = MissionType.VOICE_COMMITMENT },
@@ -386,7 +386,7 @@ fun AlarmBuilderSheetContent(
             // 2. QR / Barcode Scan
             MorroOptionChip(
                 title = "QR / Barcode Scan",
-                subtitle = "CameraX + offline ML Kit barcode scanner",
+                subtitle = "Scan a code you keep by the bed",
                 icon = Icons.Filled.QrCodeScanner,
                 isSelected = selectedMission == MissionType.QR_CODE || selectedMission == MissionType.QR_BARCODE,
                 onSelect = { selectedMission = MissionType.QR_CODE },
@@ -405,7 +405,7 @@ fun AlarmBuilderSheetContent(
             // 3. Object Photo Hunt
             MorroOptionChip(
                 title = "Object Photo Hunt",
-                subtitle = "30-item household pool, 1 random item on ring",
+                subtitle = "Morro picks one object from your pool",
                 icon = Icons.Filled.PhotoCamera,
                 isSelected = selectedMission == MissionType.PHOTO_MISSION || selectedMission == MissionType.PHOTO_OBJECT,
                 onSelect = { selectedMission = MissionType.PHOTO_MISSION },
@@ -424,7 +424,7 @@ fun AlarmBuilderSheetContent(
             // 4. Math puzzle — reserved. Not wired end to end, so it is shown honestly as "Soon".
             MorroOptionChip(
                 title = "Math Puzzle",
-                subtitle = "Wiring in progress — not part of this build",
+                subtitle = "Not in this build yet",
                 icon = Icons.Filled.Calculate,
                 isSelected = false,
                 onSelect = {},
@@ -478,6 +478,13 @@ private fun TimePickerCard(
     val shapes = morroShapes()
     val context = LocalContext.current
 
+    // Every change of time lands with a small spring, so the numbers feel set rather than typed.
+    val pop = remember { Animatable(1f) }
+    LaunchedEffect(selectedHour, selectedMinute) {
+        pop.snapTo(0.94f)
+        pop.animateTo(1f, MorroSpring.FloatSpringPlayful)
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -493,13 +500,17 @@ private fun TimePickerCard(
                     true
                 ).show()
             }
-            .padding(vertical = 28.dp, horizontal = 20.dp),
+            .padding(vertical = 26.dp, horizontal = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
             text = String.format(Locale.getDefault(), "%02d:%02d", selectedHour, selectedMinute),
-            style = typo.displayHero.copy(fontSize = 62.sp, lineHeight = 66.sp),
-            color = colors.textPrimary
+            style = typo.displayHero.copy(fontSize = 60.sp, lineHeight = 64.sp),
+            color = colors.textPrimary,
+            modifier = Modifier.graphicsLayer {
+                scaleX = pop.value
+                scaleY = pop.value
+            }
         )
 
         Spacer(modifier = Modifier.height(10.dp))

@@ -28,7 +28,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.filled.Lock
@@ -49,6 +51,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -70,6 +73,7 @@ import com.morro.alarm.ui.onboarding.PersonalizationStorage
 import com.morro.alarm.ui.onboarding.PersonalizedQuestions
 import com.morro.alarm.ui.splash.MorroGhostSplash
 import com.morro.alarm.ui.theme.MorroShapes
+import com.morro.alarm.ui.theme.MorroSpring
 import com.morro.alarm.ui.theme.MorroTheme
 import com.morro.alarm.ui.theme.morroColors
 import com.morro.alarm.ui.theme.morroHairline
@@ -189,7 +193,7 @@ fun MainAlarmScreen(context: Context) {
     val missionLabel = when (missionType) {
         MissionType.VOICE_COMMITMENT, MissionType.VOICE_MEMO -> "Voice promise"
         MissionType.QR_CODE, MissionType.QR_BARCODE -> "QR scan"
-        MissionType.PHOTO_MISSION, MissionType.PHOTO_OBJECT -> "Photo hunt · ${photoItems.size} items"
+        MissionType.PHOTO_MISSION, MissionType.PHOTO_OBJECT -> "Photo hunt, ${photoItems.size} objects"
     }
 
     val colors = morroColors()
@@ -204,9 +208,16 @@ fun MainAlarmScreen(context: Context) {
     }
 
     val dayFormat = remember { SimpleDateFormat("EEEE d MMMM", Locale.getDefault()) }
-    val timeFormat = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
     val dateLine = remember(clockCal) { dayFormat.format(clockCal.time) }
-    val timeLine = remember(clockCal) { timeFormat.format(clockCal.time) }
+
+    // One entrance for the clock, a beat later for the dock: the screen assembles instead of
+    // appearing all at once.
+    val clockReveal = remember { Animatable(0f) }
+    val dockReveal = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        clockReveal.animateTo(1f, MorroSpring.FloatSpringMomentum)
+        dockReveal.animateTo(1f, MorroSpring.FloatSpringMomentum)
+    }
 
     val dockTime = remember(prefsUpdateTrigger, savedAlarm) {
         savedAlarm?.let { (hour, minute) ->
@@ -259,28 +270,25 @@ fun MainAlarmScreen(context: Context) {
 
             // ── Volume warning (warn, never auto-change the stream) ───────────
             if (alarmVolume == 0) {
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(10.dp))
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(MorroShapes.Card)
-                        .background(colors.surfaceCard)
-                        .morroHairline(radius = 16.dp)
-                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                        .padding(horizontal = 2.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.VolumeOff,
                         contentDescription = null,
                         tint = colors.honey,
-                        modifier = Modifier.size(17.dp)
+                        modifier = Modifier.size(15.dp)
                     )
-                    Spacer(modifier = Modifier.width(12.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        text = "Alarm volume is off, so your promise will play silently.",
-                        fontSize = 12.5.sp,
-                        lineHeight = 18.sp,
-                        color = colors.textSecondary
+                        text = "Alarm volume is off. Your promise will play silently.",
+                        fontSize = 12.sp,
+                        lineHeight = 17.sp,
+                        color = colors.textTertiary
                     )
                 }
             }
@@ -288,24 +296,23 @@ fun MainAlarmScreen(context: Context) {
             Spacer(modifier = Modifier.weight(0.12f))
 
             // ── Hero clock ────────────────────────────────────────────────────
-            MorroAnalogClock(size = 248.dp, calendar = clockCal)
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            Text(
-                text = timeLine,
-                fontFamily = FontFamily.Monospace,
-                fontSize = 13.sp,
-                color = colors.textSecondary,
-                textAlign = TextAlign.Center
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = dateLine,
-                fontSize = 12.5.sp,
-                color = colors.textTertiary,
-                textAlign = TextAlign.Center
-            )
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.graphicsLayer {
+                    alpha = clockReveal.value
+                    translationY = (1f - clockReveal.value) * 16f
+                }
+            ) {
+                MorroAnalogClock(size = 244.dp, calendar = clockCal)
+                Spacer(modifier = Modifier.height(18.dp))
+                Text(
+                    text = dateLine,
+                    fontSize = 12.5.sp,
+                    letterSpacing = 0.2.sp,
+                    color = colors.textTertiary,
+                    textAlign = TextAlign.Center
+                )
+            }
 
             Spacer(modifier = Modifier.weight(1f))
 
@@ -315,6 +322,10 @@ fun MainAlarmScreen(context: Context) {
                     dockTime = dockTime,
                     missionLabel = missionLabel,
                     hasActiveAlarm = hasActiveAlarm,
+                    modifier = Modifier.graphicsLayer {
+                        alpha = dockReveal.value
+                        translationY = (1f - dockReveal.value) * 26f
+                    },
                     onSetAlarm = { showAlarmBuilder = true },
                     onArmToggle = { armed ->
                         val saved = savedAlarm
@@ -394,18 +405,20 @@ private fun AlarmDock(
     hasActiveAlarm: Boolean,
     onSetAlarm: () -> Unit,
     onArmToggle: (Boolean) -> Unit,
-    onTestAlarm: () -> Unit
+    onTestAlarm: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val colors = morroColors()
     val armed = dockTime != null && hasActiveAlarm
+    val shape = RoundedCornerShape(20.dp)
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .clip(MorroShapes.Card)
+            .clip(shape)
             .background(colors.surfaceCard)
-            .morroHairline(radius = 16.dp)
-            .padding(20.dp)
+            .morroHairline(radius = 20.dp)
+            .padding(horizontal = 20.dp, vertical = 18.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -415,6 +428,7 @@ private fun AlarmDock(
             Text(
                 text = "Next alarm",
                 fontSize = 12.sp,
+                letterSpacing = 0.2.sp,
                 color = colors.textTertiary
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -426,7 +440,7 @@ private fun AlarmDock(
                             CircleShape
                         )
                 )
-                Spacer(modifier = Modifier.width(7.dp))
+                Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = if (armed) "Armed" else "Idle",
                     fontSize = 12.sp,
@@ -435,7 +449,7 @@ private fun AlarmDock(
             }
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
         if (dockTime != null) {
             Row(
@@ -445,10 +459,10 @@ private fun AlarmDock(
             ) {
                 Text(
                     text = dockTime,
-                    fontSize = 44.sp,
-                    lineHeight = 46.sp,
+                    fontSize = 46.sp,
+                    lineHeight = 50.sp,
                     fontWeight = FontWeight.Medium,
-                    letterSpacing = (-1.4).sp,
+                    letterSpacing = (-1.6).sp,
                     color = colors.textPrimary
                 )
                 Switch(
@@ -463,29 +477,31 @@ private fun AlarmDock(
                 )
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = missionLabel,
                 fontSize = 13.sp,
+                lineHeight = 19.sp,
                 color = colors.textSecondary
             )
         } else {
             Text(
-                text = "No alarm yet",
-                fontSize = 24.sp,
-                lineHeight = 30.sp,
+                text = "No wake-up set",
+                fontSize = 22.sp,
+                lineHeight = 28.sp,
                 fontWeight = FontWeight.Medium,
-                color = colors.textSecondary
+                color = colors.textPrimary
             )
             Spacer(modifier = Modifier.height(6.dp))
             Text(
-                text = "One time, one mission, one promise.",
+                text = "Choose a time and the mission that gets you up.",
                 fontSize = 13.sp,
+                lineHeight = 19.sp,
                 color = colors.textTertiary
             )
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(18.dp))
 
         MorroPrimaryButton(
             text = if (dockTime == null) "Set wake-up" else "Change wake-up",

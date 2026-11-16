@@ -55,7 +55,7 @@ System sans, weights 400/500 (600 rare). Hierarchy from size and colour, never w
 | Labels, metadata | 12 / 16 |
 
 - Sentence case everywhere. No uppercase tracked labels, no negative tracking below 16sp.
-- Monospace only for figures with a fixed rhythm: the clock readout, the time display, the
+- Monospace only for figures with a fixed rhythm: the wake-up time display, the
   character counter, the system status values.
 - Numbers use one format across a screen.
 
@@ -101,8 +101,9 @@ Springs, one language:
 3. **Permissions.** Two rows, each with an icon, a plain sentence of why and its live status.
    A two-line reliability card below: a title, one sentence, then two rows that show either "On"
    or a single Allow action. Continue never depends on it.
-4. **Dashboard.** Wordmark and one privacy link; the dial; the digital readout; one alarm card with
-   the time at 44sp, the mission as a line of text, the arm switch and one filled action.
+4. **Dashboard.** Wordmark and one privacy link; the dial with the date under it, nothing else
+   ticking; one alarm card with the time at 46sp, the mission as a line of text, the arm switch and
+   one filled action. Clock and card arrive on separate springs, so the screen assembles.
 5. **Alarm sheet.** Title and one line, "Time" then the time at 62sp, "Mission" then three rows.
    Selected row = border + honey check. "Save and arm" is the only filled surface. An expanded
    mission states its setting in place ("Object pool / 4 of 30 objects chosen") with one quiet

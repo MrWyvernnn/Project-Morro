@@ -48,7 +48,7 @@ object MorroShapes {
     val Card = RoundedCornerShape(16.dp)
     val Button = RoundedCornerShape(12.dp)
     val Chip = RoundedCornerShape(10.dp)
-    val Sheet = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
+    val Sheet = RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp)
 }
 
 // ── Colours ───────────────────────────────────────────────────────────────
@@ -71,6 +71,12 @@ object MorroColors {
 
     /** The warm highlight: elapsed-hour arc, armed dot, second hand, selection checks. */
     val Honey = Color(0xFFE8C58F)
+
+    /**
+     * Drawn-cloud white. A shade warmer than the text colour, so a solid cloud reads as paper in
+     * warm light rather than as a white cut-out sitting on the black.
+     */
+    val CloudWhite = Color(0xFFF6EFE1)
 
     /**
      * The mascot's eyes. This is the one chromatic value in the product, and it is deliberately

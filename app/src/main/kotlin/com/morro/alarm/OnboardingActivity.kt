@@ -18,17 +18,14 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
@@ -43,7 +40,6 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -52,7 +48,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -328,16 +323,6 @@ fun PermissionsScreen(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Text(
-                text = "Offline only. No accounts, everything stays on this phone.",
-                color = MorroColors.TextTertiary,
-                fontSize = 12.sp,
-                lineHeight = 18.sp,
-                modifier = Modifier.fillMaxWidth()
-            )
-
             Spacer(modifier = Modifier.height(28.dp))
         }
     }
@@ -423,8 +408,8 @@ private fun PermissionRow(
 }
 
 /**
- * Reliability actions, styled as a terminal readout rather than a blocking step. Both actions are
- * optional and Continue never depends on them.
+ * The whole reliability story in one row: what it is, how many settings are left, and the single
+ * action that resolves the next one. Optional, and Continue never depends on it.
  */
 @Composable
 private fun SystemAccessCard(
@@ -433,90 +418,62 @@ private fun SystemAccessCard(
     onRequestExactAlarm: () -> Unit,
     onRequestBattery: () -> Unit
 ) {
-    Column(
+    val missing = (if (hasExactAlarmPermission) 0 else 1) + (if (isBatteryIgnored) 0 else 1)
+    val ready = missing == 0
+
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(MorroShapes.Card)
             .background(MorroColors.SurfaceCard)
-            .border(1.dp, MorroColors.BorderSubtle, MorroShapes.Card)
-            .padding(18.dp)
-    ) {
-        Text(
-            text = "Keep the alarm reliable",
-            color = MorroColors.TextPrimary,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Medium
-        )
-
-        Spacer(modifier = Modifier.height(6.dp))
-
-        Text(
-            text = "Optional. A phone that sleeps hard can delay an alarm.",
-            color = MorroColors.TextSecondary,
-            fontSize = 12.sp,
-            lineHeight = 17.sp
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        AccessRow(
-            label = "Exact timing",
-            allowed = hasExactAlarmPermission,
-            onAllow = onRequestExactAlarm
-        )
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        AccessRow(
-            label = "Battery",
-            allowed = isBatteryIgnored,
-            onAllow = onRequestBattery
-        )
-    }
-}
-
-/** One reliability line: what it is, and either its state or the single action that fixes it. */
-@Composable
-private fun AccessRow(label: String, allowed: Boolean, onAllow: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 32.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
+            .morroHairline(radius = 16.dp)
+            .then(
+                if (ready) Modifier else Modifier.clickable {
+                    if (!hasExactAlarmPermission) onRequestExactAlarm() else onRequestBattery()
+                }
+            )
+            .padding(horizontal = 18.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = label,
-            color = MorroColors.TextSecondary,
-            fontSize = 13.sp
-        )
-        if (allowed) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Filled.Check,
-                    contentDescription = null,
-                    tint = MorroColors.Honey,
-                    modifier = Modifier.size(13.dp)
-                )
-                Spacer(modifier = Modifier.width(5.dp))
-                Text(
-                    text = "On",
-                    color = MorroColors.TextTertiary,
-                    fontSize = 12.sp
-                )
-            }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "Alarm reliability",
+                color = MorroColors.TextSecondary,
+                fontSize = 12.sp
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = when (missing) {
+                    0 -> "Exact timing and battery are set."
+                    1 -> "One setting left to allow."
+                    else -> "Two settings left to allow."
+                },
+                color = MorroColors.TextPrimary,
+                fontSize = 14.sp,
+                lineHeight = 20.sp
+            )
+        }
+
+        Spacer(modifier = Modifier.width(12.dp))
+
+        if (ready) {
+            Icon(
+                imageVector = Icons.Filled.Check,
+                contentDescription = null,
+                tint = MorroColors.Honey,
+                modifier = Modifier.size(18.dp)
+            )
         } else {
-            TextButton(
-                onClick = onAllow,
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-            ) {
-                Text(
-                    text = "Allow",
-                    color = MorroColors.Honey,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium
-                )
-            }
+            Text(
+                text = "Allow",
+                color = MorroColors.Honey,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .border(1.dp, MorroColors.BorderStrong, RoundedCornerShape(50))
+                    .padding(horizontal = 16.dp, vertical = 9.dp)
+            )
         }
     }
 }

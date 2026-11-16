@@ -16,6 +16,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.platform.LocalContext
 import com.morro.alarm.ui.theme.MorroColors
 import kotlin.math.sin
@@ -88,13 +89,16 @@ fun DriftingClouds(
             val sway = if (reduced) 0f else 4f * sin((t * 6.283f) + index)
             val y = size.height * cloud.yFraction + sway
 
-            drawPuffyCloud(
-                center = Offset(x, y),
-                width = w,
-                height = h,
-                color = MorroColors.TextPrimary,
-                flip = cloud.flip,
-            )
+            val rock = if (reduced) 0f else sin((t * 6.283f * 2f) + index) * 1.6f
+            rotate(degrees = rock, pivot = Offset(x, y)) {
+                drawPuffyCloud(
+                    center = Offset(x, y),
+                    width = w,
+                    height = h,
+                    color = MorroColors.CloudWhite,
+                    flip = cloud.flip,
+                )
+            }
         }
     }
 }
