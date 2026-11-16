@@ -421,27 +421,47 @@ private fun SystemAccessCard(
     val missing = (if (hasExactAlarmPermission) 0 else 1) + (if (isBatteryIgnored) 0 else 1)
     val ready = missing == 0
 
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(MorroShapes.Card)
             .background(MorroColors.SurfaceCard)
             .morroHairline(radius = 16.dp)
-            .then(
-                if (ready) Modifier else Modifier.clickable {
-                    if (!hasExactAlarmPermission) onRequestExactAlarm() else onRequestBattery()
-                }
-            )
-            .padding(horizontal = 18.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 18.dp, vertical = 16.dp)
     ) {
-        Column(modifier = Modifier.weight(1f)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = "Alarm reliability",
                 color = MorroColors.TextSecondary,
                 fontSize = 12.sp
             )
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.weight(1f))
+            if (ready) {
+                Icon(
+                    imageVector = Icons.Filled.Check,
+                    contentDescription = null,
+                    tint = MorroColors.Honey,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        // One line on what the card is for, before the status sentence that says where you stand.
+        Text(
+            text = "Keeps your alarm exact and lets it ring through sleep mode.",
+            color = MorroColors.TextTertiary,
+            fontSize = 12.sp,
+            lineHeight = 17.sp
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Text(
                 text = when (missing) {
                     0 -> "Exact timing and battery are set."
@@ -450,30 +470,26 @@ private fun SystemAccessCard(
                 },
                 color = MorroColors.TextPrimary,
                 fontSize = 14.sp,
-                lineHeight = 20.sp
+                lineHeight = 20.sp,
+                modifier = Modifier.weight(1f)
             )
-        }
 
-        Spacer(modifier = Modifier.width(12.dp))
-
-        if (ready) {
-            Icon(
-                imageVector = Icons.Filled.Check,
-                contentDescription = null,
-                tint = MorroColors.Honey,
-                modifier = Modifier.size(18.dp)
-            )
-        } else {
-            Text(
-                text = "Allow",
-                color = MorroColors.Honey,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(50))
-                    .border(1.dp, MorroColors.BorderStrong, RoundedCornerShape(50))
-                    .padding(horizontal = 16.dp, vertical = 9.dp)
-            )
+            if (!ready) {
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = "Allow",
+                    color = MorroColors.Honey,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .border(1.dp, MorroColors.BorderStrong, RoundedCornerShape(50))
+                        .clickable {
+                            if (!hasExactAlarmPermission) onRequestExactAlarm() else onRequestBattery()
+                        }
+                        .padding(horizontal = 16.dp, vertical = 9.dp)
+                )
+            }
         }
     }
 }

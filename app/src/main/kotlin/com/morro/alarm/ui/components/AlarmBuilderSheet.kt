@@ -593,7 +593,10 @@ private fun MorroOptionChip(
                         else if (enabled) colors.textSecondary else colors.textTertiary,
                         modifier = Modifier.size(20.dp)
                     )
-                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
                         Text(
                             text = title,
                             style = typo.titleMedium,
@@ -626,8 +629,10 @@ private fun MorroOptionChip(
 
         if (showExpanded && enabled && expandedContent != null) {
             Spacer(modifier = Modifier.height(12.dp))
-            AnimatedVisibility(visible = true) {
-                MorroCard(modifier = Modifier.fillMaxWidth()) {
+            MorroCard(modifier = Modifier.fillMaxWidth()) { cardModifier ->
+                // MorroCard hands its inner modifier back so the card's own padding is applied.
+                // Dropping it put the panel's text flush against the card border.
+                Box(modifier = cardModifier.fillMaxWidth()) {
                     expandedContent()
                 }
             }
@@ -663,10 +668,20 @@ private fun VoiceExpandedContent(
             VoiceState.IDLE -> {
                 if (!hasSaved.value) {
                     Text(
-                        text = "Speak clearly: \"I am waking up at $wakeTimeStr tomorrow to protect my $missionTargetName.\"",
+                        text = "SAY THIS CLEARLY",
+                        style = typo.labelSmall,
+                        color = colors.textTertiary,
+                        letterSpacing = 0.6.sp,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Text(
+                        text = "\u201CI am waking up at $wakeTimeStr tomorrow to protect my $missionTargetName.\u201D",
                         style = typo.bodyMedium,
-                        color = colors.textSecondary,
-                        lineHeight = 20.sp,
+                        color = colors.textPrimary,
+                        lineHeight = 21.sp,
                         modifier = Modifier.fillMaxWidth()
                     )
 

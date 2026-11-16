@@ -100,7 +100,7 @@ private data class OnboardingQuestion(
     val fallback: String,
 )
 
-private const val TotalQuestions = 5
+private const val TotalQuestions = 7
 
 private val questions: List<OnboardingQuestion> = listOf(
     OnboardingQuestion(
@@ -125,11 +125,25 @@ private val questions: List<OnboardingQuestion> = listOf(
         fallback = "Hitting snooze"
     ),
     OnboardingQuestion(
+        key = PersonalizationStorage.KEY_SLEEP,
+        prompt = "What's one thing you wish you could do with the time you spend asleep?",
+        helper = "Say it plainly. Morro will hold you to it on the mornings you don't feel like it.",
+        options = listOf("Read", "Train", "Make something", "Rest properly"),
+        fallback = "Read"
+    ),
+    OnboardingQuestion(
         key = PersonalizationStorage.KEY_TONE,
         prompt = "How should Morro talk to you?",
         helper = "You can change this later.",
         options = listOf("Gentle nudge", "Firm accountability", "Quiet reminder", "Encouraging coach"),
         fallback = "Gentle nudge"
+    ),
+    OnboardingQuestion(
+        key = PersonalizationStorage.KEY_EXTRA,
+        prompt = "Imagine you had back every hour you slept through. What changes?",
+        helper = "\u201CEvery action you take is a vote for the type of person you wish to become.\u201D \u2014 James Clear, Atomic Habits",
+        options = emptyList(),
+        fallback = ""
     ),
     OnboardingQuestion(
         key = PersonalizationStorage.KEY_TARGET,
@@ -152,6 +166,8 @@ object PersonalizationStorage {
     const val KEY_ENERGY = "onboarding_energy"
     const val KEY_STRUGGLE = "onboarding_struggle"
     const val KEY_TONE = "onboarding_tone"
+    const val KEY_SLEEP = "onboarding_sleep_goal"
+    const val KEY_EXTRA = "onboarding_extra_time"
     const val KEY_TARGET = "onboarding_target"
 
     private fun prefs(context: Context): SharedPreferences =
@@ -173,6 +189,7 @@ object PersonalizationStorage {
         }
         val promise = answers[KEY_TARGET].orEmpty().trim().take(MaxPromiseLength)
         editor.putString(KEY_TARGET, promise)
+        editor.putString(KEY_EXTRA, answers[KEY_EXTRA].orEmpty().trim().take(MaxPromiseLength))
         editor.putBoolean(KEY_DONE, true)
         editor.commit()
     }
@@ -195,7 +212,6 @@ fun PersonalizedQuestions(
 
     var index by remember { mutableIntStateOf(0) }
     val answers = remember { mutableStateMapOf<String, String>() }
-    var promise by remember { mutableStateOf("") }
 
     val topSpace by animateDpAsState(
         targetValue = if (imeVisible) 8.dp else 24.dp,
@@ -209,11 +225,13 @@ fun PersonalizedQuestions(
     )
 
     fun finish() {
-        PersonalizationStorage.save(
-            context = context,
-            answers = answers.toMap() + (PersonalizationStorage.KEY_TARGET to promise)
-        )
+        PersonalizationStorage.save(context = context, answers = answers.toMap())
         onComplete()
+    }
+
+    /** Continue moves to the next question; only the last one closes the flow. */
+    fun advance() {
+        if (index >= questions.lastIndex) finish() else index += 1
     }
 
     fun choose(question: OnboardingQuestion, option: String) {
@@ -284,11 +302,11 @@ fun PersonalizedQuestions(
                 QuestionBody(
                     question = question,
                     selected = answers[question.key],
-                    promise = promise,
+                    text = answers[question.key].orEmpty(),
                     compact = imeVisible,
-                    onPromiseChange = { promise = it },
+                    onTextChange = { answers[question.key] = it },
                     onSelect = { option -> choose(question, option) },
-                    onContinue = { finish() }
+                    onContinue = { advance() }
                 )
             }
         }
@@ -299,9 +317,9 @@ fun PersonalizedQuestions(
 private fun QuestionBody(
     question: OnboardingQuestion,
     selected: String?,
-    promise: String,
+    text: String,
     compact: Boolean,
-    onPromiseChange: (String) -> Unit,
+    onTextChange: (String) -> Unit,
     onSelect: (String) -> Unit,
     onContinue: () -> Unit,
 ) {
@@ -310,8 +328,8 @@ private fun QuestionBody(
     var errorVisible by remember { mutableStateOf(false) }
     val haptics = LocalHapticFeedback.current
 
-    fun submitPromise() {
-        if (promise.isBlank()) {
+    fun submitText() {
+        if (text.isBlank()) {
             errorVisible = true
             haptics.performHapticFeedback(HapticFeedbackType.LongPress)
             scope.launch {
@@ -377,17 +395,17 @@ private fun QuestionBody(
                             radius = 16.dp,
                             color = when {
                                 errorVisible -> MorroColors.Error.copy(alpha = 0.6f)
-                                promise.isNotBlank() -> MorroColors.BorderStrong
+                                text.isNotBlank() -> MorroColors.BorderStrong
                                 else -> MorroColors.BorderSubtle
                             }
                         )
                         .padding(horizontal = 18.dp, vertical = 16.dp)
                 ) {
                     PromiseInput(
-                        value = promise,
+                        value = text,
                         onValueChange = {
                             if (errorVisible) errorVisible = false
-                            onPromiseChange(it)
+                            onTextChange(it)
                         }
                     )
                 }
@@ -406,8 +424,8 @@ private fun QuestionBody(
             Spacer(modifier = Modifier.height(24.dp))
 
             ContinueButton(
-                active = promise.isNotBlank(),
-                onClick = { submitPromise() }
+                active = text.isNotBlank(),
+                onClick = { submitText() }
             )
 
             Spacer(modifier = Modifier.height(16.dp))

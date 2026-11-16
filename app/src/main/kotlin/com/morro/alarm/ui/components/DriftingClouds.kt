@@ -30,16 +30,21 @@ private data class CloudSpec(
 )
 
 /**
- * Three clouds along the top edge, mirroring each other so the sky is not a row of copies.
+ * Seven clouds, from the top edge down into the lower half of the screen.
  *
- * They are confined to that band on purpose: white clouds are opaque now, and the intro screens are
- * full of small off-white text. A cloud crossing the reading column would make that text
- * unreadable, so the sky clips to the top of the screen and the content stays clear.
+ * The lower ones are the point: the sky should feel like it fills the screen rather than sitting in
+ * a strip at the top. They lean on the sides at different heights, mid-size, so the copy column
+ * still has room between them.
  */
 private val CloudLayers = listOf(
-    CloudSpec(yFraction = 0.005f, startFraction = 0.14f, travelFraction = 0.62f, widthFraction = 0.36f, flip = false),
-    CloudSpec(yFraction = 0.048f, startFraction = 0.86f, travelFraction = 0.46f, widthFraction = 0.24f, flip = true),
-    CloudSpec(yFraction = 0.082f, startFraction = 1.36f, travelFraction = 0.52f, widthFraction = 0.17f, flip = true),
+    CloudSpec(yFraction = 0.005f, startFraction = 0.14f, travelFraction = 0.62f, widthFraction = 0.34f, flip = false),
+    CloudSpec(yFraction = 0.045f, startFraction = 0.86f, travelFraction = 0.46f, widthFraction = 0.22f, flip = true),
+    CloudSpec(yFraction = 0.085f, startFraction = 1.36f, travelFraction = 0.52f, widthFraction = 0.16f, flip = true),
+    CloudSpec(yFraction = 0.38f, startFraction = 1.02f, travelFraction = 0.38f, widthFraction = 0.17f, flip = true),
+    CloudSpec(yFraction = 0.56f, startFraction = 0.08f, travelFraction = 0.44f, widthFraction = 0.26f, flip = false),
+    CloudSpec(yFraction = 0.72f, startFraction = 0.92f, travelFraction = 0.36f, widthFraction = 0.21f, flip = true),
+    CloudSpec(yFraction = 0.88f, startFraction = 0.34f, travelFraction = 0.58f, widthFraction = 0.30f, flip = false),
+    CloudSpec(yFraction = 0.965f, startFraction = 1.24f, travelFraction = 0.42f, widthFraction = 0.24f, flip = true),
 )
 
 /**
@@ -47,8 +52,8 @@ private val CloudLayers = listOf(
  *
  * These are drawn clouds, not weather: a flat base and four round puffs, one continuous outline,
  * one flat fill. No blur, no transparency, no gradient — a cloud in a children's book rather than
- * a photographed sky. They sit along the top edge, cropped by it, so they read as a drawn sky
- * border and never cross the copy; the whole sky runs on one clock so the layers cannot stutter.
+ * a photographed sky. They run from the top edge down through the lower half, drifting left on one
+ * clock so the layers cannot stutter against each other.
  *
  * Used on the intro screens only (splash, questions, permissions). The alarm setup and the
  * dashboard stay still: they are places you work, not places you arrive in.
