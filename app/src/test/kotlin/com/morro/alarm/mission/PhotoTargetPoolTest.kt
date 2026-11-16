@@ -52,7 +52,6 @@ class PhotoTargetPoolTest {
         val ids = PhotoTargetPool.ITEMS.map { it.id }.toSet()
         assertEquals(10, PhotoTargetPool.COMMON_10_IDS.size)
         assertTrue("dangling common id", ids.containsAll(PhotoTargetPool.COMMON_10_IDS))
-        assertEquals(10, PhotoTargetPool.COMMON_10_ITEMS.size)
     }
 
     @Test

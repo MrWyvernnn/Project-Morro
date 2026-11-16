@@ -1,3 +1,5 @@
+@file:androidx.annotation.OptIn(androidx.camera.core.ExperimentalGetImage::class)
+
 package com.morro.alarm.mission
 
 import android.Manifest

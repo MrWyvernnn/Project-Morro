@@ -10,7 +10,6 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,8 +20,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.TextSelectionColors
 import androidx.compose.material3.Button
@@ -85,7 +82,6 @@ class AlarmActivity : ComponentActivity() {
     }
 
     private var gateState by mutableStateOf(AlarmGateState.PUZZLE)
-    private var missionType by mutableStateOf(AlarmScheduler.MissionType.MATH)
     private var activeMissionType by mutableStateOf(MissionType.VOICE_MEMO)
 
     private var missionGraceSeconds by mutableIntStateOf(30)
@@ -159,15 +155,6 @@ class AlarmActivity : ComponentActivity() {
         // Pre-generate math problem if in puzzle mode
         nextQuestion()
 
-        // Derive puzzle type (MATH vs AFFIRMATION) from the actual mission type.
-        // Voice missions (VOICE_COMMITMENT, VOICE_MEMO) use MATH puzzle gate.
-        // Other missions (QR_BARCODE, QR_CODE, PHOTO_OBJECT, PHOTO_MISSION) skip the puzzle gate entirely.
-        missionType = when (configuredMission) {
-            MissionType.VOICE_COMMITMENT, MissionType.VOICE_MEMO -> AlarmScheduler.MissionType.MATH
-            MissionType.QR_CODE, MissionType.QR_BARCODE,
-            MissionType.PHOTO_MISSION, MissionType.PHOTO_OBJECT -> AlarmScheduler.MissionType.AFFIRMATION
-        }
-
         // Start alarm and configure initial gate based on MissionType (includes VOICE_COMMITMENT).
         when (configuredMission) {
             MissionType.QR_BARCODE, MissionType.QR_CODE -> {
@@ -191,19 +178,16 @@ class AlarmActivity : ComponentActivity() {
             MorroTheme {
                 AlarmScreen(
                     gateState = gateState,
-                    missionType = missionType,
-                    activeMissionType = activeMissionType,
+                                activeMissionType = activeMissionType,
                     missionGraceSeconds = missionGraceSeconds,
                     currentQuestion = currentQuestion,
                     userInput = userInput,
                     onAnswerChanged = { userInput = it },
                     onBackspace = { clearInput() },
                     onSubmit = { submitAnswer(it) },
-                    onPuzzleSolved = { completePuzzle() },
-                    onMissionSuccess = { onMissionComplete() },
+                                onMissionSuccess = { onMissionComplete() },
                     onRestartGracePeriod = { startGraceCountdown() },
-                    onSnooze = { snoozeAlarm() },
-                    onRecordTomorrowContent = {
+                                onRecordTomorrowContent = {
                         RecordingGateUI(
                             isRecording = isRecording,
                             countdown = recordingCountdown,
@@ -441,7 +425,6 @@ class AlarmActivity : ComponentActivity() {
     @Composable
     fun AlarmScreen(
         gateState: AlarmGateState,
-        missionType: AlarmScheduler.MissionType,
         activeMissionType: MissionType,
         missionGraceSeconds: Int,
         currentQuestion: MathEngine.Question?,
@@ -449,10 +432,8 @@ class AlarmActivity : ComponentActivity() {
         onAnswerChanged: (String) -> Unit,
         onBackspace: () -> Unit,
         onSubmit: (String) -> Unit,
-        onPuzzleSolved: () -> Unit,
         onMissionSuccess: () -> Unit,
         onRestartGracePeriod: () -> Unit,
-        onSnooze: () -> Unit,
         onRecordTomorrowContent: @Composable () -> Unit
     ) {
         val colors = morroColors()
@@ -562,120 +543,102 @@ class AlarmActivity : ComponentActivity() {
 
                         Spacer(modifier = Modifier.height(32.dp))
 
-                        when (missionType) {
-                            AlarmScheduler.MissionType.MATH,
-                            AlarmScheduler.MissionType.QR_CODE,
-                            AlarmScheduler.MissionType.PHOTO_MISSION,
-                            AlarmScheduler.MissionType.AFFIRMATION -> {
-                                currentQuestion?.let { question ->
-                                    Column(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                                    ) {
-                                        Text(
-                                            text = question.text,
-                                            style = typo.headlineMedium,
-                                            color = colors.textPrimary,
-                                            fontWeight = FontWeight.Bold,
-                                            textAlign = TextAlign.Center
-                                        )
-                                        Spacer(modifier = Modifier.height(16.dp))
-                                        OutlinedTextField(
-                                            value = userInput,
-                                            onValueChange = { onAnswerChanged(it) },
-                                            modifier = Modifier.fillMaxWidth(),
-                                            placeholder = { Text("Enter answer", color = colors.textDisabled) },
-                                            singleLine = true,
-                                            shape = RoundedCornerShape(4.dp),
-                                            colors = TextFieldDefaults.colors(
-                                                focusedTextColor = colors.textPrimary,
-                                                unfocusedTextColor = colors.textPrimary,
-                                                disabledTextColor = colors.textDisabled,
-                                                errorTextColor = colors.error,
-                                                focusedContainerColor = Color.Unspecified,
-                                                unfocusedContainerColor = Color.Unspecified,
-                                                disabledContainerColor = Color.Unspecified,
-                                                errorContainerColor = Color.Unspecified,
-                                                cursorColor = colors.honey,
-                                                errorCursorColor = colors.error,
-                                                selectionColors = TextSelectionColors(
-                                                    handleColor = colors.honey,
-                                                    backgroundColor = colors.honey.copy(alpha = 0.3f)
-                                                ),
-                                                focusedIndicatorColor = colors.honey,
-                                                unfocusedIndicatorColor = colors.borderSubtle,
-                                                disabledIndicatorColor = Color.Unspecified,
-                                                errorIndicatorColor = colors.error,
-                                                focusedLabelColor = Color.Unspecified,
-                                                unfocusedLabelColor = Color.Unspecified,
-                                                disabledLabelColor = Color.Unspecified,
-                                                errorLabelColor = Color.Unspecified,
-                                                focusedLeadingIconColor = Color.Unspecified,
-                                                unfocusedLeadingIconColor = Color.Unspecified,
-                                                disabledLeadingIconColor = Color.Unspecified,
-                                                errorLeadingIconColor = Color.Unspecified,
-                                                focusedTrailingIconColor = Color.Unspecified,
-                                                unfocusedTrailingIconColor = Color.Unspecified,
-                                                disabledTrailingIconColor = Color.Unspecified,
-                                                errorTrailingIconColor = Color.Unspecified,
-                                                focusedPlaceholderColor = colors.textDisabled,
-                                                unfocusedPlaceholderColor = colors.textDisabled,
-                                                disabledPlaceholderColor = colors.textDisabled,
-                                                errorPlaceholderColor = colors.error,
-                                                focusedSupportingTextColor = Color.Unspecified,
-                                                unfocusedSupportingTextColor = Color.Unspecified,
-                                                disabledSupportingTextColor = Color.Unspecified,
-                                                errorSupportingTextColor = Color.Unspecified,
-                                                focusedPrefixColor = Color.Unspecified,
-                                                unfocusedPrefixColor = Color.Unspecified,
-                                                disabledPrefixColor = Color.Unspecified,
-                                                errorPrefixColor = Color.Unspecified,
-                                                focusedSuffixColor = Color.Unspecified,
-                                                unfocusedSuffixColor = Color.Unspecified,
-                                                disabledSuffixColor = Color.Unspecified,
-                                                errorSuffixColor = Color.Unspecified
-                                            )
-                                        )
-                                        Spacer(modifier = Modifier.height(16.dp))
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.spacedBy(16.dp)
-                                        ) {
-                                            OutlinedButton(
-                                                onClick = onBackspace,
-                                                modifier = Modifier.weight(1f),
-                                                colors = ButtonDefaults.outlinedButtonColors(
-                                                    contentColor = colors.textSecondary
-                                                )
-                                            ) {
-                                                Text("Clear")
-                                            }
-                                            Button(
-                                                onClick = { onSubmit(userInput) },
-                                                modifier = Modifier.weight(1f),
-                                                enabled = userInput.isNotBlank(),
-                                                colors = ButtonDefaults.buttonColors(
-                                                    containerColor = colors.honey,
-                                                    contentColor = Color.White
-                                                )
-                                            ) {
-                                                Text("Submit")
-                                            }
-                                        }
-                                    }
-                                } ?: run {
-                                    AffirmationGate(
-                                        onSuccess = onPuzzleSolved,
-                                        onSnooze = onSnooze
-                                    )
-                                }
-                            }
-                            AlarmScheduler.MissionType.AFFIRMATION, AlarmScheduler.MissionType.VOICE_COMMITMENT -> {
-                                AffirmationGate(
-                                    onSuccess = onPuzzleSolved,
-                                    onSnooze = onSnooze
+                        currentQuestion?.let { question ->
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                Text(
+                                    text = question.text,
+                                    style = typo.headlineMedium,
+                                    color = colors.textPrimary,
+                                    fontWeight = FontWeight.Bold,
+                                    textAlign = TextAlign.Center
                                 )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                OutlinedTextField(
+                                    value = userInput,
+                                    onValueChange = { onAnswerChanged(it) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    placeholder = { Text("Enter answer", color = colors.textDisabled) },
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(4.dp),
+                                    colors = TextFieldDefaults.colors(
+                                        focusedTextColor = colors.textPrimary,
+                                        unfocusedTextColor = colors.textPrimary,
+                                        disabledTextColor = colors.textDisabled,
+                                        errorTextColor = colors.error,
+                                        focusedContainerColor = Color.Unspecified,
+                                        unfocusedContainerColor = Color.Unspecified,
+                                        disabledContainerColor = Color.Unspecified,
+                                        errorContainerColor = Color.Unspecified,
+                                        cursorColor = colors.honey,
+                                        errorCursorColor = colors.error,
+                                        selectionColors = TextSelectionColors(
+                                            handleColor = colors.honey,
+                                            backgroundColor = colors.honey.copy(alpha = 0.3f)
+                                        ),
+                                        focusedIndicatorColor = colors.honey,
+                                        unfocusedIndicatorColor = colors.borderSubtle,
+                                        disabledIndicatorColor = Color.Unspecified,
+                                        errorIndicatorColor = colors.error,
+                                        focusedLabelColor = Color.Unspecified,
+                                        unfocusedLabelColor = Color.Unspecified,
+                                        disabledLabelColor = Color.Unspecified,
+                                        errorLabelColor = Color.Unspecified,
+                                        focusedLeadingIconColor = Color.Unspecified,
+                                        unfocusedLeadingIconColor = Color.Unspecified,
+                                        disabledLeadingIconColor = Color.Unspecified,
+                                        errorLeadingIconColor = Color.Unspecified,
+                                        focusedTrailingIconColor = Color.Unspecified,
+                                        unfocusedTrailingIconColor = Color.Unspecified,
+                                        disabledTrailingIconColor = Color.Unspecified,
+                                        errorTrailingIconColor = Color.Unspecified,
+                                        focusedPlaceholderColor = colors.textDisabled,
+                                        unfocusedPlaceholderColor = colors.textDisabled,
+                                        disabledPlaceholderColor = colors.textDisabled,
+                                        errorPlaceholderColor = colors.error,
+                                        focusedSupportingTextColor = Color.Unspecified,
+                                        unfocusedSupportingTextColor = Color.Unspecified,
+                                        disabledSupportingTextColor = Color.Unspecified,
+                                        errorSupportingTextColor = Color.Unspecified,
+                                        focusedPrefixColor = Color.Unspecified,
+                                        unfocusedPrefixColor = Color.Unspecified,
+                                        disabledPrefixColor = Color.Unspecified,
+                                        errorPrefixColor = Color.Unspecified,
+                                        focusedSuffixColor = Color.Unspecified,
+                                        unfocusedSuffixColor = Color.Unspecified,
+                                        disabledSuffixColor = Color.Unspecified,
+                                        errorSuffixColor = Color.Unspecified
+                                    )
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    OutlinedButton(
+                                        onClick = onBackspace,
+                                        modifier = Modifier.weight(1f),
+                                        colors = ButtonDefaults.outlinedButtonColors(
+                                            contentColor = colors.textSecondary
+                                        )
+                                    ) {
+                                        Text("Clear")
+                                    }
+                                    Button(
+                                        onClick = { onSubmit(userInput) },
+                                        modifier = Modifier.weight(1f),
+                                        enabled = userInput.isNotBlank(),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = colors.honey,
+                                            contentColor = Color.White
+                                        )
+                                    ) {
+                                        Text("Submit")
+                                    }
+                                }
                             }
                         }
                     }

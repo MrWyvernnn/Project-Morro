@@ -76,7 +76,6 @@ import com.morro.alarm.ui.theme.MorroColors
 import com.morro.alarm.ui.theme.MorroShapes
 import com.morro.alarm.ui.theme.MorroSpring
 import com.morro.alarm.ui.theme.morroHairline
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -160,20 +159,10 @@ object PersonalizationStorage {
 
     fun isComplete(context: Context): Boolean = prefs(context).getBoolean(KEY_DONE, false)
 
-    fun identity(context: Context): String =
-        prefs(context).getString(KEY_IDENTITY, "Growth").orEmpty()
 
-    fun energy(context: Context): String =
-        prefs(context).getString(KEY_ENERGY, "Early morning").orEmpty()
 
-    fun struggle(context: Context): String =
-        prefs(context).getString(KEY_STRUGGLE, "Hitting snooze").orEmpty()
 
-    fun tone(context: Context): String =
-        prefs(context).getString(KEY_TONE, "Gentle nudge").orEmpty()
 
-    fun target(context: Context): String =
-        prefs(context).getString(KEY_TARGET, "").orEmpty()
 
     /** Writes the whole profile in one shot; unanswered questions keep their neutral fallback. */
     fun save(context: Context, answers: Map<String, String>) {

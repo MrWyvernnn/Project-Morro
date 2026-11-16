@@ -1,3 +1,5 @@
+@file:androidx.annotation.OptIn(androidx.camera.core.ExperimentalGetImage::class)
+
 package com.morro.alarm.mission
 
 import android.Manifest
@@ -21,9 +23,6 @@ import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image

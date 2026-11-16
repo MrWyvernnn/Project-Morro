@@ -67,8 +67,6 @@ object PhotoTargetPool {
         "mouse", "shoe", "book", "bottle", "glasses"
     )
 
-    val COMMON_10_ITEMS: List<String> = ITEMS.filter { it.id in COMMON_10_IDS }.map { it.displayName }
-
     fun getById(id: String): PhotoTargetItem? = ITEMS.find { it.id == id }
 }
 

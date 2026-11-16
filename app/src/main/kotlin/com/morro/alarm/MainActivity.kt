@@ -72,7 +72,6 @@ import com.morro.alarm.ui.onboarding.OnboardingGate
 import com.morro.alarm.ui.onboarding.PersonalizationStorage
 import com.morro.alarm.ui.onboarding.PersonalizedQuestions
 import com.morro.alarm.ui.splash.MorroGhostSplash
-import com.morro.alarm.ui.theme.MorroShapes
 import com.morro.alarm.ui.theme.MorroSpring
 import com.morro.alarm.ui.theme.MorroTheme
 import com.morro.alarm.ui.theme.morroColors
