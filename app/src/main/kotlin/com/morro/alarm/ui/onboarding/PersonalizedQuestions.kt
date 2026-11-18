@@ -86,7 +86,8 @@ import com.morro.alarm.ui.theme.morroHairline
 import kotlinx.coroutines.launch
 
 /**
- * Seven questions between the sign-in screen and the personalizing beat.
+ * Five questions between the sign-in screen and the personalizing beat: three quick choices, then
+ * the two written ones that carry the promise.
  *
  * The layout is a single column with one question at a time. There is no wizard chrome: a quiet
  * "Question 1 of 5", a two-pixel progress rail, the question at 26sp, then answers. Answer rows are
@@ -99,15 +100,13 @@ import kotlinx.coroutines.launch
 
 internal enum class CardVariant { Unselected, Selected, Disabled }
 
-private data class OnboardingQuestion(
+internal data class OnboardingQuestion(
     val key: String,
     val prompt: String,
     val helper: String,
     val options: List<String>,
     val fallback: String,
 )
-
-private const val TotalQuestions = 7
 
 /** Draft answers as a flat key/value list, so rotation does not wipe the flow. */
 private val AnswersSaver = Saver<SnapshotStateMap<String, String>, List<String>>(
@@ -121,7 +120,7 @@ private val AnswersSaver = Saver<SnapshotStateMap<String, String>, List<String>>
     }
 )
 
-private val questions: List<OnboardingQuestion> = listOf(
+internal val onboardingQuestions: List<OnboardingQuestion> = listOf(
     OnboardingQuestion(
         key = PersonalizationStorage.KEY_IDENTITY,
         prompt = "What do you want to be known for?",
@@ -144,20 +143,6 @@ private val questions: List<OnboardingQuestion> = listOf(
         fallback = "Hitting snooze"
     ),
     OnboardingQuestion(
-        key = PersonalizationStorage.KEY_SLEEP,
-        prompt = "What's one thing you wish you could do with the time you spend asleep?",
-        helper = "Say it plainly. Morro will hold you to it on the mornings you don't feel like it.",
-        options = listOf("Read", "Train", "Make something", "Rest properly"),
-        fallback = "Read"
-    ),
-    OnboardingQuestion(
-        key = PersonalizationStorage.KEY_TONE,
-        prompt = "How should Morro talk to you?",
-        helper = "You can change this later.",
-        options = listOf("Gentle nudge", "Firm accountability", "Quiet reminder", "Encouraging coach"),
-        fallback = "Gentle nudge"
-    ),
-    OnboardingQuestion(
         key = PersonalizationStorage.KEY_EXTRA,
         prompt = "Imagine you had back every hour you slept through. What changes?",
         helper = "\u201CEvery action you take is a vote for the type of person you wish to become.\u201D \u2014 James Clear, Atomic Habits",
@@ -172,6 +157,15 @@ private val questions: List<OnboardingQuestion> = listOf(
         fallback = ""
     )
 )
+
+/**
+ * One rail segment per question, derived from the list.
+ *
+ * This used to be a hand-written `7`. The list lost two questions and the rail would have kept
+ * drawing seven segments — the counter and the rail would disagree with the quiz forever. A count
+ * read off the list cannot drift.
+ */
+internal val TotalQuestions: Int = onboardingQuestions.size
 
 // ---------------------------------------------------------------------------------------------
 // Storage
@@ -202,7 +196,7 @@ object PersonalizationStorage {
     /** Writes the whole profile in one shot; unanswered questions keep their neutral fallback. */
     fun save(context: Context, answers: Map<String, String>) {
         val editor = prefs(context).edit()
-        for (question in questions) {
+        for (question in onboardingQuestions) {
             val value = answers[question.key]?.takeIf { it.isNotBlank() } ?: question.fallback
             editor.putString(question.key, value)
         }
@@ -252,7 +246,7 @@ fun PersonalizedQuestions(
 
     /** Continue moves to the next question; only the last one closes the flow. */
     fun advance() {
-        if (index >= questions.lastIndex) finish() else index += 1
+        if (index >= onboardingQuestions.lastIndex) finish() else index += 1
     }
 
     fun choose(question: OnboardingQuestion, option: String) {
@@ -329,7 +323,7 @@ fun PersonalizedQuestions(
                 },
                 label = "questionChange"
             ) { questionIndex ->
-                val question = questions[questionIndex]
+                val question = onboardingQuestions[questionIndex]
                 QuestionBody(
                     question = question,
                     selected = answers[question.key],
@@ -635,7 +629,8 @@ private fun ContinueButton(active: Boolean, onClick: () -> Unit) {
 }
 
 /**
- * Seven segments: completed and current are filled with the same warm white, the rest stay quiet.
+ * One segment per question: completed and current are filled with the same warm white, the rest
+ * stay quiet.
  *
  * Each fill is revealed by width rather than by colour, so progress reads as a mask sliding over
  * the track instead of a light switching on.

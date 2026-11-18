@@ -42,8 +42,9 @@ import kotlin.math.sin
  * hem that ripples as it hovers. No landing squash — the mascot hovers rather than hops, which
  * reads calmer next to the copy it sits above.
  *
- * The silhouette is slim from the middle: both flanks are pulled inward just below the dome, then
- * return to the hem, so the body reads as a waist rather than as a cone.
+ * The silhouette is two curves, not one: both flanks tuck in hard below the dome, hold, then flare
+ * late into the hem. That late flare is the hip, and it is what makes the body read as a figure
+ * rather than as a cone. Drop the pinch and it is a bell; drop the hold and it is an egg.
  */
 @Composable
 fun MorroGhostMascot(
@@ -158,9 +159,10 @@ private fun DrawScope.drawGhost(
     val right = centerX + halfWidth
 
     val waistY = headTop + headHeight * 0.94f
-    val bulge = bodyWidth * 0.055f
-    // Slim from the middle: the flanks sit this far inside the dome's width at the waist.
-    val pinch = bodyWidth * 0.075f
+    // The dome flares just past its shoulders; the flanks then sit this far inside its width at
+    // the waist. Both were nudged up so the outline curves instead of tapering.
+    val bulge = bodyWidth * 0.080f
+    val pinch = bodyWidth * 0.135f
 
     val body = Path().apply {
         moveTo(left, waistY)
@@ -178,10 +180,12 @@ private fun DrawScope.drawGhost(
             right, waistY
         )
 
-        // Right flank: in at the waist, then back out to the hem.
+        // Right flank: tucked at the waist, held through the middle, then a late flare into the hem.
+        // The second control point sits close to the hem, so the curve stays narrow far longer than
+        // it stays wide — that delay is the waist, and the last third is the hip.
         cubicTo(
-            right - pinch, waistY + (bodyBottom - waistY) * 0.24f,
-            right - pinch, bodyBottom - hemHeight * 1.10f,
+            right - pinch, waistY + (bodyBottom - waistY) * 0.20f,
+            right - pinch * 0.82f, bodyBottom - hemHeight * 1.55f,
             right, bodyBottom - hemHeight * 0.42f
         )
 
@@ -208,10 +212,10 @@ private fun DrawScope.drawGhost(
             index++
         }
 
-        // Left flank back up, mirroring the waist pinch.
+        // Left flank back up, mirroring the waist pinch and the hip flare.
         cubicTo(
-            left + pinch, bodyBottom - hemHeight * 1.10f,
-            left + pinch, waistY + (bodyBottom - waistY) * 0.24f,
+            left + pinch * 0.82f, bodyBottom - hemHeight * 1.55f,
+            left + pinch, waistY + (bodyBottom - waistY) * 0.20f,
             left, waistY
         )
         close()

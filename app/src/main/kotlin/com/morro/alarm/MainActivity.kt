@@ -42,7 +42,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -75,6 +77,7 @@ import com.morro.alarm.ui.components.AlarmBuilderSheet
 import com.morro.alarm.ui.components.AlarmBuilderSheetContent
 import com.morro.alarm.ui.components.MorroAnalogClock
 import com.morro.alarm.ui.components.MorroPrimaryButton
+import com.morro.alarm.ui.components.MorroSettingsSheet
 import com.morro.alarm.ui.components.MorroStatusDot
 import com.morro.alarm.ui.components.MorroSwitch
 import com.morro.alarm.ui.components.MorroPrivacyPolicySheet
@@ -235,6 +238,7 @@ fun MainAlarmScreen(context: Context) {
 
     var showAlarmBuilder by remember { mutableStateOf(false) }
     var showPrivacyPolicy by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
 
     val missionType = remember(prefsUpdateTrigger) { MissionPrefs.getMissionType(context) }
     val photoItems = remember(prefsUpdateTrigger) { MissionPrefs.getSelectedPhotoItems(context) }
@@ -394,7 +398,8 @@ fun MainAlarmScreen(context: Context) {
                         }
                         prefsUpdateTrigger++
                     },
-                    onTestAlarm = { scheduleTestAlarmIn5Seconds(context) }
+                    onTestAlarm = { scheduleTestAlarmIn5Seconds(context) },
+                    onOpenSettings = { showSettings = true }
                 )
             }
         }
@@ -445,6 +450,24 @@ fun MainAlarmScreen(context: Context) {
         if (showPrivacyPolicy) {
             MorroPrivacyPolicySheet(onDismiss = { showPrivacyPolicy = false })
         }
+
+        // Every row in Settings is a door to a sheet that already exists, so nothing here can
+        // disagree with the dashboard about what the alarm currently is.
+        if (showSettings) {
+            MorroSettingsSheet(
+                wakeUpLabel = dockTime ?: "Not set",
+                missionLabel = missionLabel,
+                onOpenWakeUp = {
+                    showSettings = false
+                    showAlarmBuilder = true
+                },
+                onOpenPrivacy = {
+                    showSettings = false
+                    showPrivacyPolicy = true
+                },
+                onDismiss = { showSettings = false }
+            )
+        }
     }
 }
 
@@ -462,6 +485,7 @@ private fun AlarmDock(
     onSetAlarm: () -> Unit,
     onArmToggle: (Boolean) -> Unit,
     onTestAlarm: () -> Unit,
+    onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = morroColors()
@@ -496,14 +520,25 @@ private fun AlarmDock(
                 color = colors.textTertiary
             )
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                    // One pulse when the alarm arms, then still: the app's only celebratory motion.
-                    MorroStatusDot(armed = armed)
-                    Spacer(modifier = Modifier.width(8.dp))
+                // One pulse when the alarm arms, then still: the app's only celebratory motion.
+                MorroStatusDot(armed = armed)
+                Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = if (armed) "Armed" else "Idle",
                     fontSize = 12.sp,
                     color = if (armed) colors.textPrimary else colors.textTertiary
                 )
+                Spacer(modifier = Modifier.width(4.dp))
+                // Settings lives on the card, not in a corner of the screen: this card is the one
+                // place a person looks when nothing is set, so the way out belongs here.
+                IconButton(onClick = onOpenSettings) {
+                    Icon(
+                        imageVector = Icons.Filled.Settings,
+                        contentDescription = "Settings",
+                        tint = colors.textTertiary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
             }
         }
 

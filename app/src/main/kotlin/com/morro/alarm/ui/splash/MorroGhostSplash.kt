@@ -44,8 +44,9 @@ import com.morro.alarm.ui.theme.MorroColors
 import com.morro.alarm.ui.theme.MorroSpring
 import kotlinx.coroutines.delay
 
-// Short enough to stay inside the Doherty threshold: the splash is a greeting, not a wait.
-private const val SplashHoldMillis = 700L
+// Long enough for the greeting to be read and the mascot to be seen hovering. Still short enough
+// that it never feels like a loading screen, and a tap dismisses it immediately.
+private const val SplashHoldMillis = 1_800L
 private const val ReducedHoldMillis = 200L
 
 /**
@@ -103,9 +104,11 @@ fun MorroGhostSplash(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
+            // Taller than it is wide: the same body width over a longer canvas stretches the flanks,
+            // which is what makes the waist and hip read on the first screen.
             MorroGhostMascot(
                 modifier = Modifier
-                    .size(width = 124.dp, height = 138.dp)
+                    .size(width = 126.dp, height = 176.dp)
                     .graphicsLayer {
                         val p = entrance.value.coerceIn(0f, 1f)
                         alpha = p
