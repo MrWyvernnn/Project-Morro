@@ -45,10 +45,11 @@ import androidx.compose.ui.unit.sp
 
 // ── Geometry ──────────────────────────────────────────────────────────────
 object MorroShapes {
-    val Card = RoundedCornerShape(16.dp)
+    /** Three steps only: control, card, sheet. More radii than that reads as inconsistency. */
     val Button = RoundedCornerShape(12.dp)
-    val Chip = RoundedCornerShape(10.dp)
-    val Sheet = RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp)
+    val Chip = RoundedCornerShape(12.dp)
+    val Card = RoundedCornerShape(16.dp)
+    val Sheet = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
 }
 
 // ── Colours ───────────────────────────────────────────────────────────────

@@ -341,10 +341,20 @@ fun PhotoMissionScreen(
                             modifier = Modifier.padding(24.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            CircularProgressIndicator(
-                                color = ColorAccent,
-                                strokeWidth = 3.dp,
-                                modifier = Modifier.size(44.dp)
+                            // Real wait (ML Kit is matching a frame): a skeleton reads calmer
+                            // than a spinner and keeps the card's shape steady.
+                            com.morro.alarm.ui.components.MorroSkeleton(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(6.dp),
+                                cornerRadius = 3
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            com.morro.alarm.ui.components.MorroSkeleton(
+                                modifier = Modifier
+                                    .fillMaxWidth(0.6f)
+                                    .height(6.dp),
+                                cornerRadius = 3
                             )
                             Spacer(modifier = Modifier.height(16.dp))
                             Text(

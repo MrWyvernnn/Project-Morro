@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.widthIn
@@ -56,6 +57,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -76,6 +80,9 @@ import androidx.compose.ui.unit.sp
 import com.morro.alarm.ui.components.DriftingClouds
 import com.morro.alarm.ui.theme.MorroColors
 import com.morro.alarm.ui.theme.MorroShapes
+import com.morro.alarm.ui.motion.MorroMotion
+import com.morro.alarm.ui.motion.pressScale
+import com.morro.alarm.ui.motion.staggeredReveal
 import com.morro.alarm.ui.theme.MorroSpring
 import com.morro.alarm.ui.theme.morroHairline
 import kotlinx.coroutines.launch
@@ -103,6 +110,18 @@ private data class OnboardingQuestion(
 )
 
 private const val TotalQuestions = 7
+
+/** Draft answers as a flat key/value list, so rotation does not wipe the flow. */
+private val AnswersSaver = Saver<SnapshotStateMap<String, String>, List<String>>(
+    save = { map -> map.entries.flatMap { listOf(it.key, it.value) } },
+    restore = { flat ->
+        mutableStateMapOf<String, String>().apply {
+            for (i in flat.indices step 2) {
+                if (i + 1 < flat.size) put(flat[i], flat[i + 1])
+            }
+        }
+    }
+)
 
 private val questions: List<OnboardingQuestion> = listOf(
     OnboardingQuestion(
@@ -212,8 +231,11 @@ fun PersonalizedQuestions(
     val scope = rememberCoroutineScope()
     val imeVisible = WindowInsets.isImeVisible
 
-    var index by remember { mutableIntStateOf(0) }
-    val answers = remember { mutableStateMapOf<String, String>() }
+    var index by rememberSaveable { mutableIntStateOf(0) }
+    // Draft answers survive rotation and process death; the map is flattened to a String list.
+    val answers: SnapshotStateMap<String, String> = rememberSaveable(saver = AnswersSaver) {
+        mutableStateMapOf()
+    }
 
     val topSpace by animateDpAsState(
         targetValue = if (imeVisible) 8.dp else 24.dp,
@@ -439,11 +461,12 @@ private fun QuestionBody(
                 modifier = Modifier.selectableGroup(),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                question.options.forEach { option ->
+                question.options.forEachIndexed { optionIndex, option ->
                     AnswerCard(
                         label = option,
                         variant = if (option == selected) CardVariant.Selected else CardVariant.Unselected,
-                        onClick = { onSelect(option) }
+                        onClick = { onSelect(option) },
+                        index = optionIndex
                     )
                 }
             }
@@ -469,15 +492,11 @@ private fun AnswerCard(
     label: String,
     variant: CardVariant,
     onClick: () -> Unit,
+    index: Int = 0,
 ) {
     val selected = variant == CardVariant.Selected
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.98f else 1f,
-        animationSpec = MorroSpring.FloatSpringPlayful,
-        label = "answerPress"
-    )
     val shape = MorroShapes.Card
     val container by animateColorAsState(
         targetValue = if (selected) MorroColors.SurfaceElevated else MorroColors.SurfaceCard,
@@ -499,9 +518,9 @@ private fun AnswerCard(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 58.dp)
+            .staggeredReveal(index)
+            .pressScale(interactionSource)
             .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
                 translationY = lift
             }
             .clip(shape)
@@ -568,11 +587,6 @@ private fun AnswerCard(
 private fun ContinueButton(active: Boolean, onClick: () -> Unit) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.97f else if (active) 1f else 0.99f,
-        animationSpec = MorroSpring.FloatSpringPlayful,
-        label = "continuePress"
-    )
     val fill by animateColorAsState(
         targetValue = if (active) MorroColors.TextPrimary else MorroColors.SurfaceElevated,
         animationSpec = tween(durationMillis = 200),
@@ -593,10 +607,7 @@ private fun ContinueButton(active: Boolean, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .height(52.dp)
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            }
+            .pressScale(interactionSource)
             .clip(MorroShapes.Button)
             .background(fill)
             .morroHairline(radius = 12.dp, color = border)
@@ -619,7 +630,12 @@ private fun ContinueButton(active: Boolean, onClick: () -> Unit) {
     }
 }
 
-/** Five segments: completed and current are filled with the same warm white, the rest stay quiet. */
+/**
+ * Seven segments: completed and current are filled with the same warm white, the rest stay quiet.
+ *
+ * Each fill is revealed by width rather than by colour, so progress reads as a mask sliding over
+ * the track instead of a light switching on.
+ */
 @Composable
 private fun ProgressRail(index: Int) {
     Row(
@@ -627,13 +643,9 @@ private fun ProgressRail(index: Int) {
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         for (segment in 0 until TotalQuestions) {
-            val fill by animateColorAsState(
-                targetValue = if (segment <= index) {
-                    MorroColors.TextPrimary.copy(alpha = 0.75f)
-                } else {
-                    MorroColors.BorderSubtle
-                },
-                animationSpec = tween(durationMillis = 260),
+            val filled by animateFloatAsState(
+                targetValue = if (segment <= index) 1f else 0f,
+                animationSpec = tween(320, easing = MorroMotion.EnterEasing),
                 label = "railSegment$segment"
             )
             Box(
@@ -641,8 +653,15 @@ private fun ProgressRail(index: Int) {
                     .weight(1f)
                     .height(2.dp)
                     .clip(RoundedCornerShape(1.dp))
-                    .background(fill)
-            )
+                    .background(MorroColors.BorderSubtle)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .fillMaxWidth(filled)
+                        .background(MorroColors.TextPrimary.copy(alpha = 0.75f))
+                )
+            }
         }
     }
 }

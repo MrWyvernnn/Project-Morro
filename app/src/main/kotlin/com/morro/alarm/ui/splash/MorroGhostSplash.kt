@@ -44,7 +44,8 @@ import com.morro.alarm.ui.theme.MorroColors
 import com.morro.alarm.ui.theme.MorroSpring
 import kotlinx.coroutines.delay
 
-private const val SplashHoldMillis = 2_200L
+// Short enough to stay inside the Doherty threshold: the splash is a greeting, not a wait.
+private const val SplashHoldMillis = 700L
 private const val ReducedHoldMillis = 200L
 
 /**

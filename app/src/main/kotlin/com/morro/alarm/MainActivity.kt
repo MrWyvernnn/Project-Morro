@@ -17,6 +17,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -48,6 +49,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -59,7 +61,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -74,15 +78,19 @@ import com.morro.alarm.ui.components.AlarmBuilderSheet
 import com.morro.alarm.ui.components.AlarmBuilderSheetContent
 import com.morro.alarm.ui.components.MorroAnalogClock
 import com.morro.alarm.ui.components.MorroPrimaryButton
+import com.morro.alarm.ui.components.MorroStatusDot
+import com.morro.alarm.ui.components.MorroSwitch
 import com.morro.alarm.ui.components.MorroPrivacyPolicySheet
 import com.morro.alarm.ui.onboarding.OnboardingGate
 import com.morro.alarm.ui.onboarding.PersonalizationStorage
 import com.morro.alarm.ui.onboarding.PersonalizedQuestions
 import com.morro.alarm.ui.splash.MorroGhostSplash
+import com.morro.alarm.ui.motion.pressScale
 import com.morro.alarm.ui.theme.MorroSpring
 import com.morro.alarm.ui.theme.MorroTheme
 import com.morro.alarm.ui.theme.morroColors
 import com.morro.alarm.ui.theme.morroHairline
+import com.morro.alarm.ui.theme.morroShapes
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -120,8 +128,8 @@ class MainActivity : ComponentActivity() {
 
                 // One flag for the intro; a returning person lands straight on the dashboard.
                 val alreadyOnboarded = OnboardingGate.isComplete(this@MainActivity)
-                var splashDone by remember { mutableStateOf(alreadyOnboarded) }
-                var questionsDone by remember {
+                var splashDone by rememberSaveable { mutableStateOf(alreadyOnboarded) }
+                var questionsDone by rememberSaveable {
                     mutableStateOf(alreadyOnboarded || PersonalizationStorage.isComplete(this@MainActivity))
                 }
 
@@ -168,6 +176,7 @@ fun MainAlarmScreen(context: Context) {
     val audioManager = remember {
         context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
     }
+    val haptics = LocalHapticFeedback.current
     var alarmVolume by remember {
         mutableIntStateOf(audioManager?.getStreamVolume(AudioManager.STREAM_ALARM) ?: 1)
     }
@@ -344,6 +353,8 @@ fun MainAlarmScreen(context: Context) {
                     },
                     onSetAlarm = { showAlarmBuilder = true },
                     onArmToggle = { armed ->
+                        // Confirm the state change on the same frame the switch moves.
+                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         val saved = savedAlarm
                         if (armed && saved != null) {
                             AlarmScheduler.scheduleDailyAlarm(context, saved.first, saved.second)
@@ -357,7 +368,8 @@ fun MainAlarmScreen(context: Context) {
             }
         }
 
-        if (showAlarmBuilder) {
+        // Always composed: the sheet needs to stay on screen for its 192ms exit animation.
+        run {
             val initialHour = savedAlarm?.first ?: 7
             val initialMinute = savedAlarm?.second ?: 0
             AlarmBuilderSheet(
@@ -426,14 +438,22 @@ private fun AlarmDock(
 ) {
     val colors = morroColors()
     val armed = dockTime != null && hasActiveAlarm
-    val shape = RoundedCornerShape(20.dp)
+    val shape = morroShapes().Card
+    val dockInteraction = remember { MutableInteractionSource() }
 
     Column(
         modifier = modifier
             .fillMaxWidth()
+            // The whole dock opens setup (Fitts); the arm switch consumes its own taps.
+            .pressScale(dockInteraction, pressedScale = 0.995f)
+            .clickable(
+                interactionSource = dockInteraction,
+                indication = null,
+                onClick = onSetAlarm
+            )
             .clip(shape)
             .background(colors.surfaceCard)
-            .morroHairline(radius = 20.dp)
+            .morroHairline(radius = 16.dp)
             .padding(horizontal = 20.dp, vertical = 18.dp)
     ) {
         Row(
@@ -447,16 +467,10 @@ private fun AlarmDock(
                 letterSpacing = 0.2.sp,
                 color = colors.textTertiary
             )
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(6.dp)
-                        .background(
-                            if (armed) colors.honey else colors.textDisabled,
-                            CircleShape
-                        )
-                )
-                Spacer(modifier = Modifier.width(8.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                    // One pulse when the alarm arms, then still: the app's only celebratory motion.
+                    MorroStatusDot(armed = armed)
+                    Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = if (armed) "Armed" else "Idle",
                     fontSize = 12.sp,
@@ -485,15 +499,9 @@ private fun AlarmDock(
                     // off the card.
                     modifier = Modifier.weight(1f, fill = false)
                 )
-                Switch(
+                MorroSwitch(
                     checked = hasActiveAlarm,
-                    onCheckedChange = onArmToggle,
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = colors.canvas,
-                        checkedTrackColor = colors.honey,
-                        uncheckedThumbColor = colors.textSecondary,
-                        uncheckedTrackColor = colors.surfaceLow
-                    )
+                    onCheckedChange = onArmToggle
                 )
             }
 

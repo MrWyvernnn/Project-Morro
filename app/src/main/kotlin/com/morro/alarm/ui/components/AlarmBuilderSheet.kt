@@ -9,6 +9,10 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.StartOffset
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
@@ -19,6 +23,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -61,6 +66,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
@@ -72,9 +79,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -88,6 +98,10 @@ import com.morro.alarm.MemoStorage
 import com.morro.alarm.mission.MissionPrefs
 import com.morro.alarm.mission.MissionType
 import com.morro.alarm.mission.PhotoTargetPool
+import com.morro.alarm.ui.motion.MorroMotion
+import com.morro.alarm.ui.motion.pressScale
+import com.morro.alarm.ui.motion.staggeredReveal
+import com.morro.alarm.ui.motion.rememberReducedMotion
 import com.morro.alarm.ui.theme.MorroSpring
 import com.morro.alarm.ui.theme.morroColors
 import com.morro.alarm.ui.theme.morroHairline
@@ -96,6 +110,7 @@ import com.morro.alarm.ui.theme.morroTypography
 import java.util.Locale
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 // ─── Voice Commitment States ─────────────────────────────────────────────────
 enum class VoiceState {
@@ -129,14 +144,31 @@ fun AlarmBuilderSheet(
     val colors = morroColors()
     val shapes = morroShapes()
 
-    if (!isVisible) return
-
-    // One Animatable drives the scrim, the lift and the fade, so the sheet is never half-visible.
+    // Enter eases out from a 0.95 scale, exit runs at 80% of that duration back to 0.95. The sheet
+    // stays composed until its exit finishes, so dismissing does not cut the animation off.
     val appear = remember { Animatable(0f) }
-    LaunchedEffect(Unit) {
-        appear.animateTo(1f, MorroSpring.FloatSpringMomentum)
+    val reduced = rememberReducedMotion()
+    LaunchedEffect(isVisible) {
+        if (reduced) {
+            appear.snapTo(if (isVisible) 1f else 0f)
+        } else {
+            appear.animateTo(
+                targetValue = if (isVisible) 1f else 0f,
+                animationSpec = tween(
+                    durationMillis = if (isVisible) 240 else MorroMotion.exitMillis(240),
+                    easing = if (isVisible) MorroMotion.EnterEasing else MorroMotion.ExitEasing
+                )
+            )
+        }
     }
     val progress = appear.value
+    if (!isVisible && progress == 0f) return
+
+    // The handle is the only drag target, so it cannot fight the sheet's inner scroll.
+    val drag = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+    val dismissAt = with(LocalDensity.current) { 120.dp.toPx() }
+    val handleStretch = 1f + 0.12f * (drag.value / dismissAt).coerceIn(0f, 1f)
 
     Box(modifier = Modifier.fillMaxSize()) {
         // Scrim at 88% black: the dashboard clock and dock never read through the sheet.
@@ -152,8 +184,13 @@ fun AlarmBuilderSheet(
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .fillMaxHeight(0.92f)
-                .offset {
-                    IntOffset(x = 0, y = ((1f - progress) * 80f * density).roundToInt())
+                .graphicsLayer {
+                    val s = 0.95f + 0.05f * progress
+                    scaleX = s
+                    scaleY = s
+                    alpha = progress
+                    transformOrigin = TransformOrigin(0.5f, 1f)
+                    translationY = (1f - progress) * 40f * density + drag.value
                 }
                 .clip(shapes.Sheet)
                 .background(colors.surface)
@@ -161,15 +198,36 @@ fun AlarmBuilderSheet(
                 .navigationBarsPadding()
                 .imePadding()
         ) {
-            // Drag handle: a single 40dp line, with the air around it done by padding.
+            // Drag handle: a single 40dp line that stretches to 112% while pulled, the way a
+            // physical knob deforms under a finger. It is the sheet's only drag target.
             Box(
                 modifier = Modifier
                     .padding(top = 10.dp, bottom = 14.dp)
                     .align(Alignment.CenterHorizontally)
-                    .width(40.dp)
+                    .width((40f * handleStretch).dp)
                     .height(4.dp)
                     .clip(RoundedCornerShape(2.dp))
                     .background(colors.borderSubtle)
+                    .pointerInput(Unit) {
+                        detectVerticalDragGestures(
+                            onDragEnd = {
+                                if (drag.value > dismissAt * 0.5f) onDismiss()
+                                scope.launch { drag.animateTo(0f, MorroMotion.PressRelease) }
+                            },
+                            onDragCancel = {
+                                scope.launch { drag.animateTo(0f, MorroMotion.PressRelease) }
+                            }
+                        ) { _, delta ->
+                            val raw = drag.value + delta
+                            // Pulling past the top is resisted, never blocked.
+                            val next = if (raw < 0f) {
+                                MorroMotion.rubberBand(raw, dismissAt * 4f)
+                            } else {
+                                raw
+                            }
+                            scope.launch { drag.snapTo(next) }
+                        }
+                    }
             )
 
             Box(modifier = Modifier.weight(1f)) {
@@ -198,19 +256,19 @@ fun AlarmBuilderSheetContent(
     val context = LocalContext.current
 
     // ── Time state ────────────────────────────────────────────────────────────
-    var selectedHour by remember { mutableStateOf(initialHour) }
-    var selectedMinute by remember { mutableStateOf(initialMinute) }
+    var selectedHour by rememberSaveable { mutableStateOf(initialHour) }
+    var selectedMinute by rememberSaveable { mutableStateOf(initialMinute) }
 
     // ── Mission selection ─────────────────────────────────────────────────────
     var selectedMission by remember { mutableStateOf(MissionPrefs.getMissionType(context)) }
 
     // ── QR code ───────────────────────────────────────────────────────────────
     var qrCodeValue by remember { mutableStateOf(MissionPrefs.getQrCode(context)) }
-    var showQrDialog by remember { mutableStateOf(false) }
+    var showQrDialog by rememberSaveable { mutableStateOf(false) }
 
     // ── Photo items ───────────────────────────────────────────────────────────
     var selectedPhotoItems by remember { mutableStateOf(MissionPrefs.getSelectedPhotoItems(context)) }
-    var showPhotoSheet by remember { mutableStateOf(false) }
+    var showPhotoSheet by rememberSaveable { mutableStateOf(false) }
 
     // ── Voice commitment state machine ───────────────────────────────────────
     var voiceState by remember { mutableStateOf(VoiceState.IDLE) }
@@ -360,6 +418,7 @@ fun AlarmBuilderSheetContent(
             MorroOptionChip(
                 title = "Voice Commitment",
                 subtitle = "Record a line in your own voice",
+                staggerIndex = 0,
                 icon = Icons.Filled.Mic,
                 isSelected = selectedMission == MissionType.VOICE_COMMITMENT || selectedMission == MissionType.VOICE_MEMO,
                 onSelect = { selectedMission = MissionType.VOICE_COMMITMENT },
@@ -384,6 +443,7 @@ fun AlarmBuilderSheetContent(
             MorroOptionChip(
                 title = "QR / Barcode Scan",
                 subtitle = "Scan a code you keep by the bed",
+                staggerIndex = 1,
                 icon = Icons.Filled.QrCodeScanner,
                 isSelected = selectedMission == MissionType.QR_CODE || selectedMission == MissionType.QR_BARCODE,
                 onSelect = { selectedMission = MissionType.QR_CODE },
@@ -403,6 +463,7 @@ fun AlarmBuilderSheetContent(
             MorroOptionChip(
                 title = "Object Photo Hunt",
                 subtitle = "Morro picks one object from your pool",
+                staggerIndex = 2,
                 icon = Icons.Filled.PhotoCamera,
                 isSelected = selectedMission == MissionType.PHOTO_MISSION || selectedMission == MissionType.PHOTO_OBJECT,
                 onSelect = { selectedMission = MissionType.PHOTO_MISSION },
@@ -422,6 +483,7 @@ fun AlarmBuilderSheetContent(
             MorroOptionChip(
                 title = "Math Puzzle",
                 subtitle = "Not in this build yet",
+                staggerIndex = 3,
                 icon = Icons.Filled.Calculate,
                 isSelected = false,
                 onSelect = {},
@@ -478,8 +540,9 @@ private fun TimePickerCard(
     // Every change of time lands with a small spring, so the numbers feel set rather than typed.
     val pop = remember { Animatable(1f) }
     LaunchedEffect(selectedHour, selectedMinute) {
-        pop.snapTo(0.94f)
-        pop.animateTo(1f, MorroSpring.FloatSpringPlayful)
+        // A set time snaps, then settles. No bounce: this happens on every minute change.
+        pop.snapTo(0.97f)
+        pop.animateTo(1f, MorroMotion.PressRelease)
     }
 
     Column(
@@ -526,6 +589,31 @@ private fun TimePickerCard(
                 fontSize = 12.sp
             )
         }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // Three common times. A default beats an open question (Parkinson), and three choices are
+        // cheaper than a full picker when one of them fits (Hick).
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(6 to 0, 7 to 0, 8 to 0).forEach { (hour, minute) ->
+                val active = selectedHour == hour && selectedMinute == minute
+                Text(
+                    text = String.format(Locale.getDefault(), "%02d:00", hour),
+                    fontSize = 12.sp,
+                    color = if (active) colors.honey else colors.textSecondary,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .morroHairline(
+                            radius = 50.dp,
+                            color = if (active) colors.borderStrong else colors.borderSubtle
+                        )
+                        .clickable { onTimeChange(hour, minute) }
+                        .heightIn(min = 48.dp)
+                        .wrapContentHeight(Alignment.CenterVertically)
+                        .padding(horizontal = 16.dp)
+                )
+            }
+        }
     }
 }
 
@@ -540,6 +628,7 @@ private fun MorroOptionChip(
     icon: ImageVector,
     isSelected: Boolean,
     onSelect: () -> Unit,
+    staggerIndex: Int = 0,
     showExpanded: Boolean = false,
     enabled: Boolean = true,
     expandedContent: @Composable (() -> Unit)? = null
@@ -549,21 +638,12 @@ private fun MorroOptionChip(
     val shapes = morroShapes()
 
     val interactionSource = remember { MutableInteractionSource() }
-    val pressed by interactionSource.collectIsPressedAsState()
-    val pressScale by animateFloatAsState(
-        targetValue = if (pressed && enabled) 0.985f else 1f,
-        animationSpec = MorroSpring.FloatSpringPlayful,
-        label = "missionPress"
-    )
 
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(modifier = Modifier.fillMaxWidth().staggeredReveal(staggerIndex)) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .graphicsLayer {
-                    scaleX = pressScale
-                    scaleY = pressScale
-                }
+                .pressScale(interactionSource, enabled, MorroMotion.RowPressedScale)
                 .clip(shapes.Card)
                 .background(if (isSelected) colors.surfaceElevated else colors.surfaceCard)
                 .morroHairline(
@@ -629,13 +709,29 @@ private fun MorroOptionChip(
             }
         }
 
-        if (showExpanded && enabled && expandedContent != null) {
-            Spacer(modifier = Modifier.height(12.dp))
-            MorroCard(modifier = Modifier.fillMaxWidth()) { cardModifier ->
-                // MorroCard hands its inner modifier back so the card's own padding is applied.
-                // Dropping it put the panel's text flush against the card border.
-                Box(modifier = cardModifier.fillMaxWidth()) {
-                    expandedContent()
+        if (enabled && expandedContent != null) {
+            AnimatedVisibility(
+                visible = showExpanded,
+                enter = fadeIn(tween(MorroMotion.ExpanderMillis, easing = MorroMotion.EnterEasing)) +
+                    expandVertically(
+                        animationSpec = tween(MorroMotion.ExpanderMillis, easing = MorroMotion.EnterEasing),
+                        expandFrom = Alignment.Top
+                    ),
+                exit = fadeOut(tween(MorroMotion.exitMillis(MorroMotion.ExpanderMillis), easing = MorroMotion.ExitEasing)) +
+                    shrinkVertically(
+                        animationSpec = tween(MorroMotion.exitMillis(MorroMotion.ExpanderMillis), easing = MorroMotion.ExitEasing),
+                        shrinkTowards = Alignment.Top
+                    )
+            ) {
+                Column {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    MorroCard(modifier = Modifier.fillMaxWidth()) { cardModifier ->
+                        // MorroCard hands its inner modifier back so the card's own padding is applied.
+                        // Dropping it put the panel's text flush against the card border.
+                        Box(modifier = cardModifier.fillMaxWidth()) {
+                            expandedContent()
+                        }
+                    }
                 }
             }
         }
