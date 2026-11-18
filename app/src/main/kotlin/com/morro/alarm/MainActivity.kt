@@ -80,6 +80,7 @@ import com.morro.alarm.ui.components.MorroSwitch
 import com.morro.alarm.ui.components.MorroPrivacyPolicySheet
 import com.morro.alarm.ui.onboarding.OnboardingGate
 import com.morro.alarm.ui.onboarding.PaywallScreen
+import com.morro.alarm.ui.onboarding.PersonalizingScreen
 import com.morro.alarm.ui.onboarding.PersonalizationStorage
 import com.morro.alarm.ui.onboarding.PersonalizedQuestions
 import com.morro.alarm.ui.onboarding.SignInScreen
@@ -135,6 +136,7 @@ class MainActivity : ComponentActivity() {
                 var questionsDone by rememberSaveable {
                     mutableStateOf(alreadyOnboarded || PersonalizationStorage.isComplete(this@MainActivity))
                 }
+                var personalizeDone by rememberSaveable { mutableStateOf(alreadyOnboarded) }
                 var paywallDone by rememberSaveable { mutableStateOf(alreadyOnboarded) }
 
                 when {
@@ -153,6 +155,9 @@ class MainActivity : ComponentActivity() {
                             questionsDone = true
                         }
                     )
+
+                    // The answers are saved; this beat is the transition into choosing a plan.
+                    !personalizeDone -> PersonalizingScreen(onDone = { personalizeDone = true })
 
                     !paywallDone -> PaywallScreen(onContinue = { paywallDone = true })
 

@@ -44,6 +44,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.morro.alarm.ui.components.MorroGhostMascot
 import com.morro.alarm.ui.components.MorroPrimaryButton
 import com.morro.alarm.ui.motion.MorroMotion
 import com.morro.alarm.ui.motion.pressScale
@@ -133,7 +134,18 @@ fun PaywallScreen(
                 .fillMaxWidth()
                 .staggeredReveal(0)
         ) {
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // The same smiling ghost that opens the app, small enough not to compete with the
+            // prices: the character carries the screen, the plans carry the decision.
+            MorroGhostMascot(
+                modifier = Modifier
+                    .size(width = 76.dp, height = 88.dp)
+                    .align(Alignment.CenterHorizontally),
+                happy = true
+            )
+
+            Spacer(modifier = Modifier.height(18.dp))
 
             Text(
                 text = "Choose your plan",
