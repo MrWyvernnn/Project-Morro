@@ -66,6 +66,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -267,7 +269,24 @@ fun PersonalizedQuestions(
     BackHandler(enabled = index > 0) { index -= 1 }
 
     Box(modifier = modifier.fillMaxSize().imePadding()) {
-        DriftingClouds(intensity = 0.8f)
+        DriftingClouds(intensity = 0.7f)
+
+        // The sky is scenery; the question is the page. A soft scrim keeps the clouds in the margins
+        // so a longer question (the hour quote, the two free-text prompts) never sits on a cloud.
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .drawBehind {
+                    drawRect(
+                        brush = Brush.horizontalGradient(
+                            0f to Color.Transparent,
+                            0.10f to MorroColors.Canvas.copy(alpha = 0.95f),
+                            0.90f to MorroColors.Canvas.copy(alpha = 0.95f),
+                            1f to Color.Transparent
+                        )
+                    )
+                }
+        )
 
         Column(
             modifier = Modifier

@@ -47,7 +47,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Mic
@@ -476,17 +475,6 @@ fun AlarmBuilderSheetContent(
                     )
                 }
             )
-
-            // 4. Math puzzle — reserved. Not wired end to end, so it is shown honestly as "Soon".
-            MorroOptionChip(
-                title = "Math Puzzle",
-                subtitle = "Not in this build yet",
-                staggerIndex = 3,
-                icon = Icons.Filled.Calculate,
-                isSelected = false,
-                onSelect = {},
-                enabled = false
-            )
         }
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -616,8 +604,7 @@ private fun TimePickerCard(
 }
 
 /**
- * MorroOptionChip — one mission. Selected takes a 35% border, a honey icon and a check; a disabled
- * mission says "Soon" and explains itself in the subtitle instead of pretending to work.
+ * MorroOptionChip — one mission. Selected takes a 35% border, a honey icon and a check.
  */
 @Composable
 private fun MorroOptionChip(
@@ -628,7 +615,6 @@ private fun MorroOptionChip(
     onSelect: () -> Unit,
     staggerIndex: Int = 0,
     showExpanded: Boolean = false,
-    enabled: Boolean = true,
     expandedContent: @Composable (() -> Unit)? = null
 ) {
     val colors = morroColors()
@@ -641,7 +627,7 @@ private fun MorroOptionChip(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .pressScale(interactionSource, enabled, MorroMotion.RowPressedScale)
+                .pressScale(interactionSource, true, MorroMotion.RowPressedScale)
                 .clip(shapes.Card)
                 .background(if (isSelected) colors.surfaceElevated else colors.surfaceCard)
                 .morroHairline(
@@ -651,7 +637,6 @@ private fun MorroOptionChip(
                 .clickable(
                     interactionSource = interactionSource,
                     indication = null,
-                    enabled = enabled,
                     onClick = onSelect
                 )
                 .padding(16.dp)
@@ -669,8 +654,7 @@ private fun MorroOptionChip(
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
-                        tint = if (isSelected) colors.honey
-                        else if (enabled) colors.textSecondary else colors.textTertiary,
+                        tint = if (isSelected) colors.honey else colors.textSecondary,
                         modifier = Modifier.size(20.dp)
                     )
                     Column(
@@ -680,23 +664,17 @@ private fun MorroOptionChip(
                         Text(
                             text = title,
                             style = typo.titleMedium,
-                            color = if (enabled) colors.textPrimary else colors.textTertiary
+                            color = colors.textPrimary
                         )
                         Text(
                             text = subtitle,
                             style = typo.bodyMedium,
-                            color = if (enabled) colors.textSecondary else colors.textTertiary
+                            color = colors.textSecondary
                         )
                     }
                 }
 
-                if (!enabled) {
-                    Text(
-                        text = "Soon",
-                        color = colors.textTertiary,
-                        fontSize = 11.sp
-                    )
-                } else if (isSelected) {
+                if (isSelected) {
                     Icon(
                         imageVector = Icons.Filled.Check,
                         contentDescription = "Selected",
@@ -707,7 +685,7 @@ private fun MorroOptionChip(
             }
         }
 
-        if (enabled && expandedContent != null) {
+        if (expandedContent != null) {
             AnimatedVisibility(
                 visible = showExpanded,
                 enter = fadeIn(tween(MorroMotion.ExpanderMillis, easing = MorroMotion.EnterEasing)) +

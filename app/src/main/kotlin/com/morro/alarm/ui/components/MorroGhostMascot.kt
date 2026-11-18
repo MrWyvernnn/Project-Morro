@@ -37,9 +37,13 @@ import kotlin.math.sin
  * three deep round hem scallops. The body is one closed path filled with a single-neutral tone
  * shift and closed with a 1.4dp rim — no bloom, no halo, nothing glowing behind it.
  *
- * Motion: it floats. A slow rise and fall, a light side-to-side sway with a matching tilt, a faint
- * breathing stretch and a two-frame blink. No landing squash — the mascot hovers rather than hops,
- * which reads calmer next to the copy it sits above.
+ * Motion: it floats. A slow rise and fall with a second, quicker bob on top, a side-to-side sway
+ * with a matching tilt, a breathing stretch, a two-frame blink whose eyes follow the drift, and a
+ * hem that ripples as it hovers. No landing squash — the mascot hovers rather than hops, which
+ * reads calmer next to the copy it sits above.
+ *
+ * The silhouette is slim from the middle: both flanks are pulled inward just below the dome, then
+ * return to the hem, so the body reads as a waist rather than as a cone.
  */
 @Composable
 fun MorroGhostMascot(
@@ -71,10 +75,13 @@ fun MorroGhostMascot(
 
     val phase = if (reduced) 0f else drift
     val floatFraction = if (reduced) 0f else floatOffset(phase)
-    val sway = if (reduced) 0f else sin(phase * 2f * PI.toFloat()) * 2.2f
-    val tilt = if (reduced) 0f else sin(phase * 2f * PI.toFloat()) * 1.2f
-    val stretch = if (reduced) 1f else 0.99f + 0.02f * breath
+    val angle = phase * 2f * PI.toFloat()
+    val sway = if (reduced) 0f else sin(angle) * 3.6f
+    val tilt = if (reduced) 0f else sin(angle) * 2.2f + sin(angle * 2f) * 0.6f
+    val stretch = if (reduced) 1f else 0.975f + 0.045f * breath
     val blink = if (reduced) 1f else blinkAmount(phase)
+    // Eyes travel with the drift: the mascot looks the way it leans.
+    val gaze = if (reduced) 0f else sin(angle)
 
     Box(modifier = modifier) {
         Canvas(
@@ -98,15 +105,23 @@ fun MorroGhostMascot(
                     bodyColor = MorroColors.SurfaceElevated,
                     eyeColor = MorroColors.EyeRose,
                     happy = happy,
-                    blink = blink
+                    blink = blink,
+                    gaze = gaze,
+                    hemWave = phase
                 )
             }
         }
     }
 }
 
-/** Vertical hover, as a fraction of the canvas height. Positive is down. */
-private fun floatOffset(t: Float): Float = -sin(t * 2f * PI.toFloat()) * 0.038f
+/**
+ * Vertical hover, as a fraction of the canvas height. Positive is down.
+ *
+ * Two sine waves that both complete whole cycles per loop: the slow breath of the hover, plus a
+ * shorter bob so the float never reads as a single mechanical pulse.
+ */
+private fun floatOffset(t: Float): Float =
+    -sin(t * 2f * PI.toFloat()) * 0.048f - sin(t * 4f * PI.toFloat()) * 0.010f
 
 /** A two-frame blink, once per float cycle. */
 private fun blinkAmount(t: Float): Float = when {
@@ -129,6 +144,8 @@ private fun DrawScope.drawGhost(
     eyeColor: Color = MorroColors.EyeRose,
     happy: Boolean = true,
     blink: Float = 1f,
+    gaze: Float = 0f,
+    hemWave: Float = 0f,
 ) {
     val centerX = canvasSize.width / 2f
     val bodyWidth = canvasSize.width * 0.68f
@@ -142,6 +159,8 @@ private fun DrawScope.drawGhost(
 
     val waistY = headTop + headHeight * 0.94f
     val bulge = bodyWidth * 0.055f
+    // Slim from the middle: the flanks sit this far inside the dome's width at the waist.
+    val pinch = bodyWidth * 0.075f
 
     val body = Path().apply {
         moveTo(left, waistY)
@@ -159,10 +178,10 @@ private fun DrawScope.drawGhost(
             right, waistY
         )
 
-        // Right flank down to the hem.
+        // Right flank: in at the waist, then back out to the hem.
         cubicTo(
-            right + bulge, waistY + (bodyBottom - waistY) * 0.32f,
-            right + bulge * 0.7f, bodyBottom - hemHeight * 0.75f,
+            right - pinch, waistY + (bodyBottom - waistY) * 0.24f,
+            right - pinch, bodyBottom - hemHeight * 1.10f,
             right, bodyBottom - hemHeight * 0.42f
         )
 
@@ -173,24 +192,26 @@ private fun DrawScope.drawGhost(
         while (index < 3) {
             val endX = startX - scallop
             val midX = (startX + endX) / 2f
+            // Each scallop laps slightly out of phase, so the hem ripples instead of hanging still.
+            val ripple = sin(hemWave * 2f * PI.toFloat() + index * 1.7f) * hemHeight * 0.14f
             cubicTo(
-                startX - scallop * 0.10f, bodyBottom + hemHeight * 0.70f,
-                midX + scallop * 0.16f, bodyBottom + hemHeight * 0.72f,
+                startX - scallop * 0.10f, bodyBottom + hemHeight * 0.70f + ripple,
+                midX + scallop * 0.16f, bodyBottom + hemHeight * 0.72f + ripple,
                 midX, bodyBottom + hemHeight * 0.54f
             )
             cubicTo(
-                midX - scallop * 0.16f, bodyBottom + hemHeight * 0.72f,
-                endX + scallop * 0.10f, bodyBottom + hemHeight * 0.70f,
+                midX - scallop * 0.16f, bodyBottom + hemHeight * 0.72f + ripple,
+                endX + scallop * 0.10f, bodyBottom + hemHeight * 0.70f + ripple,
                 endX, bodyBottom - hemHeight * 0.42f
             )
             startX = endX
             index++
         }
 
-        // Left flank back up.
+        // Left flank back up, mirroring the waist pinch.
         cubicTo(
-            left - bulge * 0.7f, bodyBottom - hemHeight * 0.75f,
-            left - bulge, waistY + (bodyBottom - waistY) * 0.32f,
+            left + pinch, bodyBottom - hemHeight * 1.10f,
+            left + pinch, waistY + (bodyBottom - waistY) * 0.24f,
             left, waistY
         )
         close()
@@ -230,8 +251,10 @@ private fun DrawScope.drawGhost(
     val eyeWidth = bodyWidth * 0.10f
     val eyeHeight = bodyWidth * 0.145f * blink.coerceIn(0.08f, 1f)
 
+    val eyeShift = bodyWidth * 0.030f * gaze
+
     listOf(-1f, 1f).forEach { side ->
-        val cx = centerX + side * eyeSpacing
+        val cx = centerX + side * eyeSpacing + eyeShift
 
         if (happy) {
             val path = Path().apply {
