@@ -160,5 +160,3 @@ object AlarmSoundPlayer {
 /**
  * Production alias matching architectural specification.
  */
-typealias AlarmAudioPlayer = AlarmSoundPlayer
-typealias AlarmRingingActivity = AlarmActivity

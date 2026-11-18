@@ -9,13 +9,13 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.StartOffset
 import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.spring
@@ -25,7 +25,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,7 +38,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -71,6 +69,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -90,7 +89,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.morro.alarm.MemoRecorder
@@ -109,6 +107,7 @@ import com.morro.alarm.ui.theme.morroShapes
 import com.morro.alarm.ui.theme.morroTypography
 import java.util.Locale
 import kotlin.math.roundToInt
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -131,14 +130,12 @@ enum class VoiceState {
  *
  * @param isVisible controls sheet visibility
  * @param onDismiss called when user taps backdrop or dismisses
- * @param fabCenter center of triggering FAB in window coordinates (for anchor animation)
  * @param content sheet content slot
  */
 @Composable
 fun AlarmBuilderSheet(
     isVisible: Boolean,
     onDismiss: () -> Unit,
-    fabCenter: Offset,
     content: @Composable () -> Unit
 ) {
     val colors = morroColors()
@@ -165,10 +162,10 @@ fun AlarmBuilderSheet(
     if (!isVisible && progress == 0f) return
 
     // The handle is the only drag target, so it cannot fight the sheet's inner scroll.
-    val drag = remember { Animatable(0f) }
+    var dragOffset by remember { mutableFloatStateOf(0f) }
     val scope = rememberCoroutineScope()
     val dismissAt = with(LocalDensity.current) { 120.dp.toPx() }
-    val handleStretch = 1f + 0.12f * (drag.value / dismissAt).coerceIn(0f, 1f)
+
 
     Box(modifier = Modifier.fillMaxSize()) {
         // Scrim at 88% black: the dashboard clock and dock never read through the sheet.
@@ -190,7 +187,7 @@ fun AlarmBuilderSheet(
                     scaleY = s
                     alpha = progress
                     transformOrigin = TransformOrigin(0.5f, 1f)
-                    translationY = (1f - progress) * 40f * density + drag.value
+                    translationY = (1f - progress) * 40f * density + dragOffset
                 }
                 .clip(shapes.Sheet)
                 .background(colors.surface)
@@ -204,28 +201,29 @@ fun AlarmBuilderSheet(
                 modifier = Modifier
                     .padding(top = 10.dp, bottom = 14.dp)
                     .align(Alignment.CenterHorizontally)
-                    .width((40f * handleStretch).dp)
+                    .width(40.dp)
                     .height(4.dp)
+                    // Stretch is applied in the draw phase so a drag does not recompose the sheet.
+                    .graphicsLayer {
+                        scaleX = 1f + 0.12f * (dragOffset / dismissAt).coerceIn(0f, 1f)
+                    }
                     .clip(RoundedCornerShape(2.dp))
                     .background(colors.borderSubtle)
                     .pointerInput(Unit) {
                         detectVerticalDragGestures(
                             onDragEnd = {
-                                if (drag.value > dismissAt * 0.5f) onDismiss()
-                                scope.launch { drag.animateTo(0f, MorroMotion.PressRelease) }
+                                if (dragOffset > dismissAt * 0.5f) onDismiss()
+                                scope.settleDrag(dragOffset) { dragOffset = it }
                             },
-                            onDragCancel = {
-                                scope.launch { drag.animateTo(0f, MorroMotion.PressRelease) }
-                            }
+                            onDragCancel = { scope.settleDrag(dragOffset) { dragOffset = it } }
                         ) { _, delta ->
-                            val raw = drag.value + delta
+                            val raw = dragOffset + delta
                             // Pulling past the top is resisted, never blocked.
-                            val next = if (raw < 0f) {
+                            dragOffset = if (raw < 0f) {
                                 MorroMotion.rubberBand(raw, dismissAt * 4f)
                             } else {
                                 raw
                             }
-                            scope.launch { drag.snapTo(next) }
                         }
                     }
             )
@@ -1520,5 +1518,16 @@ private fun AnimatedWaveform(
                     )
             )
         }
+    }
+}
+
+/** One place that returns the drag offset to rest, however the gesture ended. */
+private fun CoroutineScope.settleDrag(from: Float, onValue: (Float) -> Unit) {
+    launch {
+        animate(
+            initialValue = from,
+            targetValue = 0f,
+            animationSpec = MorroMotion.PressRelease
+        ) { value, _ -> onValue(value) }
     }
 }

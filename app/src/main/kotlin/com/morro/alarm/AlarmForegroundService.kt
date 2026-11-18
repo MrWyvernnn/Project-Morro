@@ -32,21 +32,36 @@ class AlarmForegroundService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val notification = buildNotification()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            try {
+        // A failed promotion must not crash the process: without a foreground notification the
+        // service has no legal reason to live, so stop it instead of holding a wake lock.
+        val promoted = try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 startForeground(
                     NOTIFICATION_ID,
                     notification,
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
                 )
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to startForeground with FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK, falling back", e)
+            } else {
                 startForeground(NOTIFICATION_ID, notification)
             }
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
+            true
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to startForeground with mediaPlayback type, retrying plainly", e)
+            try {
+                startForeground(NOTIFICATION_ID, notification)
+                true
+            } catch (retry: Exception) {
+                Log.e(TAG, "Could not promote service to foreground", retry)
+                false
+            }
         }
-        return START_STICKY
+
+        if (!promoted) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        // START_NOT_STICKY: a restart arrives with a null intent and nothing to ring for.
+        return START_NOT_STICKY
     }
 
     override fun onDestroy() {

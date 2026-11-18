@@ -83,7 +83,6 @@ import com.morro.alarm.ui.theme.MorroShapes
 import com.morro.alarm.ui.motion.MorroMotion
 import com.morro.alarm.ui.motion.pressScale
 import com.morro.alarm.ui.motion.staggeredReveal
-import com.morro.alarm.ui.theme.MorroSpring
 import com.morro.alarm.ui.theme.morroHairline
 import kotlinx.coroutines.launch
 
@@ -212,7 +211,7 @@ object PersonalizationStorage {
         editor.putString(KEY_TARGET, promise)
         editor.putString(KEY_EXTRA, answers[KEY_EXTRA].orEmpty().trim().take(MaxPromiseLength))
         editor.putBoolean(KEY_DONE, true)
-        editor.commit()
+        editor.apply()
     }
 }
 
@@ -239,12 +238,12 @@ fun PersonalizedQuestions(
 
     val topSpace by animateDpAsState(
         targetValue = if (imeVisible) 8.dp else 24.dp,
-        animationSpec = MorroSpring.DpSpringDefault,
+        animationSpec = tween(180, easing = MorroMotion.EnterEasing),
         label = "headerCompact"
     )
     val gapBelowProgress by animateDpAsState(
         targetValue = if (imeVisible) 16.dp else 32.dp,
-        animationSpec = MorroSpring.DpSpringDefault,
+        animationSpec = tween(180, easing = MorroMotion.EnterEasing),
         label = "headerGap"
     )
 
@@ -510,7 +509,7 @@ private fun AnswerCard(
     )
     val lift by animateFloatAsState(
         targetValue = if (selected) -1.5f else 0f,
-        animationSpec = MorroSpring.FloatSpringPlayful,
+        animationSpec = MorroMotion.PressRelease,
         label = "answerLift"
     )
 
@@ -556,7 +555,7 @@ private fun AnswerCard(
                 visible = selected,
                 enter = fadeIn(tween(140)) + scaleIn(
                     initialScale = 0.5f,
-                    animationSpec = MorroSpring.FloatSpringPlayful
+                    animationSpec = tween(140, easing = MorroMotion.EnterEasing)
                 ),
                 exit = fadeOut(tween(100))
             ) {

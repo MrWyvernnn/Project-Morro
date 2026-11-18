@@ -6,8 +6,6 @@ import android.media.MediaPlayer
 import android.os.PowerManager
 import android.util.Log
 import java.io.File
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * MemoPlayer: Plays a recorded memo clip.
@@ -37,26 +35,6 @@ object MemoPlayer {
     private var mediaPlayer: MediaPlayer? = null
     private var pendingCompletion: (() -> Unit)? = null
     private var pendingError: ((String) -> Unit)? = null
-
-    /**
-     * Reactive state flow for playback state. Compose can collect this via
-     * `collectAsStateWithLifecycle()` so UI survives rotation and stays in sync
-     * with the active hardware state even after the Activity is recreated.
-     */
-    private val _isPlayingFlow = MutableStateFlow(false)
-    val isPlayingFlow: kotlinx.coroutines.flow.StateFlow<Boolean> = _isPlayingFlow.asStateFlow()
-
-    /**
-     * Syncs the internal playing state with the reactive flow.
-     * Called whenever MediaPlayer is created or released.
-     */
-    private fun syncPlayingFlow() {
-        _isPlayingFlow.value = try {
-            mediaPlayer?.isPlaying == true
-        } catch (e: Exception) {
-            false
-        }
-    }
 
     /**
      * Plays the clip at [filePath] to the end.
@@ -104,7 +82,6 @@ object MemoPlayer {
                     Log.d(TAG, "MediaPlayer prepared asynchronously, starting playback")
                     try {
                         mp.start()
-                        syncPlayingFlow()
                     } catch (e: Exception) {
                         Log.e(TAG, "Error starting MediaPlayer on prepared", e)
                         stopAndReleasePlayer()
@@ -138,7 +115,6 @@ object MemoPlayer {
             Log.w(TAG, "Error stopping and releasing player", e)
         }
         mediaPlayer = null
-        syncPlayingFlow()
     }
 
     fun stopPlayback() = stopAndReleasePlayer()

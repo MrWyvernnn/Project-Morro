@@ -8,7 +8,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
@@ -31,11 +34,14 @@ fun MorroStatusDot(
     val reduced = rememberReducedMotion()
     val pulse = remember { Animatable(0f) }
 
+    // Only celebrate the transition into armed; opening the app on an armed alarm stays still.
+    var wasArmed by remember { mutableStateOf(armed) }
     LaunchedEffect(armed) {
-        if (armed && !reduced) {
+        if (armed && !wasArmed && !reduced) {
             pulse.snapTo(0f)
             pulse.animateTo(1f, tween(MorroMotion.SuccessPulseMillis))
         }
+        wasArmed = armed
     }
 
     Box(

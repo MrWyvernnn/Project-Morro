@@ -37,14 +37,12 @@ import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.animation.core.Animatable
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -59,7 +57,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
@@ -85,8 +82,8 @@ import com.morro.alarm.ui.onboarding.OnboardingGate
 import com.morro.alarm.ui.onboarding.PersonalizationStorage
 import com.morro.alarm.ui.onboarding.PersonalizedQuestions
 import com.morro.alarm.ui.splash.MorroGhostSplash
+import com.morro.alarm.ui.motion.MorroMotion
 import com.morro.alarm.ui.motion.pressScale
-import com.morro.alarm.ui.theme.MorroSpring
 import com.morro.alarm.ui.theme.MorroTheme
 import com.morro.alarm.ui.theme.morroColors
 import com.morro.alarm.ui.theme.morroHairline
@@ -229,15 +226,18 @@ fun MainAlarmScreen(context: Context) {
     }
 
     val dayFormat = remember { SimpleDateFormat("EEEE d MMMM", Locale.getDefault()) }
-    val dateLine = remember(clockCal) { dayFormat.format(clockCal.time) }
+    // Format once per day, not once per second: every tick recreating this string was pure churn.
+    val dateLine = remember(clockCal.get(Calendar.YEAR), clockCal.get(Calendar.DAY_OF_YEAR)) {
+        dayFormat.format(clockCal.time)
+    }
 
     // One entrance for the clock, a beat later for the dock: the screen assembles instead of
     // appearing all at once.
     val clockReveal = remember { Animatable(0f) }
     val dockReveal = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
-        clockReveal.animateTo(1f, MorroSpring.FloatSpringMomentum)
-        dockReveal.animateTo(1f, MorroSpring.FloatSpringMomentum)
+        clockReveal.animateTo(1f, tween(MorroMotion.EnterMillis, easing = MorroMotion.EnterEasing))
+        dockReveal.animateTo(1f, tween(MorroMotion.EnterMillis, easing = MorroMotion.EnterEasing))
     }
 
     val dockTime = remember(prefsUpdateTrigger, savedAlarm) {
@@ -369,14 +369,12 @@ fun MainAlarmScreen(context: Context) {
         }
 
         // Always composed: the sheet needs to stay on screen for its 192ms exit animation.
-        run {
-            val initialHour = savedAlarm?.first ?: 7
-            val initialMinute = savedAlarm?.second ?: 0
-            AlarmBuilderSheet(
-                isVisible = showAlarmBuilder,
-                onDismiss = { showAlarmBuilder = false },
-                fabCenter = Offset(0f, 0f),
-                content = {
+        val initialHour = savedAlarm?.first ?: 7
+        val initialMinute = savedAlarm?.second ?: 0
+        AlarmBuilderSheet(
+            isVisible = showAlarmBuilder,
+            onDismiss = { showAlarmBuilder = false },
+            content = {
                     AlarmBuilderSheetContent(
                         initialHour = initialHour,
                         initialMinute = initialMinute,
@@ -412,7 +410,6 @@ fun MainAlarmScreen(context: Context) {
                     )
                 }
             )
-        }
 
         if (showPrivacyPolicy) {
             MorroPrivacyPolicySheet(onDismiss = { showPrivacyPolicy = false })
@@ -445,7 +442,7 @@ private fun AlarmDock(
         modifier = modifier
             .fillMaxWidth()
             // The whole dock opens setup (Fitts); the arm switch consumes its own taps.
-            .pressScale(dockInteraction, pressedScale = 0.995f)
+            .pressScale(dockInteraction, pressedScale = 0.985f)
             .clickable(
                 interactionSource = dockInteraction,
                 indication = null,

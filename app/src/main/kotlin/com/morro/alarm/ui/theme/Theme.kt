@@ -260,10 +260,8 @@ private val MaterialColorScheme = darkColorScheme(
  */
 object MorroSpring {
     val FloatSpringDefault: SpringSpec<Float> = spring(dampingRatio = 1f, stiffness = 322f)
-    val FloatSpringMomentum: SpringSpec<Float> = spring(dampingRatio = 0.82f, stiffness = 386f)
     val FloatSpringPress: SpringSpec<Float> = spring(dampingRatio = 1f, stiffness = 2741f)
     val FloatSpringPlayful: SpringSpec<Float> = spring(dampingRatio = 0.55f, stiffness = 438f)
-    val DpSpringDefault: SpringSpec<Dp> = spring(dampingRatio = 1f, stiffness = 322f)
 }
 
 // ── Theme ─────────────────────────────────────────────────────────────────

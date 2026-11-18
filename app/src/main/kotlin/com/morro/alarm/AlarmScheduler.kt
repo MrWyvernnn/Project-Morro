@@ -20,15 +20,6 @@ import java.util.Locale
  */
 object AlarmScheduler {
 
-    /** Puzzle gate used to dismiss an armed alarm. */
-    enum class MissionType {
-        MATH,
-        AFFIRMATION,
-        VOICE_COMMITMENT,
-        QR_CODE,
-        PHOTO_MISSION
-    }
-
     private const val TAG = "AlarmScheduler"
     private const val PREFS_NAME = "morro_prefs"
     private const val KEY_NEXT_ALARM_TIME = "next_alarm_time"
@@ -162,11 +153,6 @@ object AlarmScheduler {
         return if (v == -1L) null else v
     }
 
-    fun getFormattedTime(context: Context): String? {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        return prefs.getString(KEY_NEXT_ALARM_FORMATTED, null)
-    }
-
     private fun savePrefs(context: Context, timeMillis: Long) {
         val fmt = SimpleDateFormat("h:mm a", Locale.getDefault())
         val formatted = fmt.format(Date(timeMillis))
@@ -175,7 +161,7 @@ object AlarmScheduler {
                 .edit()
                 .putLong(KEY_NEXT_ALARM_TIME, timeMillis)
                 .putString(KEY_NEXT_ALARM_FORMATTED, formatted)
-                .commit()
+                .apply()
         } catch (e: Exception) {
             Log.w(TAG, "Failed to persist alarm prefs", e)
         }

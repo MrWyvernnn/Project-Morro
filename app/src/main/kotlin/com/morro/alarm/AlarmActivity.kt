@@ -88,7 +88,6 @@ class AlarmActivity : ComponentActivity() {
     }
 
     private var gateState by mutableStateOf(AlarmGateState.PUZZLE)
-    private var activeMissionType by mutableStateOf(MissionType.VOICE_MEMO)
 
     private var missionGraceSeconds by mutableIntStateOf(30)
     private var graceJob: Job? = null
@@ -160,7 +159,6 @@ class AlarmActivity : ComponentActivity() {
 
         // Read user's chosen mission type
         val configuredMission = MissionPrefs.getMissionType(this)
-        activeMissionType = configuredMission
 
         // Pre-generate math problem if in puzzle mode
         nextQuestion()
@@ -188,7 +186,6 @@ class AlarmActivity : ComponentActivity() {
             MorroTheme {
                 AlarmScreen(
                     gateState = gateState,
-                                activeMissionType = activeMissionType,
                     missionGraceSeconds = missionGraceSeconds,
                     currentQuestion = currentQuestion,
                     userInput = userInput,
@@ -475,7 +472,6 @@ class AlarmActivity : ComponentActivity() {
     @Composable
     fun AlarmScreen(
         gateState: AlarmGateState,
-        activeMissionType: MissionType,
         missionGraceSeconds: Int,
         currentQuestion: MathEngine.Question?,
         userInput: String,
@@ -488,13 +484,15 @@ class AlarmActivity : ComponentActivity() {
     ) {
         val colors = morroColors()
         val typo = morroTypography()
+        // One formatter, reused every tick. Creating one twice a second was avoidable churn.
+        val timeFormat = remember { SimpleDateFormat("h:mm:ss a", Locale.getDefault()) }
         val currentTime = remember {
-            mutableStateOf(SimpleDateFormat("h:mm:ss a", Locale.getDefault()).format(Date()))
+            mutableStateOf(timeFormat.format(Date()))
         }
         LaunchedEffect(Unit) {
             while (true) {
                 delay(500L)
-                currentTime.value = SimpleDateFormat("h:mm:ss a", Locale.getDefault()).format(Date())
+                currentTime.value = timeFormat.format(Date())
             }
         }
 

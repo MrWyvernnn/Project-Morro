@@ -7,8 +7,6 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * MemoRecorder: Records the user's voice memo into app-private storage.
@@ -36,22 +34,6 @@ object MemoRecorder {
 
     private var recorder: MediaRecorder? = null
     private var activeAppContext: Context? = null
-
-    /**
-     * Reactive state flow for recording state. Compose can collect this via
-     * `collectAsStateWithLifecycle()` so UI survives rotation and stays in sync
-     * with the active hardware state even after the Activity is recreated.
-     */
-    private val _isRecordingFlow = MutableStateFlow(false)
-    val isRecordingFlow: kotlinx.coroutines.flow.StateFlow<Boolean> = _isRecordingFlow.asStateFlow()
-
-    /**
-     * Syncs the internal `recordingActive` flag with the reactive flow.
-     * Called from every state transition so Compose UI stays in sync.
-     */
-    private fun syncRecordingFlow() {
-        _isRecordingFlow.value = recordingActive
-    }
 
     /**
      * Internal flag to track recording state for race condition protection.
@@ -115,7 +97,6 @@ object MemoRecorder {
             }
             recorder = null
             recordingActive = false
-            syncRecordingFlow()
         }
 
         if (deleteTemp && ctx != null) {
@@ -158,7 +139,6 @@ object MemoRecorder {
             recorder = mr
             autoStopped = false
             recordingActive = true
-            syncRecordingFlow()
 
             // 1.3 Speech Encoder Optimization & Strict setMaxDuration Ordering
             mr.setAudioSource(AUDIO_SOURCE)
@@ -226,20 +206,6 @@ object MemoRecorder {
 
     /** True while a recording is in progress. */
     fun isRecording(): Boolean = recordingActive
-
-    /**
-     * Public alias callable from Compose's remember { } block.
-     * Identical to [isRecording] — exists because Kotlin doesn't allow calling a
-     * function with parentheses directly inside mutableStateOf.
-     */
-    fun isCurrentlyRecording(): Boolean = recordingActive
-
-    /** Returns remaining milliseconds according to monotonic clock. */
-    fun getRemainingMs(): Long {
-        if (!recordingActive) return 0L
-        val elapsed = SystemClock.elapsedRealtime() - startRealtime
-        return (MAX_DURATION_MS.toLong() - elapsed).coerceAtLeast(0L)
-    }
 
     private fun startMonotonicTimer(
         startTime: Long,
