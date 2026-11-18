@@ -59,7 +59,13 @@ object MorroColors {
     val Surface         = Color(0xFF0B0A08)
     val SurfaceCard     = Color(0xFF121110)
     val SurfaceElevated = Color(0xFF1A1714)
-    val SurfaceLow      = Color(0xFF231F19)
+
+    /**
+     * The lightest step, not the darkest: an inset well inside an elevated surface. It was called
+     * `SurfaceLow`, which read as "below the canvas" and sent every reader looking in the wrong
+     * direction in the ramp.
+     */
+    val SurfaceHigh     = Color(0xFF231F19)
 
     /** Same tone as a card, named for the Material slot it fills. */
     val SurfaceVariant = SurfaceCard
@@ -236,7 +242,7 @@ private val MaterialColorScheme = darkColorScheme(
     onPrimaryContainer = MorroColors.TextPrimary,
     secondary          = MorroColors.TextSecondary,
     onSecondary        = MorroColors.Canvas,
-    secondaryContainer = MorroColors.SurfaceLow,
+    secondaryContainer = MorroColors.SurfaceHigh,
     onSecondaryContainer = MorroColors.TextPrimary,
     tertiary           = MorroColors.TextSecondary,
     onTertiary         = MorroColors.Canvas,
@@ -271,7 +277,7 @@ data class MorroColorPalette(
     val surfaceCard: Color = MorroColors.SurfaceCard,
     val surfaceVariant: Color = MorroColors.SurfaceVariant,
     val surfaceElevated: Color = MorroColors.SurfaceElevated,
-    val surfaceLow: Color = MorroColors.SurfaceLow,
+    val surfaceHigh: Color = MorroColors.SurfaceHigh,
     val textPrimary: Color = MorroColors.TextPrimary,
     val textSecondary: Color = MorroColors.TextSecondary,
     val textTertiary: Color = MorroColors.TextTertiary,

@@ -53,7 +53,7 @@ fun MorroSkeleton(
     val brush = Brush.linearGradient(
         colors = listOf(
             MorroColors.SurfaceCard,
-            MorroColors.SurfaceLow,
+            MorroColors.SurfaceHigh,
             MorroColors.SurfaceCard
         ),
         start = androidx.compose.ui.geometry.Offset(highlight * 600f - 300f, 0f),

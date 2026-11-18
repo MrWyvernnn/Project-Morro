@@ -23,9 +23,10 @@ One warm neutral ramp. Nothing tints the ground.
 | Surface (sheets) | `#0B0A08` |
 | Surface card | `#121110` |
 | Surface elevated (inputs, selection) | `#1A1714` |
+| Surface high (the lightest step: inset wells, switch track, skeletons) | `#231F19` |
 | Text primary ("warm honey white") | `#EFE7D6` |
 | Text secondary | `#A79E8D` |
-| Text tertiary | `#7C7466` |
+| Text tertiary | `#877F70` |
 | Honey highlight (arc, armed dot, second hand) | `#E8C58F` |
 | Mascot eyes only (dusty rose) | `#E8B4AE` |
 | Hairline | text primary at 8% (`#14EFE7D6`) |
@@ -62,7 +63,8 @@ System sans, weights 400/500 (600 rare). Hierarchy from size and colour, never w
 ## Space and shape
 
 - 4px rhythm: 4, 8, 12, 16, 20, 24, 28, 32, 40, 48.
-- Cards 16dp radius, buttons and inputs 12dp, chips 10dp, sheet 20dp. Not everything is a pill.
+- Three radii only: cards 16dp, buttons, inputs and chips 12dp, sheets 24dp top. Not everything is
+  a pill. `MorroShapes` holds them; a component that hardcodes a radius is a bug.
 - Card padding 18–20dp, screen edges 24dp. Group gaps smaller than the gaps between groups.
 - Selected rows are a border step (35%) plus a check, never a coloured wash.
 
@@ -77,23 +79,25 @@ Springs, one language:
 | Press | 1.0 / 2741 |
 | Playful pop (buttons, mascot) | 0.55 / 438 |
 
-- Buttons dip to 0.96 on a press and return with a ~1% overshoot. That is the whole playfulness;
-  no glow, no shimmer, no hover scale on cards.
-- The mascot runs a hop cycle: crouch, stretch, float, land squash, recover, with a slow breath
-  and a blink.
+- Buttons dip to 0.97 on a press and settle back on a critically damped spring: no overshoot. That
+  is the whole playfulness; no glow, no shimmer, no hover scale on cards.
+- The mascot hovers rather than hops: a slow rise and fall with a second, quicker bob on top, a
+  side sway with a matching tilt, a breathing stretch, a two-frame blink whose eyes follow the
+  drift, and a hem that ripples. No crouch and no landing squash.
 - Clouds are solid, not smoky: a flat base and four round puffs in warm white, one outline, one
   fill, no alpha. They sit along the top edge of the intro screens, cropped by it, and drift left
   on one clock, 180s per pass, with a few pixels of sway. Keeping them in that band is what lets
   them be opaque without ever crossing the copy. Intro screens only; the alarm setup and the
   dashboard stay still.
-- The mascot outline is curves only: a wide dome, two bulging sides and three round hem scallops.
-  Nothing on it is straight.
+- The mascot outline is curves only: a dome that flares past the shoulders, a hard tuck at the
+  waist, a late flare over the hip, and three round hem scallops. Nothing on it is straight.
 - Everything respects `ANIMATOR_DURATION_SCALE = 0`. Reduced motion freezes the mascot hop, the
   clouds and the pulse, and keeps the entrances as fades.
 
 ## Screens
 
-1. **Splash.** Clouds, mascot at 124dp, wordmark, signature rule, one line of copy. Tap to continue.
+1. **Splash.** Clouds, mascot at 126×176dp (taller than wide, so the waist and hip read), wordmark,
+   signature rule, one line of copy. It holds for 1.8s and any tap continues immediately.
 2. **Questions.** "Question 1 of 5", a 2dp progress rail, one question at 26sp, flat answer rows.
    Selected = 35% border + check. Last answer is free text with a shake on empty submit. Continue
    sits below the options and is explicit: choosing no longer skips ahead, and the button stays a

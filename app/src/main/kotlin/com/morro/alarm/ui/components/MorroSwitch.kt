@@ -57,7 +57,7 @@ fun MorroSwitch(
         label = "switchPosition"
     )
     val track by animateColorAsState(
-        targetValue = if (checked) MorroColors.Honey else MorroColors.SurfaceLow,
+        targetValue = if (checked) MorroColors.Honey else MorroColors.SurfaceHigh,
         animationSpec = tween(140),
         label = "switchTrack"
     )

@@ -764,7 +764,7 @@ class AlarmActivity : ComponentActivity() {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(if (isGraceActive) colors.surfaceLow else colors.error.copy(alpha = 0.2f))
+                .background(if (isGraceActive) colors.surfaceHigh else colors.error.copy(alpha = 0.2f))
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween

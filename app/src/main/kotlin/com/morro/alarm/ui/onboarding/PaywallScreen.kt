@@ -317,7 +317,7 @@ private fun PlanCard(
                 modifier = Modifier
                     .size(22.dp)
                     .background(
-                        if (selected) MorroColors.Honey.copy(alpha = 0.14f) else MorroColors.SurfaceLow,
+                        if (selected) MorroColors.Honey.copy(alpha = 0.14f) else MorroColors.SurfaceHigh,
                         CircleShape
                     ),
                 contentAlignment = Alignment.Center

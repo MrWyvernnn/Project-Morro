@@ -18,7 +18,6 @@ import androidx.compose.animation.core.StartOffset
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -75,14 +74,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -99,13 +96,11 @@ import com.morro.alarm.ui.motion.MorroMotion
 import com.morro.alarm.ui.motion.pressScale
 import com.morro.alarm.ui.motion.staggeredReveal
 import com.morro.alarm.ui.motion.rememberReducedMotion
-import com.morro.alarm.ui.theme.MorroSpring
 import com.morro.alarm.ui.theme.morroColors
 import com.morro.alarm.ui.theme.morroHairline
 import com.morro.alarm.ui.theme.morroShapes
 import com.morro.alarm.ui.theme.morroTypography
 import java.util.Locale
-import kotlin.math.roundToInt
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -118,14 +113,16 @@ enum class VoiceState {
 }
 
 /**
- * AlarmBuilderSheet — Anchored bottom sheet for alarm configuration.
+ * AlarmBuilderSheet — the full-width sheet that holds alarm setup.
  *
- * SPEC (per Manifesto):
- * - Anchored to FAB center (bottom-right), NOT full-width slide-up
- * - Background: Surface at 92% alpha (NO backdrop-filter blur)
- * - Radius: 24dp top-only
- * - Enter: spring from FAB (scale 0.1→1.0, y: FAB.y→0), damping 0.82, response 0.32s (Momentum)
- * - Elevation: 0→8dp spring on enter, 8→0 on exit
+ * What it actually does, so this comment stops describing a design that no longer exists:
+ * - Full width, anchored to the bottom edge, 92% of screen height. It is not a FAB-anchored card.
+ * - Opaque `surface` background with a hairline border and the 24dp top-sheet radius. No alpha,
+ *   no blur: the dashboard behind it is covered, not seen through.
+ * - Enter is a 240ms tween from 0.95 scale and 40dp below its final position, easing out; exit is
+ *   the same motion at 80% of that duration, easing in. No spring, no overshoot.
+ * - The drag handle is the only drag target, so pulling it cannot fight the sheet's inner scroll.
+ *   Pulling down past half the dismiss distance closes the sheet; pulling up is rubber-banded.
  *
  * @param isVisible controls sheet visibility
  * @param onDismiss called when user taps backdrop or dismisses
@@ -1185,6 +1182,7 @@ private fun PhotoTargetSheet(
 ) {
     val colors = morroColors()
     val typo = morroTypography()
+    val shapes = morroShapes()
     var localSelectedItems by remember { mutableStateOf(selectedPhotoItems) }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -1200,7 +1198,8 @@ private fun PhotoTargetSheet(
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .fillMaxHeight(0.94f)
-                .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
+                // Same top radius as every other sheet: the token, not a second number.
+                .clip(shapes.Sheet)
                 .background(colors.surface)
                 .navigationBarsPadding()
                 .imePadding()
@@ -1433,7 +1432,7 @@ private fun PoolTile(
                 Icon(
                     imageVector = Icons.Filled.Check,
                     contentDescription = null,
-                    tint = Color.Black,
+                    tint = colors.canvas,
                     modifier = Modifier.size(11.dp)
                 )
             }
@@ -1450,7 +1449,6 @@ private fun AnimatedWaveform(
     modifier: Modifier = Modifier
 ) {
     val colors = morroColors()
-    val density = LocalDensity.current.density
 
     // 12 bars, each with its own phase offset
     val phases = remember {
