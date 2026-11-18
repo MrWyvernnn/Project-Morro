@@ -79,8 +79,10 @@ import com.morro.alarm.ui.components.MorroStatusDot
 import com.morro.alarm.ui.components.MorroSwitch
 import com.morro.alarm.ui.components.MorroPrivacyPolicySheet
 import com.morro.alarm.ui.onboarding.OnboardingGate
+import com.morro.alarm.ui.onboarding.PaywallScreen
 import com.morro.alarm.ui.onboarding.PersonalizationStorage
 import com.morro.alarm.ui.onboarding.PersonalizedQuestions
+import com.morro.alarm.ui.onboarding.SignInScreen
 import com.morro.alarm.ui.splash.MorroGhostSplash
 import com.morro.alarm.ui.motion.MorroMotion
 import com.morro.alarm.ui.motion.pressScale
@@ -126,15 +128,22 @@ class MainActivity : ComponentActivity() {
                 // One flag for the intro; a returning person lands straight on the dashboard.
                 val alreadyOnboarded = OnboardingGate.isComplete(this@MainActivity)
                 var splashDone by rememberSaveable { mutableStateOf(alreadyOnboarded) }
+                // Sign-in and the paywall are visual beats for now: no account is created, no
+                // billing is wired, and both can be skipped. Their state lives in the saved
+                // instance only, like the splash, so the intro replays until it is truly finished.
+                var signInDone by rememberSaveable { mutableStateOf(alreadyOnboarded) }
                 var questionsDone by rememberSaveable {
                     mutableStateOf(alreadyOnboarded || PersonalizationStorage.isComplete(this@MainActivity))
                 }
+                var paywallDone by rememberSaveable { mutableStateOf(alreadyOnboarded) }
 
                 when {
                     !splashDone -> MorroGhostSplash(
                         onDismiss = { splashDone = true },
                         modifier = Modifier.fillMaxSize()
                     )
+
+                    !signInDone -> SignInScreen(onContinue = { signInDone = true })
 
                     !questionsDone -> PersonalizedQuestions(
                         onComplete = {
@@ -144,6 +153,8 @@ class MainActivity : ComponentActivity() {
                             questionsDone = true
                         }
                     )
+
+                    !paywallDone -> PaywallScreen(onContinue = { paywallDone = true })
 
                     !hasOnboarded -> {
                         // Launch from an effect, not from the composition body: a recomposition
