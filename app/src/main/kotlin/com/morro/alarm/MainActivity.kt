@@ -78,12 +78,14 @@ import com.morro.alarm.ui.components.MorroPrimaryButton
 import com.morro.alarm.ui.components.MorroStatusDot
 import com.morro.alarm.ui.components.MorroSwitch
 import com.morro.alarm.ui.components.MorroPrivacyPolicySheet
+import com.morro.alarm.ui.onboarding.IntroStep
 import com.morro.alarm.ui.onboarding.OnboardingGate
 import com.morro.alarm.ui.onboarding.PaywallScreen
 import com.morro.alarm.ui.onboarding.PersonalizingScreen
 import com.morro.alarm.ui.onboarding.PersonalizationStorage
 import com.morro.alarm.ui.onboarding.PersonalizedQuestions
 import com.morro.alarm.ui.onboarding.SignInScreen
+import com.morro.alarm.ui.onboarding.nextIntroStep
 import com.morro.alarm.ui.splash.MorroGhostSplash
 import com.morro.alarm.ui.motion.MorroMotion
 import com.morro.alarm.ui.motion.pressScale
@@ -139,29 +141,42 @@ class MainActivity : ComponentActivity() {
                 var personalizeDone by rememberSaveable { mutableStateOf(alreadyOnboarded) }
                 var paywallDone by rememberSaveable { mutableStateOf(alreadyOnboarded) }
 
-                when {
-                    !splashDone -> MorroGhostSplash(
+                // The order lives in `nextIntroStep`, where it is a pure function the unit tests
+                // can hold still. This `when` only maps a step onto the screen that draws it.
+                when (
+                    nextIntroStep(
+                        splashDone = splashDone,
+                        signInDone = signInDone,
+                        questionsDone = questionsDone,
+                        personalizeDone = personalizeDone,
+                        paywallDone = paywallDone,
+                        permissionsDone = hasOnboarded
+                    )
+                ) {
+                    IntroStep.Splash -> MorroGhostSplash(
                         onDismiss = { splashDone = true },
                         modifier = Modifier.fillMaxSize()
                     )
 
-                    !signInDone -> SignInScreen(onContinue = { signInDone = true })
+                    IntroStep.SignIn -> SignInScreen(onContinue = { signInDone = true })
 
-                    !questionsDone -> PersonalizedQuestions(
+                    IntroStep.Questions -> PersonalizedQuestions(
                         onComplete = {
-                            // The intro is over the moment the questions are answered; there is no
-                            // explainer step between the promise and the app.
+                            // The answers are saved by the questions screen itself; the intro flag is
+                            // only about "this person has met the app", not about the answers.
                             OnboardingGate.markComplete(this@MainActivity)
                             questionsDone = true
                         }
                     )
 
-                    // The answers are saved; this beat is the transition into choosing a plan.
-                    !personalizeDone -> PersonalizingScreen(onDone = { personalizeDone = true })
+                    // Answers are on disk already; this beat hands off to choosing a plan.
+                    IntroStep.Personalizing -> PersonalizingScreen(
+                        onDone = { personalizeDone = true }
+                    )
 
-                    !paywallDone -> PaywallScreen(onContinue = { paywallDone = true })
+                    IntroStep.Paywall -> PaywallScreen(onContinue = { paywallDone = true })
 
-                    !hasOnboarded -> {
+                    IntroStep.Permissions -> {
                         // Launch from an effect, not from the composition body: a recomposition
                         // before finish() lands would otherwise start the screen twice.
                         LaunchedEffect(Unit) {
@@ -174,7 +189,7 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    else -> MainAlarmScreen(context = this@MainActivity)
+                    IntroStep.Dashboard -> MainAlarmScreen(context = this@MainActivity)
                 }
             }
         }

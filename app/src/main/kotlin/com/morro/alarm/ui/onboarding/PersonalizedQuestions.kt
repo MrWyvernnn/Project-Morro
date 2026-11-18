@@ -28,17 +28,15 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
@@ -66,8 +64,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -80,6 +76,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.morro.alarm.ui.components.DriftingClouds
+import com.morro.alarm.ui.components.MorroSkyScrim
 import com.morro.alarm.ui.theme.MorroColors
 import com.morro.alarm.ui.theme.MorroShapes
 import com.morro.alarm.ui.motion.MorroMotion
@@ -89,15 +86,15 @@ import com.morro.alarm.ui.theme.morroHairline
 import kotlinx.coroutines.launch
 
 /**
- * Five questions between the splash and the permissions screen.
+ * Seven questions between the sign-in screen and the personalizing beat.
  *
  * The layout is a single column with one question at a time. There is no wizard chrome: a quiet
  * "Question 1 of 5", a two-pixel progress rail, the question at 26sp, then answers. Answer rows are
  * flat cards with a hairline; selection is a honey border plus a check, so it is never signalled by
  * colour alone and never by a gradient.
  *
- * The last answer is free text with real input behaviour: keyboard-aware compaction, a shake plus
- * inline error on empty submit, and a counter that warns before the cap.
+ * The last two answers are free text with real input behaviour: keyboard-aware compaction, a shake
+ * plus inline error on empty submit, and a counter that warns before the cap.
  */
 
 internal enum class CardVariant { Unselected, Selected, Disabled }
@@ -229,7 +226,6 @@ fun PersonalizedQuestions(
 ) {
     val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
-    val scope = rememberCoroutineScope()
     val imeVisible = WindowInsets.isImeVisible
 
     var index by rememberSaveable { mutableIntStateOf(0) }
@@ -268,25 +264,13 @@ fun PersonalizedQuestions(
 
     BackHandler(enabled = index > 0) { index -= 1 }
 
-    Box(modifier = modifier.fillMaxSize().imePadding()) {
+    // Full-bleed so the clouds reach the edges; the column below owns the insets.
+    Box(modifier = modifier.fillMaxSize()) {
         DriftingClouds(intensity = 0.7f)
 
-        // The sky is scenery; the question is the page. A soft scrim keeps the clouds in the margins
-        // so a longer question (the hour quote, the two free-text prompts) never sits on a cloud.
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .drawBehind {
-                    drawRect(
-                        brush = Brush.horizontalGradient(
-                            0f to Color.Transparent,
-                            0.10f to MorroColors.Canvas.copy(alpha = 0.95f),
-                            0.90f to MorroColors.Canvas.copy(alpha = 0.95f),
-                            1f to Color.Transparent
-                        )
-                    )
-                }
-        )
+        // The sky is scenery; the question is the page. The shared scrim keeps the clouds in the
+        // margins so a longer question (the hour quote, the two free-text prompts) never sits on one.
+        MorroSkyScrim(alpha = 0.95f)
 
         Column(
             modifier = Modifier
@@ -294,7 +278,9 @@ fun PersonalizedQuestions(
                 .fillMaxHeight()
                 .widthIn(max = 560.dp)
                 .align(Alignment.TopCenter)
-                .windowInsetsPadding(WindowInsets.systemBars)
+                // safeDrawing = system bars + IME. Applying imePadding on the Box *and* the system
+                // bars here double-counted the navigation-bar inset once the keyboard opened.
+                .windowInsetsPadding(WindowInsets.safeDrawing)
                 .padding(horizontal = 24.dp)
         ) {
             Spacer(modifier = Modifier.height(topSpace))

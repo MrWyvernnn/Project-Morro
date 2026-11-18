@@ -39,6 +39,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -55,8 +57,11 @@ import com.morro.alarm.ui.theme.morroHairline
 
 /**
  * One plan. Names and prices are placeholders: nothing here is priced, stored or charged.
+ *
+ * Internal rather than private so `PaywallPlansTest` can hold the offer to its shape (three plans,
+ * one free plan first, at most one highlighted) without starting a device.
  */
-private data class Plan(
+internal data class Plan(
     val name: String,
     val price: String,
     val period: String,
@@ -68,7 +73,7 @@ private data class Plan(
  * Three plans, written as sample copy. The prices are deliberately arbitrary — this screen is a
  * layout, not a price list, and it says so in one quiet line at the bottom.
  */
-private val plans = listOf(
+internal val PaywallPlans: List<Plan> = listOf(
     Plan(
         name = "Free",
         price = "$0",
@@ -173,7 +178,7 @@ fun PaywallScreen(
                 modifier = Modifier.selectableGroup(),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                plans.forEachIndexed { index, plan ->
+                PaywallPlans.forEachIndexed { index, plan ->
                     PlanCard(
                         plan = plan,
                         selected = index == selected,
@@ -219,6 +224,7 @@ private fun PlanCard(
     onSelect: () -> Unit,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
+    val haptics = LocalHapticFeedback.current
     val container by animateColorAsState(
         targetValue = if (selected) MorroColors.SurfaceElevated else MorroColors.SurfaceCard,
         animationSpec = tween(durationMillis = MorroMotion.EnterMillis),
@@ -243,7 +249,11 @@ private fun PlanCard(
                 interactionSource = interactionSource,
                 indication = ripple(color = MorroColors.TextPrimary),
                 role = Role.RadioButton,
-                onClick = onSelect
+                onClick = {
+                    // Same confirmation the question cards give: the choice registers in the hand.
+                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onSelect()
+                }
             )
             .padding(horizontal = 18.dp, vertical = 16.dp)
     ) {

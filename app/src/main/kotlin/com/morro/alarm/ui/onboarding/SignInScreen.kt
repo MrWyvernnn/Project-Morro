@@ -13,15 +13,15 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.OutlinedTextField
@@ -37,18 +37,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.morro.alarm.ui.components.DriftingClouds
 import com.morro.alarm.ui.components.MorroGhostMascot
+import com.morro.alarm.ui.components.MorroSkyScrim
 import com.morro.alarm.ui.components.MorroPrimaryButton
 import com.morro.alarm.ui.motion.pressScale
 import com.morro.alarm.ui.motion.staggeredReveal
@@ -74,23 +74,14 @@ fun SignInScreen(
     modifier: Modifier = Modifier,
 ) {
     var email by rememberSaveable { mutableStateOf("") }
+    val focusManager = LocalFocusManager.current
 
-    Box(modifier = modifier.fillMaxSize().imePadding()) {
+    // Full-bleed so the sky reaches the edges; the reading column takes the insets, not the Box.
+    Box(modifier = modifier.fillMaxSize()) {
         DriftingClouds(intensity = 0.55f)
 
         // Same scrim as the questions: scenery stays in the margins, copy stays legible.
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.horizontalGradient(
-                        0f to Color.Transparent,
-                        0.08f to MorroColors.Canvas.copy(alpha = 0.94f),
-                        0.92f to MorroColors.Canvas.copy(alpha = 0.94f),
-                        1f to Color.Transparent
-                    )
-                )
-        )
+        MorroSkyScrim()
 
         Column(
             modifier = Modifier
@@ -99,7 +90,9 @@ fun SignInScreen(
                 .fillMaxHeight()
                 .widthIn(max = 520.dp)
                 .align(Alignment.TopCenter)
-                .windowInsetsPadding(WindowInsets.systemBars)
+                // safeDrawing is system bars plus the IME; applying imePadding as well on the
+                // parent added the navigation-bar inset twice once the keyboard opened.
+                .windowInsetsPadding(WindowInsets.safeDrawing)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -174,6 +167,13 @@ fun SignInScreen(
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Email,
                     imeAction = ImeAction.Done
+                ),
+                // The keyboard's own Done key does what the button does, instead of only closing.
+                keyboardActions = KeyboardActions(
+                    onDone = {
+                        focusManager.clearFocus()
+                        if (email.isNotBlank()) onContinue()
+                    }
                 ),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = MorroColors.Honey,
