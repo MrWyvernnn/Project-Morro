@@ -10,7 +10,10 @@ import kotlin.random.Random
  */
 object MathEngine {
 
-    private val random = Random(System.currentTimeMillis())
+    // A seeded kotlin Random is a plain XORWOW instance, which is not safe to share across
+    // threads. The puzzle needs variety, not unpredictability, so the thread-safe default is the
+    // right generator and removes a whole class of "same question twice" hazard.
+    private val random = Random.Default
 
     /** Simple data class holding a math question text and its answer */
     data class Question(val text: String, val answer: Int)

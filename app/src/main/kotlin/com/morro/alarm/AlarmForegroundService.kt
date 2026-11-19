@@ -23,6 +23,7 @@ class AlarmForegroundService : Service() {
     }
 
     private var wakeLock: PowerManager.WakeLock? = null
+    private var notification: Notification? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -31,7 +32,9 @@ class AlarmForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val notification = buildNotification()
+        // A ring can start this service more than once (notification repost, OEM retry). The
+        // notification and the PendingIntent are identical every time, so they are built once.
+        val notification = notification ?: buildNotification().also { notification = it }
         // A failed promotion must not crash the process: without a foreground notification the
         // service has no legal reason to live, so stop it instead of holding a wake lock.
         val promoted = try {

@@ -25,6 +25,9 @@ object MemoRecorder {
     /** Hard cap on a single recording in milliseconds (15s). */
     const val MAX_DURATION_MS = 15_000
 
+    /** Cap-check cadence. 250 ms is far below human perception against a 15 s limit. */
+    private const val TIMER_POLL_MS = 250L
+
     private val OUTPUT_FORMAT = MediaRecorder.OutputFormat.MPEG_4
     private val AUDIO_ENCODER = MediaRecorder.AudioEncoder.AAC
     private val AUDIO_SOURCE = MediaRecorder.AudioSource.MIC
@@ -230,12 +233,14 @@ object MemoRecorder {
                     teardownRecorder(context, deleteTemp = false)
                     mainHandler.post { onMaxDurationReached() }
                 } else {
-                    mainHandler.postDelayed(this, 100L)
+                    // The cap only needs to fire within a fraction of a second; 100 ms meant
+                    // ~150 main-looper wakeups per clip competing with the countdown UI.
+                    mainHandler.postDelayed(this, TIMER_POLL_MS)
                 }
             }
         }
         monotonicTimerRunnable = runnable
-        mainHandler.postDelayed(runnable, 100L)
+        mainHandler.postDelayed(runnable, TIMER_POLL_MS)
     }
 
     private fun cancelMonotonicTimer() {

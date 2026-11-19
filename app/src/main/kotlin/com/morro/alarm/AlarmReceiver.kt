@@ -31,8 +31,13 @@ class AlarmReceiver : BroadcastReceiver() {
         Log.d(TAG, "Acquired partial wake lock for 60s")
 
         try {
-            val memoPath = MemoStorage.getLatestMemoPath(context)
-            Log.d(TAG, "(4) File check for commitment memo: path=${memoPath ?: "none found (fallback active)"}")
+            // getLatestMemoPath() stats up to three files. That is disk I/O on the broadcast main
+            // thread, on the one path that has to surface the alarm fast, and it only feeds a log
+            // line, so it is skipped unless verbose logging is actually on.
+            if (Log.isLoggable(TAG, Log.DEBUG)) {
+                val memoPath = MemoStorage.getLatestMemoPath(context)
+                Log.d(TAG, "(4) File check for commitment memo: path=${memoPath ?: "none found (fallback active)"}")
+            }
 
             // Start foreground service to hold wake-lock while alarm is active.
             // If this fails, we fall back to a high-priority notification below
