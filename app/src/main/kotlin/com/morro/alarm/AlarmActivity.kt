@@ -103,6 +103,14 @@ class AlarmActivity : ComponentActivity() {
     private var recordingCountdown by mutableIntStateOf(15)
 
     private val TAG = "AlarmActivity"
+
+    private companion object {
+        const val KEY_GATE_STATE = "gate_state"
+        const val KEY_PROBLEMS_SOLVED = "problems_solved"
+        const val KEY_USER_INPUT = "user_input"
+        const val KEY_QUESTION_TEXT = "question_text"
+        const val KEY_QUESTION_ANSWER = "question_answer"
+    }
     private var wakeLock: PowerManager.WakeLock? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -160,25 +168,31 @@ class AlarmActivity : ComponentActivity() {
         // Read user's chosen mission type
         val configuredMission = MissionPrefs.getMissionType(this)
 
-        // Pre-generate math problem if in puzzle mode
-        nextQuestion()
+        // A rotation, a dark-mode switch or a system-initiated recreate used to throw away the
+        // gate, the solved count and the typed answer, sending a half-awake person back to problem
+        // 1 of 3. Restore that state and only fall back to a fresh start when there is none.
+        val restored = savedInstanceState != null && restoreGateState(savedInstanceState)
+        if (!restored) {
+            // Pre-generate math problem if in puzzle mode
+            nextQuestion()
 
-        // Start alarm and configure initial gate based on MissionType (includes VOICE_COMMITMENT).
-        when (configuredMission) {
-            MissionType.QR_BARCODE, MissionType.QR_CODE -> {
-                gateState = AlarmGateState.MISSION_QR
-                AlarmSoundPlayer.start(this)
-                startGraceCountdown()
-            }
-            MissionType.PHOTO_OBJECT, MissionType.PHOTO_MISSION -> {
-                gateState = AlarmGateState.MISSION_PHOTO
-                AlarmSoundPlayer.start(this)
-                startGraceCountdown()
-            }
-            MissionType.VOICE_MEMO, MissionType.VOICE_COMMITMENT -> {
-                gateState = AlarmGateState.PUZZLE
-                AlarmSoundPlayer.start(this)
-                AlarmSoundPlayer.setVolume(1.0f)
+            // Start alarm and configure initial gate based on MissionType.
+            when (configuredMission) {
+                MissionType.QR_BARCODE, MissionType.QR_CODE -> {
+                    gateState = AlarmGateState.MISSION_QR
+                    AlarmSoundPlayer.start(this)
+                    startGraceCountdown()
+                }
+                MissionType.PHOTO_OBJECT, MissionType.PHOTO_MISSION -> {
+                    gateState = AlarmGateState.MISSION_PHOTO
+                    AlarmSoundPlayer.start(this)
+                    startGraceCountdown()
+                }
+                MissionType.VOICE_MEMO, MissionType.VOICE_COMMITMENT -> {
+                    gateState = AlarmGateState.PUZZLE
+                    AlarmSoundPlayer.start(this)
+                    AlarmSoundPlayer.setVolume(1.0f)
+                }
             }
         }
 
@@ -193,7 +207,7 @@ class AlarmActivity : ComponentActivity() {
                     onBackspace = { clearInput() },
                     onSubmit = { submitAnswer(it) },
                                 onMissionSuccess = { onMissionComplete() },
-                    onRestartGracePeriod = { startGraceCountdown() },
+                    onRestartGracePeriod = { restoreFullVolume() },
                                 onRecordTomorrowContent = {
                         RecordingGateUI(
                             isRecording = isRecording,
@@ -206,6 +220,19 @@ class AlarmActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    /**
+     * Drops the ring back to full volume without touching the grace window.
+     *
+     * The banner's button used to call startGraceCountdown(), which muted the alarm to 20% at the
+     * exact moment the banner was telling the person "MAX VOLUME ACTIVE". Nothing about the camera
+     * is started by that button — the scanner is already live underneath.
+     */
+    private fun restoreFullVolume() {
+        graceJob?.cancel()
+        missionGraceSeconds = 0
+        AlarmSoundPlayer.setVolume(1.0f)
     }
 
     /**
@@ -238,7 +265,9 @@ class AlarmActivity : ComponentActivity() {
     }
 
     private fun clearInput() {
-        userInput = userInput.take(userInput.length.coerceAtLeast(1) - 1)
+        // The button says "Clear", so it clears. Backspace-per-keystroke is what the field itself
+        // is for; at 6 a.m. one tap should be one action.
+        userInput = ""
     }
 
     private fun submitAnswer(answer: String) {
@@ -405,15 +434,48 @@ class AlarmActivity : ComponentActivity() {
         finishAlarm()
     }
 
+    /** Persists the puzzle gate so a recreate resumes mid-question instead of restarting it. */
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString(KEY_GATE_STATE, gateState.name)
+        outState.putInt(KEY_PROBLEMS_SOLVED, problemsSolved)
+        outState.putString(KEY_USER_INPUT, userInput)
+        currentQuestion?.let { question ->
+            outState.putString(KEY_QUESTION_TEXT, question.text)
+            outState.putInt(KEY_QUESTION_ANSWER, question.answer)
+        }
+    }
+
+    /** @return true when a usable gate state was restored. */
+    private fun restoreGateState(state: Bundle): Boolean {
+        val name = state.getString(KEY_GATE_STATE) ?: return false
+        val restoredGate = runCatching { AlarmGateState.valueOf(name) }.getOrNull() ?: return false
+        gateState = restoredGate
+        problemsSolved = state.getInt(KEY_PROBLEMS_SOLVED, 0)
+        userInput = state.getString(KEY_USER_INPUT) ?: ""
+        val text = state.getString(KEY_QUESTION_TEXT)
+        val answer = state.getInt(KEY_QUESTION_ANSWER, Int.MIN_VALUE)
+        currentQuestion = if (text != null && answer != Int.MIN_VALUE) {
+            MathEngine.Question(text, answer)
+        } else {
+            MathEngine.generateQuestion()
+        }
+        return true
+    }
+
     override fun onResume() {
         super.onResume()
+        // A permission dialog or a pulled-down shade pauses and resumes this activity. Restarting
+        // the player from the top made the ringtone jump back to its first note every time, so the
+        // tone is only (re)started when nothing is playing.
+        val alreadyRinging = AlarmSoundPlayer.isPlaying()
         when (gateState) {
             AlarmGateState.PUZZLE -> {
-                AlarmSoundPlayer.start(this)
+                if (!alreadyRinging) AlarmSoundPlayer.start(this)
                 AlarmSoundPlayer.setVolume(1.0f)
             }
             AlarmGateState.MISSION_QR, AlarmGateState.MISSION_PHOTO -> {
-                AlarmSoundPlayer.start(this)
+                if (!alreadyRinging) AlarmSoundPlayer.start(this)
                 if (missionGraceSeconds > 0) {
                     AlarmSoundPlayer.setVolume(0.2f)
                 } else {
@@ -798,7 +860,7 @@ class AlarmActivity : ComponentActivity() {
                         .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Text(
-                        text = "START SCAN",
+                        text = "MAX VOLUME",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White

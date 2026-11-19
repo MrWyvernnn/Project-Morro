@@ -109,6 +109,13 @@ object AlarmSoundPlayer {
         mediaPlayer = null
     }
 
+    /** True while the alarm tone is actually sounding. */
+    fun isPlaying(): Boolean = try {
+        mediaPlayer?.isPlaying == true
+    } catch (e: Exception) {
+        false
+    }
+
     fun stop() = stopAndReleasePlayer()
     fun release() = stopAndReleasePlayer()
 
