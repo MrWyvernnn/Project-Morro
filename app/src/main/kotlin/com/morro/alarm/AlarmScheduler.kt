@@ -24,6 +24,7 @@ object AlarmScheduler {
     private const val PREFS_NAME = "morro_prefs"
     private const val KEY_NEXT_ALARM_TIME = "next_alarm_time"
     private const val KEY_NEXT_ALARM_FORMATTED = "next_alarm_formatted"
+    private const val KEY_ALARM_ARMED = "alarm_armed"
     const val KEY_ALARM_HOUR = "alarm_hour"
     const val KEY_ALARM_MINUTE = "alarm_minute"
     private const val ALARM_REQUEST_CODE = 1001
@@ -147,6 +148,11 @@ object AlarmScheduler {
         clearPrefs(context)
     }
 
+    /** True when the person armed the alarm and has not cancelled it since. */
+    fun isArmed(context: Context): Boolean =
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(KEY_ALARM_ARMED, false)
+
     fun getNextAlarmTime(context: Context): Long? {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val v = prefs.getLong(KEY_NEXT_ALARM_TIME, -1L)
@@ -161,6 +167,7 @@ object AlarmScheduler {
                 .edit()
                 .putLong(KEY_NEXT_ALARM_TIME, timeMillis)
                 .putString(KEY_NEXT_ALARM_FORMATTED, formatted)
+                .putBoolean(KEY_ALARM_ARMED, true)
                 .apply()
         } catch (e: Exception) {
             Log.w(TAG, "Failed to persist alarm prefs", e)
@@ -173,6 +180,8 @@ object AlarmScheduler {
                 .edit()
                 .remove(KEY_NEXT_ALARM_TIME)
                 .remove(KEY_NEXT_ALARM_FORMATTED)
+                // An explicit cancel must never be resurrected by the launch-time safety net.
+                .putBoolean(KEY_ALARM_ARMED, false)
                 .apply()
         } catch (e: Exception) {
             Log.w(TAG, "Failed to clear alarm prefs", e)

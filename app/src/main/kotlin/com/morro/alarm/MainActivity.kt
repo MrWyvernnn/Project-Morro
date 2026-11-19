@@ -141,8 +141,15 @@ class MainActivity : ComponentActivity() {
                 var questionsDone by rememberSaveable {
                     mutableStateOf(alreadyOnboarded || PersonalizationStorage.isComplete(this@MainActivity))
                 }
-                var personalizeDone by rememberSaveable { mutableStateOf(alreadyOnboarded) }
-                var paywallDone by rememberSaveable { mutableStateOf(alreadyOnboarded) }
+                // Seeded from their own flags, not from the "has met the app" flag written at the
+                // questions step: killing the app during Personalizing used to skip straight to
+                // Permissions and the rest of the intro never ran.
+                var personalizeDone by rememberSaveable {
+                    mutableStateOf(prefs.getBoolean("onboarding_personalize_done", false))
+                }
+                var paywallDone by rememberSaveable {
+                    mutableStateOf(prefs.getBoolean("onboarding_paywall_done", false))
+                }
 
                 // The order lives in `nextIntroStep`, where it is a pure function the unit tests
                 // can hold still. This `when` only maps a step onto the screen that draws it.
@@ -174,10 +181,18 @@ class MainActivity : ComponentActivity() {
 
                     // Answers are on disk already; this beat hands off to choosing a plan.
                     IntroStep.Personalizing -> PersonalizingScreen(
-                        onDone = { personalizeDone = true }
+                        onDone = {
+                            prefs.edit().putBoolean("onboarding_personalize_done", true).apply()
+                            personalizeDone = true
+                        }
                     )
 
-                    IntroStep.Paywall -> PaywallScreen(onContinue = { paywallDone = true })
+                    IntroStep.Paywall -> PaywallScreen(
+                        onContinue = {
+                            prefs.edit().putBoolean("onboarding_paywall_done", true).apply()
+                            paywallDone = true
+                        }
+                    )
 
                     IntroStep.Permissions -> {
                         // Launch from an effect, not from the composition body: a recomposition
@@ -230,6 +245,18 @@ fun MainAlarmScreen(context: Context) {
         }
         prefs.registerOnSharedPreferenceChangeListener(listener)
         onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
+
+    // A ring that died before AlarmActivity could re-arm (process death, crash, force-stop) leaves
+    // the one-shot trigger consumed. If the person never cancelled, put the next occurrence back.
+    LaunchedEffect(Unit) {
+        if (!AlarmScheduler.isArmed(context)) return@LaunchedEffect
+        val pending = AlarmScheduler.getNextAlarmTime(context)
+        if (pending != null && pending > System.currentTimeMillis()) return@LaunchedEffect
+        AlarmScheduler.getSavedAlarmTime(context)?.let { (hour, minute) ->
+            AlarmScheduler.scheduleDailyAlarm(context, hour, minute)
+            prefsUpdateTrigger++
+        }
     }
 
     val savedAlarm = remember(prefsUpdateTrigger) { AlarmScheduler.getSavedAlarmTime(context) }
@@ -392,7 +419,15 @@ fun MainAlarmScreen(context: Context) {
                         haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         val saved = savedAlarm
                         if (armed && saved != null) {
-                            AlarmScheduler.scheduleDailyAlarm(context, saved.first, saved.second)
+                            val scheduled = AlarmScheduler.scheduleDailyAlarm(context, saved.first, saved.second)
+                            if (!scheduled) {
+                                // The switch springs back to Idle; say why instead of doing it silently.
+                                Toast.makeText(
+                                    context,
+                                    "Exact alarm access is off. Allow it in Settings to arm the alarm.",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
                         } else {
                             AlarmScheduler.cancelAlarm(context)
                         }
@@ -415,15 +450,15 @@ fun MainAlarmScreen(context: Context) {
                         initialHour = initialHour,
                         initialMinute = initialMinute,
                         onDismiss = { showAlarmBuilder = false },
-                        onSave = { hour, minute, mission ->
+                        onSave = { hour, minute, mission, qrCode, photoItems ->
                             showAlarmBuilder = false
 
-                            // Persist the mission the person picked, then arm the alarm.
+                            // Persist exactly what the sheet was showing, then arm the alarm.
                             MissionPrefs.saveMission(
                                 context = context,
                                 missionType = mission,
-                                qrCode = MissionPrefs.getQrCode(context),
-                                photoItems = MissionPrefs.getSelectedPhotoItems(context)
+                                qrCode = qrCode,
+                                photoItems = photoItems
                             )
 
                             val armed = AlarmScheduler.scheduleDailyAlarm(context, hour, minute)
