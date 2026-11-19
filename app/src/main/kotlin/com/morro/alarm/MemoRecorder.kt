@@ -45,14 +45,6 @@ object MemoRecorder {
     @Volatile
     private var recordingActive = false
 
-    /**
-     * True once the recorder has auto-stopped because it hit the duration cap.
-     * Read/written only on the main thread (all callbacks run there).
-     */
-    @Volatile
-    var autoStopped = false
-        private set
-
     private val mainHandler = Handler(Looper.getMainLooper())
     private var monotonicTimerRunnable: Runnable? = null
     private var startRealtime: Long = 0L
@@ -64,54 +56,47 @@ object MemoRecorder {
      * native MEDIA_RECORDER_INFO_MAX_DURATION_REACHED, Cancel, or Error handler)
      * can execute teardown at a time.
      *
-     * @param context Context used to clear temp file if needed.
-     * @param deleteTemp true if the temp recording file should be deleted immediately.
-     * @return true when a usable clip is on disk and deleteTemp is false. Whether the recorder
-     *   stopped cleanly is deliberately ignored: at the 15 s cap MediaRecorder has already
-     *   finalised and released itself, so `stop()` throws even though the clip is complete.
+     * Whichever caller gets here first — the Stop button, the countdown reaching zero, the native
+     * MAX_DURATION_REACHED callback, Cancel, the error handler or release() — stops and releases
+     * the recorder. Later callers find it already gone and do nothing, which is what makes a
+     * double stop harmless.
+     *
+     * There is no "did it work" return value on purpose. At the 15 s cap MediaRecorder has
+     * already finalised the file and released itself, so `stop()` throws even though the clip is
+     * complete, and only the bytes on disk can answer that question (see MemoStorage.saveMemo).
+     *
+     * @param deleteTemp true to throw the clip away (cancel / error); false keeps it on disk.
      */
     @Synchronized
-    private fun teardownRecorder(context: Context?, deleteTemp: Boolean): Boolean {
-        if (!recordingActive && recorder == null) {
-            // Already torn down by the other caller (Stop button, ticker, or the native
-            // MAX_DURATION_REACHED handler). A finished clip in temp_memo.m4a is still a valid
-            // recording, so report success instead of discarding it as "too short".
-            if (deleteTemp) return false
-            val ctx = context?.applicationContext ?: activeAppContext
-            return ctx != null && MemoStorage.hasTempMemo(ctx)
-        }
-        cancelMonotonicTimer()
+    private fun teardownRecorder(context: Context?, deleteTemp: Boolean) {
         val ctx = context?.applicationContext ?: activeAppContext
 
-        try {
-            // A RuntimeException here means the recorder already stopped itself (the 15 s cap) or
-            // never started; either way the file on disk decides the outcome below.
-            recorder?.stop()
-        } catch (e: RuntimeException) {
-            Log.w(TAG, "Swallowed RuntimeException during recorder.stop()", e)
-        } finally {
+        if (recordingActive || recorder != null) {
+            cancelMonotonicTimer()
             try {
-                recorder?.reset()
-            } catch (e: Exception) {
-                Log.w(TAG, "Error resetting recorder", e)
+                // A RuntimeException means the recorder already stopped itself (the 15 s cap) or
+                // never started. The file on disk is unaffected either way.
+                recorder?.stop()
+            } catch (e: RuntimeException) {
+                Log.w(TAG, "Swallowed RuntimeException during recorder.stop()", e)
+            } finally {
+                try {
+                    recorder?.reset()
+                } catch (e: Exception) {
+                    Log.w(TAG, "Error resetting recorder", e)
+                }
+                try {
+                    recorder?.release()
+                } catch (e: Exception) {
+                    Log.w(TAG, "Error releasing recorder", e)
+                }
+                recorder = null
+                recordingActive = false
             }
-            try {
-                recorder?.release()
-            } catch (e: Exception) {
-                Log.w(TAG, "Error releasing recorder", e)
-            }
-            recorder = null
-            recordingActive = false
         }
 
         if (deleteTemp && ctx != null) {
             MemoStorage.clearTemp(ctx)
-        }
-
-        return if (deleteTemp) {
-            false
-        } else {
-            ctx != null && MemoStorage.hasTempMemo(ctx)
         }
     }
 
@@ -142,7 +127,6 @@ object MemoRecorder {
         try {
             val mr = createRecorder(appCtx)
             recorder = mr
-            autoStopped = false
             recordingActive = true
 
             // 1.3 Speech Encoder Optimization & Strict setMaxDuration Ordering
@@ -158,7 +142,6 @@ object MemoRecorder {
             mr.setOnInfoListener { _, what, _ ->
                 if (what == MediaRecorder.MEDIA_RECORDER_INFO_MAX_DURATION_REACHED) {
                     Log.d(TAG, "MEDIA_RECORDER_INFO_MAX_DURATION_REACHED triggered")
-                    autoStopped = true
                     teardownRecorder(appCtx, deleteTemp = false)
                     mainHandler.post { onMaxDurationReached() }
                 }
@@ -188,12 +171,14 @@ object MemoRecorder {
     }
 
     /**
-     * Stops the current recording and keeps the clip.
-     * @return true when a clip was successfully finalised.
+     * Stops the current recording and keeps the clip on disk.
+     *
+     * No success flag: use [MemoStorage.saveMemo] to promote the clip, which returns true only
+     * when a usable file was actually there. That keeps this class from owning a second opinion.
      */
     @Synchronized
-    fun stopRecording(context: Context): Boolean {
-        return teardownRecorder(context, deleteTemp = false)
+    fun stopRecording(context: Context) {
+        teardownRecorder(context, deleteTemp = false)
     }
 
     /** Aborts the recording and deletes the temp file. The saved memo is untouched. */
@@ -226,7 +211,6 @@ object MemoRecorder {
                 val remainingMs = (MAX_DURATION_MS.toLong() - elapsed).coerceAtLeast(0L)
                 if (remainingMs <= 0L) {
                     Log.d(TAG, "15s cap reached via monotonic timer")
-                    autoStopped = true
                     teardownRecorder(context, deleteTemp = false)
                     mainHandler.post { onMaxDurationReached() }
                 } else {

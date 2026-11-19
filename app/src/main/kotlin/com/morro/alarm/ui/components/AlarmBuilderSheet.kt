@@ -271,13 +271,12 @@ fun AlarmBuilderSheetContent(
     // The native 15 s cap callback, the countdown ticker and the Stop button can all end the same
     // clip. voiceState is the guard: only the first caller reaches RECORDED_READY and promotes the
     // file, so a late caller cannot re-save, find nothing to move, and flip "promise ready" back
-    // to unsaved. Success comes from the clip on disk (MemoStorage.isUsableClip), never from who
-    // happened to call stop() first.
+    // to unsaved. Whether the clip is real comes from the file on disk, via saveMemo().
     val finishRecording = {
         if (voiceState == VoiceState.RECORDING) {
             voiceState = VoiceState.RECORDED_READY
-            val recorded = MemoRecorder.stopRecording(context)
-            hasSaved.value = recorded && MemoStorage.saveMemo(context)
+            MemoRecorder.stopRecording(context)
+            hasSaved.value = MemoStorage.saveMemo(context)
         }
     }
 

@@ -409,24 +409,19 @@ class AlarmActivity : ComponentActivity() {
     }
 
     /**
-     * Stops recording, calls MemoStorage.saveMemo() synchronously, shows success toast, and finishes.
+     * Stops recording, promotes the clip to the saved memo, shows the result, and finishes.
      *
      * The 15 s cap arrives from two places — MediaRecorder's own MAX_DURATION_REACHED callback and
      * the countdown coroutine in [startRecordingTomorrow] — and whichever lands second finds the
-     * recorder already torn down. isRecording makes this idempotent, and "recorded" means a usable
-     * clip is on disk, not that our stop() call won the race.
+     * recorder already torn down. isRecording makes this idempotent; the clip on disk, checked by
+     * saveMemo(), decides whether there is a memo to keep.
      */
     private fun stopRecordingTomorrow() {
         if (!isRecording) return
         isRecording = false
-        val recorded = MemoRecorder.stopRecording(this)
-        if (recorded) {
-            val saved = MemoStorage.saveMemo(this)
-            if (saved) {
-                Toast.makeText(this, "Tomorrow's commitment saved!", Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(this, "Failed to save commitment; using fallback.", Toast.LENGTH_SHORT).show()
-            }
+        MemoRecorder.stopRecording(this)
+        if (MemoStorage.saveMemo(this)) {
+            Toast.makeText(this, "Tomorrow's commitment saved!", Toast.LENGTH_SHORT).show()
         } else {
             Toast.makeText(this, "Recording was too short; using fallback.", Toast.LENGTH_SHORT).show()
         }
