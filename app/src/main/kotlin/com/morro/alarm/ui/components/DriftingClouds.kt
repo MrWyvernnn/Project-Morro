@@ -1,6 +1,5 @@
 package com.morro.alarm.ui.components
 
-import android.provider.Settings
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -17,7 +16,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.rotate
-import androidx.compose.ui.platform.LocalContext
+import com.morro.alarm.ui.motion.rememberReducedMotion
 import com.morro.alarm.ui.theme.MorroColors
 import kotlin.math.sin
 
@@ -68,17 +67,10 @@ fun DriftingClouds(
     durationMillis: Int = 180_000,
 ) {
     val reduced = rememberReducedMotion()
-    val transition = rememberInfiniteTransition(label = "clouds")
-    val progress by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = durationMillis, easing = LinearEasing)
-        ),
-        label = "cloudDrift"
-    )
 
-    val t = if (reduced) 0.35f else progress
+    // With reduced motion on, nothing here needs to tick: the drift is skipped entirely instead of
+    // running an infinite transition whose value is then ignored.
+    val t = if (reduced) 0.35f else rememberCloudDrift(durationMillis)
     val presence = intensity.coerceIn(0.4f, 1f)
 
     Canvas(modifier = modifier.fillMaxSize()) {
@@ -163,13 +155,15 @@ private fun DrawScope.drawPuffyCloud(
 }
 
 @Composable
-private fun rememberReducedMotion(): Boolean {
-    val context = LocalContext.current
-    return remember(context) {
-        Settings.Global.getFloat(
-            context.contentResolver,
-            Settings.Global.ANIMATOR_DURATION_SCALE,
-            1f,
-        ) == 0f
-    }
+private fun rememberCloudDrift(durationMillis: Int): Float {
+    val transition = rememberInfiniteTransition(label = "clouds")
+    val progress by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = durationMillis, easing = LinearEasing)
+        ),
+        label = "cloudDrift"
+    )
+    return progress
 }

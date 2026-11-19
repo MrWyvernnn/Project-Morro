@@ -65,7 +65,7 @@ fun MorroSettingsSheet(
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        shape = morroShapes().Sheet,
         containerColor = colors.surface,
         contentColor = colors.textPrimary,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),

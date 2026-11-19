@@ -23,8 +23,8 @@ import kotlin.math.sin
  * The dashboard clock.
  *
  * A dial, not a decoration: near-black face, one hairline rim, honey-white hands. The only warm
- * element is the second hand and a thin arc that traces how much of the current hour has passed —
- * a quiet sign that time is actually moving, which a static dial never gives you.
+ * element is the second hand and a thin arc that sweeps minute/60 of the dial — the fraction of the
+ * current hour that has passed, a quiet sign that time is actually moving.
  *
  * No gradients, no glow, no numerals. The dashboard owns the digital readout, so the dial stays
  * silent and the two can never disagree.
@@ -60,7 +60,7 @@ fun MorroAnalogClock(
                 style = Stroke(width = 1.dp.toPx())
             )
 
-            // Elapsed-hour arc: 0 at twelve, filling clockwise. The one warm mark on the dial.
+            // Hour-progress arc: 0 at twelve, filling clockwise with minute/60. The one warm mark.
             drawArc(
                 color = MorroColors.Honey.copy(alpha = 0.55f),
                 startAngle = -90f,

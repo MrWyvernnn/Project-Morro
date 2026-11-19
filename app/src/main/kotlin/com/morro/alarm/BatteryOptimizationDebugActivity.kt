@@ -35,7 +35,6 @@ class BatteryOptimizationDebugActivity : ComponentActivity() {
         setContent {
             MorroTheme {
                 val colors = morroColors()
-                val typo = morroTypography()
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = colors.canvas

@@ -1,6 +1,5 @@
 package com.morro.alarm.ui.splash
 
-import android.provider.Settings
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -40,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.morro.alarm.ui.components.DriftingClouds
 import com.morro.alarm.ui.components.MorroGhostMascot
+import com.morro.alarm.ui.motion.rememberReducedMotion
 import com.morro.alarm.ui.theme.MorroColors
 import com.morro.alarm.ui.theme.MorroSpring
 import kotlinx.coroutines.delay
@@ -172,15 +172,3 @@ fun MorroGhostSplash(
     }
 }
 
-/** Reads the system animator scale; zero means the user asked for no animation. */
-@Composable
-private fun rememberReducedMotion(): Boolean {
-    val context = LocalContext.current
-    return remember(context) {
-        Settings.Global.getFloat(
-            context.contentResolver,
-            Settings.Global.ANIMATOR_DURATION_SCALE,
-            1f,
-        ) == 0f
-    }
-}

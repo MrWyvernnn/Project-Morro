@@ -43,8 +43,7 @@ fun MorroPrimaryButton(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    enabled: Boolean = true,
-    isFocused: Boolean = false
+    enabled: Boolean = true
 ) {
     val colors = morroColors()
     val shapes = morroShapes()
