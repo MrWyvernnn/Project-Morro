@@ -77,17 +77,17 @@ class AlarmReceiver : BroadcastReceiver() {
                 context.startActivity(intent)
             } catch (e: Exception) {
                 Log.w(TAG, "Direct startActivity() fallback failed: ${e.message}")
-                if (serviceStarted) {
-                    // The service may have died before promoting itself; make sure the person
-                    // still gets a surface they can tap.
-                    postFallbackNotification(context)
-                }
+                // Posted whether or not the service reported success: it may have died before
+                // promoting itself, and a duplicate post is just the same notification refreshed.
+                // This is the only surface left when the activity cannot be launched.
+                postFallbackNotification(context)
             }
         } catch (e: Exception) {
-            // Never fail silently: log the failure. UI-state is not touched here because
-            // this is a broadcast receiver; the notification (if posted) carries the user
-            // facing signal.
+            // Never fail silently. Anything unexpected above means the activity was not launched
+            // and the service may never have run, so this is the last chance to leave a surface
+            // the person can tap to reach the alarm.
             Log.e(TAG, "AlarmReceiver encountered an unexpected error", e)
+            postFallbackNotification(context)
         } finally {
             // Always release the wake lock so we don't hold the CPU longer than needed.
             try {
