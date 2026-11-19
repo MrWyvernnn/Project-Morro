@@ -53,6 +53,7 @@ import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.MutableIntState
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.saveable.Saver
@@ -167,6 +168,12 @@ internal val onboardingQuestions: List<OnboardingQuestion> = listOf(
  */
 internal val TotalQuestions: Int = onboardingQuestions.size
 
+/** Restores the question index, clamped to the question list this build actually ships. */
+private val QuestionIndexSaver = androidx.compose.runtime.saveable.Saver<MutableIntState, Int>(
+    save = { it.intValue },
+    restore = { mutableIntStateOf(it.coerceIn(0, onboardingQuestions.lastIndex)) }
+)
+
 // ---------------------------------------------------------------------------------------------
 // Storage
 // ---------------------------------------------------------------------------------------------
@@ -222,7 +229,9 @@ fun PersonalizedQuestions(
     val haptics = LocalHapticFeedback.current
     val imeVisible = WindowInsets.isImeVisible
 
-    var index by rememberSaveable { mutableIntStateOf(0) }
+    // A remembered index from an older build can point past the end of this build's question
+    // list, and onboardingQuestions[questionIndex] would throw before the flow ever renders.
+    var index by rememberSaveable(saver = QuestionIndexSaver) { mutableIntStateOf(0) }
     // Draft answers survive rotation and process death; the map is flattened to a String list.
     val answers: SnapshotStateMap<String, String> = rememberSaveable(saver = AnswersSaver) {
         mutableStateMapOf()

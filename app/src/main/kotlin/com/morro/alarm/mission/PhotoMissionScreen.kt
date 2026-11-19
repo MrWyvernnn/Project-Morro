@@ -59,6 +59,7 @@ import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.label.ImageLabeling
 import com.google.mlkit.vision.label.defaults.ImageLabelerOptions
 import kotlinx.coroutines.delay
+import java.util.concurrent.Executors
 
 // Design Tokens
 private val ColorCanvasRoot = Color(0xFF000000)      // Pure AMOLED Black
@@ -455,6 +456,7 @@ fun PhotoMissionScreen(
                             Spacer(modifier = Modifier.height(20.dp))
                             Button(
                                 onClick = {
+                                    capturedBitmap?.recycle()
                                     capturedBitmap = null
                                     detectedLabels = emptyList()
                                     photoState = PhotoState.LIVE_CAMERA
@@ -503,14 +505,20 @@ fun PhotoMissionScreen(
                             .background(ColorTextPrimary)
                             .clickable {
                                 photoState = PhotoState.ANALYZING_FRAME
-                                val executor = ContextCompat.getMainExecutor(context)
+                                val mainExecutor = ContextCompat.getMainExecutor(context)
+                                // Decoding a full-resolution frame and matching labels used to run
+                                // on the UI thread at 6 a.m. on a possibly warm phone.
+                                val worker = Executors.newSingleThreadExecutor()
                                 imageCapture.takePicture(
-                                    executor,
+                                    worker,
                                     object : ImageCapture.OnImageCapturedCallback() {
                                         override fun onCaptureSuccess(imageProxy: ImageProxy) {
                                             try {
                                                 val bitmap = imageProxy.toBitmap()
-                                                capturedBitmap = bitmap
+                                                mainExecutor.execute {
+                                                    capturedBitmap?.recycle()
+                                                    capturedBitmap = bitmap
+                                                }
 
                                                 val mediaImage = imageProxy.image
                                                 val inputImage = if (mediaImage != null) {
@@ -532,40 +540,55 @@ fun PhotoMissionScreen(
 
                                                 labeler.process(inputImage)
                                                     .addOnSuccessListener { labels ->
-                                                        val match = labels.firstOrNull { label ->
-                                                            val text = label.text.lowercase().trim()
-                                                            targetItem.mlKitSynonyms.any { syn ->
-                                                                val s = syn.lowercase().trim()
-                                                                text == s || text.contains(s) || s.contains(text)
-                                                            } || text == targetItem.id.lowercase() || text == targetItem.displayName.lowercase()
-                                                        }
+                                                        mainExecutor.execute {
+                                                            val match = labels.firstOrNull { label ->
+                                                                val text = label.text.lowercase().trim()
+                                                                targetItem.mlKitSynonyms.any { syn ->
+                                                                    val s = syn.lowercase().trim()
+                                                                    text == s || text.contains(s) || s.contains(text)
+                                                                } || text == targetItem.id.lowercase() || text == targetItem.displayName.lowercase()
+                                                            }
 
-                                                        if (match != null) {
-                                                            matchedLabelText = match.text
-                                                            photoState = PhotoState.VERIFIED_SUCCESS
-                                                        } else {
-                                                            detectedLabels = labels.map { it.text }
-                                                            photoState = PhotoState.RETAKE_REQUIRED
+                                                            if (match != null) {
+                                                                matchedLabelText = match.text
+                                                                photoState = PhotoState.VERIFIED_SUCCESS
+                                                            } else {
+                                                                detectedLabels = labels.map { it.text }
+                                                                photoState = PhotoState.RETAKE_REQUIRED
+                                                            }
                                                         }
                                                     }
                                                     .addOnFailureListener { e ->
                                                         Log.w("PhotoMissionScreen", "Labeling failed", e)
-                                                        detectedLabels = emptyList()
-                                                        photoState = PhotoState.RETAKE_REQUIRED
+                                                        mainExecutor.execute {
+                                                            detectedLabels = emptyList()
+                                                            photoState = PhotoState.RETAKE_REQUIRED
+                                                        }
                                                     }
                                                     .addOnCompleteListener {
+                                                        // The detector lived for the whole process
+                                                        // before; it is per-shot state, so close it
+                                                        // with the shot.
+                                                        labeler.close()
                                                         imageProxy.close()
+                                                        worker.shutdown()
                                                     }
                                             } catch (e: Exception) {
                                                 Log.e("PhotoMissionScreen", "Processing exception", e)
                                                 imageProxy.close()
-                                                photoState = PhotoState.RETAKE_REQUIRED
+                                                worker.shutdown()
+                                                mainExecutor.execute {
+                                                    photoState = PhotoState.RETAKE_REQUIRED
+                                                }
                                             }
                                         }
 
                                         override fun onError(exception: ImageCaptureException) {
                                             Log.e("PhotoMissionScreen", "Capture failed", exception)
-                                            photoState = PhotoState.RETAKE_REQUIRED
+                                            worker.shutdown()
+                                            mainExecutor.execute {
+                                                photoState = PhotoState.RETAKE_REQUIRED
+                                            }
                                         }
                                     }
                                 )

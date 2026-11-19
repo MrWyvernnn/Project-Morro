@@ -142,12 +142,28 @@ fun QrMissionScreen(
         }
     }
 
+    // The analyzer thread and the ML Kit detector used to be created inside the AndroidView
+    // factory, so every composition of the scanner leaked a thread and a detector for the life of
+    // the process. They are owned here and torn down with the screen.
+    val analysisExecutor = remember { Executors.newSingleThreadExecutor() }
+    val barcodeScanner = remember { BarcodeScanning.getClient() }
+
     DisposableEffect(Unit) {
         onDispose {
             try {
                 cameraControl?.enableTorch(false)
             } catch (e: Exception) {
                 Log.w("QrMissionScreen", "Failed to disable torch on dispose", e)
+            }
+            try {
+                analysisExecutor.shutdownNow()
+            } catch (e: Exception) {
+                Log.w("QrMissionScreen", "Failed to stop analyzer executor", e)
+            }
+            try {
+                barcodeScanner.close()
+            } catch (e: Exception) {
+                Log.w("QrMissionScreen", "Failed to close barcode scanner", e)
             }
         }
     }
@@ -262,7 +278,6 @@ fun QrMissionScreen(
                             }
                             val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
                             val mainExecutor = ContextCompat.getMainExecutor(ctx)
-                            val analysisExecutor = Executors.newSingleThreadExecutor()
 
                             cameraProviderFuture.addListener({
                                 try {
@@ -271,7 +286,7 @@ fun QrMissionScreen(
                                         it.setSurfaceProvider(previewView.surfaceProvider)
                                     }
 
-                                    val scanner = BarcodeScanning.getClient()
+                                    val scanner = barcodeScanner
                                     val analysis = ImageAnalysis.Builder()
                                         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                                         .build()
