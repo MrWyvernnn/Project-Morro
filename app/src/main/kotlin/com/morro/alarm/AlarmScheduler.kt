@@ -126,9 +126,23 @@ object AlarmScheduler {
         }
     }
 
-    fun snoozeAlarm(context: Context, minutes: Int = 10) {
+    /**
+     * Arms a one-off snooze.
+     *
+     * The occurrence that just rang consumed the single alarm slot, so a snooze that cannot be
+     * scheduled leaves nothing pending at all. In that case the daily alarm is re-armed instead of
+     * silently giving the person no alarm until they next open the app.
+     *
+     * @return true when the snooze itself was armed.
+     */
+    fun snoozeAlarm(context: Context, minutes: Int = 10): Boolean {
         val triggerTime = System.currentTimeMillis() + minutes * 60_000L
-        scheduleAlarm(context, triggerTime)
+        if (scheduleAlarm(context, triggerTime)) return true
+        Log.w(TAG, "Snooze could not be armed; falling back to the daily alarm")
+        getSavedAlarmTime(context)?.let { (hour, minute) ->
+            scheduleDailyAlarm(context, hour, minute)
+        }
+        return false
     }
 
     fun cancelAlarm(context: Context) {

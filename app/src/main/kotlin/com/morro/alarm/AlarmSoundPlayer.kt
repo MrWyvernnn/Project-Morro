@@ -6,6 +6,7 @@ import android.media.MediaPlayer
 import android.media.RingtoneManager
 import android.net.Uri
 import android.os.PowerManager
+import android.provider.Settings
 import android.util.Log
 
 /**
@@ -32,27 +33,35 @@ object AlarmSoundPlayer {
     private var mediaPlayer: MediaPlayer? = null
 
     /**
-     * Starts playing the alarm sound using prepareAsync().
+     * Plays the alarm, walking a fallback chain of system sound URIs.
      *
-     * @param context Application context
+     * A single TYPE_ALARM URI is not guaranteed to be playable: it can be null when the person has
+     * set the alarm sound to "None", and some OEMs hand back a URI whose provider cannot open.
+     * The old code caught that and gave up, which is the one fatal outcome for this app — a silent
+     * alarm. Each candidate is opened with the same attributes, so routing is unchanged.
      */
     @Synchronized
     fun start(context: Context, onError: ((String) -> Unit)? = null) {
         stopAndReleasePlayer()
+        val appContext = context.applicationContext
+        var lastFailure: String? = null
 
-        try {
-            mediaPlayer = MediaPlayer().apply {
-                setAudioAttributes(audioAttributes)
-                setWakeMode(context.applicationContext, PowerManager.PARTIAL_WAKE_LOCK)
-                setDataSource(context, getAlarmSoundUri(context))
-                isLooping = true
-                setOnErrorListener { _, what, extra ->
+        for (uri in alarmSoundUris()) {
+            var candidate: MediaPlayer? = null
+            try {
+                val player = MediaPlayer()
+                candidate = player
+                player.setAudioAttributes(audioAttributes)
+                player.setWakeMode(appContext, PowerManager.PARTIAL_WAKE_LOCK)
+                player.setDataSource(appContext, uri)
+                player.isLooping = true
+                player.setOnErrorListener { _, what, extra ->
                     Log.w(TAG, "MediaPlayer error what=$what extra=$extra")
                     stopAndReleasePlayer()
                     onError?.invoke("Alarm audio error code $what")
                     true
                 }
-                setOnPreparedListener { mp ->
+                player.setOnPreparedListener { mp ->
                     try {
                         mp.start()
                     } catch (e: Exception) {
@@ -61,22 +70,32 @@ object AlarmSoundPlayer {
                         onError?.invoke("Could not start alarm audio")
                     }
                 }
-                prepareAsync()
+                player.prepareAsync()
+                mediaPlayer = player
+                Log.d(TAG, "Alarm sound prepareAsync called for $uri")
+                return
+            } catch (e: Exception) {
+                lastFailure = e.message
+                Log.w(TAG, "Alarm sound source unusable, trying the next: $uri", e)
+                try {
+                    candidate?.release()
+                } catch (ignored: Exception) {
+                }
             }
-            Log.d(TAG, "Alarm sound prepareAsync called")
-        } catch (e: Exception) {
-            Log.e(TAG, "Could not start alarm sound", e)
-            stopAndReleasePlayer()
-            onError?.invoke(e.message ?: "Could not start alarm sound")
         }
+
+        stopAndReleasePlayer()
+        Log.e(TAG, "No playable alarm sound source; last failure: $lastFailure")
+        onError?.invoke(lastFailure ?: "Could not start alarm sound")
     }
 
-    /**
-     * Gets the URI for the alarm sound, falling back to system default if none is set.
-     */
-    private fun getAlarmSoundUri(context: Context): Uri {
-        return RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-    }
+    /** Playable system sound URIs, most alarm-like first, distinct and non-null. */
+    private fun alarmSoundUris(): List<Uri> = listOfNotNull(
+        RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM),
+        RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE),
+        RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION),
+        Settings.System.DEFAULT_ALARM_ALERT_URI
+    ).distinct()
 
     /**
      * Sets the volume of the playing alarm sound (clamped between 0.0 and 1.0).
@@ -120,47 +139,58 @@ object AlarmSoundPlayer {
     fun release() = stopAndReleasePlayer()
 
     /**
-     * Plays the fallback system alarm tone using prepareAsync().
+     * Plays one short system alarm tone, walking the same fallback chain as [start].
      *
      * @param context Application context
      */
     @Synchronized
-    fun playFallbackAlarmTone(context: Context, onCompletion: (() -> Unit)? = null, onError: ((String) -> Unit)? = null) {
+    fun playFallbackAlarmTone(
+        context: Context,
+        onCompletion: (() -> Unit)? = null,
+        onError: ((String) -> Unit)? = null
+    ) {
         stopAndReleasePlayer()
 
-        try {
-            mediaPlayer = MediaPlayer().apply {
-                setAudioAttributes(audioAttributes)
-                setWakeMode(context.applicationContext, PowerManager.PARTIAL_WAKE_LOCK)
-                setDataSource(context, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM))
-                setOnCompletionListener {
-                    Log.d(TAG, "Fallback alarm tone completed")
-                    stopAndReleasePlayer()
-                    onCompletion?.invoke()
-                }
-                setOnErrorListener { _, what, extra ->
-                    Log.w(TAG, "Fallback alarm error what=$what extra=$extra")
-                    stopAndReleasePlayer()
-                    onError?.invoke("Fallback alarm error code $what")
-                    true
-                }
-                setOnPreparedListener { mp ->
-                    try {
-                        mp.start()
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error starting fallback alarm on prepared", e)
+        val appContext = context.applicationContext
+        var fallbackFailure: String? = null
+        for (uri in alarmSoundUris()) {
+            try {
+                mediaPlayer = MediaPlayer().apply {
+                    setAudioAttributes(audioAttributes)
+                    setWakeMode(appContext, PowerManager.PARTIAL_WAKE_LOCK)
+                    setDataSource(appContext, uri)
+                    setOnCompletionListener {
+                        Log.d(TAG, "Fallback alarm tone completed")
                         stopAndReleasePlayer()
-                        onError?.invoke("Could not start fallback alarm")
+                        onCompletion?.invoke()
                     }
+                    setOnErrorListener { _, what, extra ->
+                        Log.w(TAG, "Fallback alarm error what=$what extra=$extra")
+                        stopAndReleasePlayer()
+                        onError?.invoke("Fallback alarm error code $what")
+                        true
+                    }
+                    setOnPreparedListener { mp ->
+                        try {
+                            mp.start()
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error starting fallback alarm on prepared", e)
+                            stopAndReleasePlayer()
+                            onError?.invoke("Could not start fallback alarm")
+                        }
+                    }
+                    prepareAsync()
                 }
-                prepareAsync()
+                Log.d(TAG, "Fallback alarm tone prepareAsync called for $uri")
+                return
+            } catch (e: Exception) {
+                fallbackFailure = e.message
+                Log.w(TAG, "Fallback tone source unusable, trying the next: $uri", e)
+                stopAndReleasePlayer()
             }
-            Log.d(TAG, "Fallback alarm tone prepareAsync called")
-        } catch (e: Exception) {
-            Log.e(TAG, "Could not play fallback alarm tone", e)
-            stopAndReleasePlayer()
-            onError?.invoke(e.message ?: "Could not play fallback alarm tone")
         }
+        Log.e(TAG, "No playable fallback tone; last failure: $fallbackFailure")
+        onError?.invoke(fallbackFailure ?: "Could not play fallback alarm tone")
     }
 }
 
