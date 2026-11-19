@@ -66,7 +66,9 @@ object MemoRecorder {
      *
      * @param context Context used to clear temp file if needed.
      * @param deleteTemp true if the temp recording file should be deleted immediately.
-     * @return true if a valid recording was saved and deleteTemp is false.
+     * @return true when a usable clip is on disk and deleteTemp is false. Whether the recorder
+     *   stopped cleanly is deliberately ignored: at the 15 s cap MediaRecorder has already
+     *   finalised and released itself, so `stop()` throws even though the clip is complete.
      */
     @Synchronized
     private fun teardownRecorder(context: Context?, deleteTemp: Boolean): Boolean {
@@ -80,18 +82,13 @@ object MemoRecorder {
         }
         cancelMonotonicTimer()
         val ctx = context?.applicationContext ?: activeAppContext
-        var stoppedCleanly = false
 
         try {
-            recorder?.let { mr ->
-                try {
-                    mr.stop()
-                    stoppedCleanly = true
-                } catch (e: RuntimeException) {
-                    // Swallow stop-when-not-recording race condition
-                    Log.w(TAG, "Swallowed RuntimeException during recorder.stop()", e)
-                }
-            }
+            // A RuntimeException here means the recorder already stopped itself (the 15 s cap) or
+            // never started; either way the file on disk decides the outcome below.
+            recorder?.stop()
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "Swallowed RuntimeException during recorder.stop()", e)
         } finally {
             try {
                 recorder?.reset()
@@ -114,7 +111,7 @@ object MemoRecorder {
         return if (deleteTemp) {
             false
         } else {
-            stoppedCleanly || (ctx != null && MemoStorage.hasTempMemo(ctx))
+            ctx != null && MemoStorage.hasTempMemo(ctx)
         }
     }
 

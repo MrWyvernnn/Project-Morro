@@ -26,10 +26,24 @@ object MemoStorage {
     const val FILENAME_TEMP = "temp_memo.m4a"
 
     /** Absolute path of the temp (work-in-progress) recording. */
-    fun getTempPath(context: Context): String {
+    fun getTempPath(context: Context): String = getTempFile(context).absolutePath
+
+    /** The temp (work-in-progress) recording file, whether or not it exists yet. */
+    fun getTempFile(context: Context): File {
         val dir = context.applicationContext?.filesDir ?: context.filesDir
-        return File(dir, FILENAME_TEMP).absolutePath
+        return File(dir, FILENAME_TEMP)
     }
+
+    /**
+     * The one rule for "this file is a real recording".
+     *
+     * MediaRecorder finalises the clip itself when it hits the 15 s cap, so by the time our own
+     * stop call arrives the recorder is already gone and `stop()` cannot report success. The bytes
+     * on disk are the only honest signal: an existing non-empty file is a recording, a missing or
+     * empty one is not. Every path (Stop button, 15 s ticker, native cap callback) uses this, so
+     * they can never disagree about whether the clip survived.
+     */
+    fun isUsableClip(file: File): Boolean = file.exists() && file.length() > 0L
 
     /** Absolute path of the saved memo, or null if nothing is saved. */
     fun getLatestMemoPath(context: Context): String? {
@@ -58,8 +72,8 @@ object MemoStorage {
      */
     fun saveMemo(context: Context): Boolean {
         val appCtx = context.applicationContext
-        val temp = File(appCtx.filesDir, FILENAME_TEMP)
-        if (!temp.exists() || temp.length() == 0L) return false
+        val temp = getTempFile(appCtx)
+        if (!isUsableClip(temp)) return false
 
         val latest = File(appCtx.filesDir, FILENAME_LATEST)
 
@@ -84,16 +98,11 @@ object MemoStorage {
 
     /** Deletes the work-in-progress recording. The saved memo is untouched. */
     fun clearTemp(context: Context) {
-        val dir = context.applicationContext?.filesDir ?: context.filesDir
-        File(dir, FILENAME_TEMP).delete()
+        getTempFile(context).delete()
     }
 
     /** True when an uncommitted temp recording exists on disk. */
-    fun hasTempMemo(context: Context): Boolean {
-        val dir = context.applicationContext?.filesDir ?: context.filesDir ?: return false
-        val temp = File(dir, FILENAME_TEMP)
-        return temp.exists() && temp.length() > 0L
-    }
+    fun hasTempMemo(context: Context): Boolean = isUsableClip(getTempFile(context))
 
     /** True when a saved memo exists on disk. */
     fun hasSavedMemo(context: Context): Boolean = getLatestMemoPath(context) != null

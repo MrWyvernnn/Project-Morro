@@ -267,10 +267,19 @@ fun AlarmBuilderSheetContent(
     var recordingCountdown by remember { mutableIntStateOf(15) }
     var isPlayingPreview by remember { mutableStateOf(false) }
     val hasSaved = remember { mutableStateOf(MemoStorage.hasSavedMemo(context)) }
-    // saveMemo() moves temp -> latest, so a second caller (native cap callback vs. the ticker)
-    // finds nothing left to move and returns false. The clip is still on disk in that case, and the
-    // CTA must not refuse a promise that exists.
-    val persistMemo = { MemoStorage.saveMemo(context) || MemoStorage.hasSavedMemo(context) }
+
+    // The native 15 s cap callback, the countdown ticker and the Stop button can all end the same
+    // clip. voiceState is the guard: only the first caller reaches RECORDED_READY and promotes the
+    // file, so a late caller cannot re-save, find nothing to move, and flip "promise ready" back
+    // to unsaved. Success comes from the clip on disk (MemoStorage.isUsableClip), never from who
+    // happened to call stop() first.
+    val finishRecording = {
+        if (voiceState == VoiceState.RECORDING) {
+            voiceState = VoiceState.RECORDED_READY
+            val recorded = MemoRecorder.stopRecording(context)
+            hasSaved.value = recorded && MemoStorage.saveMemo(context)
+        }
+    }
 
     // ── Permission launcher ───────────────────────────────────────────────────
     val audioPermissionLauncher = rememberLauncherForActivityResult(
@@ -286,8 +295,7 @@ fun AlarmBuilderSheetContent(
                     voiceState = VoiceState.IDLE
                 },
                 onMaxDurationReached = {
-                    voiceState = VoiceState.RECORDED_READY
-                    hasSaved.value = persistMemo()
+                    finishRecording()
                 }
             )
             voiceState = VoiceState.RECORDING
@@ -306,9 +314,7 @@ fun AlarmBuilderSheetContent(
                 val remainingMs = (15_000L - elapsed).coerceAtLeast(0L)
                 recordingCountdown = ((remainingMs + 999L) / 1000L).toInt().coerceIn(0, 15)
                 if (remainingMs <= 0L) {
-                    MemoRecorder.stopRecording(context)
-                    voiceState = VoiceState.RECORDED_READY
-                    hasSaved.value = persistMemo()
+                    finishRecording()
                     break
                 }
                 delay(100L)
@@ -428,7 +434,7 @@ fun AlarmBuilderSheetContent(
                         wakeTimeStr = wakeTimeStr,
                         missionTargetName = missionTargetName,
                         onRecord = { audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO) },
-                        onStop = { MemoRecorder.stopRecording(context); voiceState = VoiceState.RECORDED_READY; hasSaved.value = persistMemo() },
+                        onStop = finishRecording,
                         // Preview and re-record are owned here: the playing flag and the voice
                         // state machine live in this composable, so a caller-supplied no-op left
                         // both buttons dead.
@@ -923,9 +929,13 @@ private fun VoiceExpandedContent(
             }
 
             VoiceState.RECORDED_READY -> {
+                // Safety net for a clip left behind by an earlier build or a killed process. Same
+                // rule as finishRecording: a non-empty temp clip is a real recording, and an empty
+                // one is not. No hasSavedMemo() fallback here — that would call yesterday's memo a
+                // success for a clip that was never written.
                 if (!hasSaved.value && MemoStorage.hasTempMemo(context)) {
                     LaunchedEffect(Unit) {
-                        hasSaved.value = MemoStorage.saveMemo(context) || MemoStorage.hasSavedMemo(context)
+                        hasSaved.value = MemoStorage.saveMemo(context)
                     }
                 }
 

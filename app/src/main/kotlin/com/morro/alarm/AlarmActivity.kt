@@ -408,7 +408,14 @@ class AlarmActivity : ComponentActivity() {
         }
     }
 
-    /** Stops recording, calls MemoStorage.saveMemo() synchronously, shows success toast, and finishes. */
+    /**
+     * Stops recording, calls MemoStorage.saveMemo() synchronously, shows success toast, and finishes.
+     *
+     * The 15 s cap arrives from two places — MediaRecorder's own MAX_DURATION_REACHED callback and
+     * the countdown coroutine in [startRecordingTomorrow] — and whichever lands second finds the
+     * recorder already torn down. isRecording makes this idempotent, and "recorded" means a usable
+     * clip is on disk, not that our stop() call won the race.
+     */
     private fun stopRecordingTomorrow() {
         if (!isRecording) return
         isRecording = false
