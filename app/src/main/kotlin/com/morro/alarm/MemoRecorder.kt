@@ -68,7 +68,12 @@ object MemoRecorder {
     @Synchronized
     private fun teardownRecorder(context: Context?, deleteTemp: Boolean): Boolean {
         if (!recordingActive && recorder == null) {
-            return false
+            // Already torn down by the other caller (Stop button, ticker, or the native
+            // MAX_DURATION_REACHED handler). A finished clip in temp_memo.m4a is still a valid
+            // recording, so report success instead of discarding it as "too short".
+            if (deleteTemp) return false
+            val ctx = context?.applicationContext ?: activeAppContext
+            return ctx != null && MemoStorage.hasTempMemo(ctx)
         }
         cancelMonotonicTimer()
         val ctx = context?.applicationContext ?: activeAppContext

@@ -87,6 +87,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.morro.alarm.MemoPlayer
 import com.morro.alarm.MemoRecorder
 import com.morro.alarm.MemoStorage
 import com.morro.alarm.mission.MissionPrefs
@@ -239,13 +240,10 @@ fun AlarmBuilderSheet(
  */
 @Composable
 fun AlarmBuilderSheetContent(
-    onSave: (hour: Int, minute: Int, missionType: MissionType) -> Unit,
+    onSave: (hour: Int, minute: Int, missionType: MissionType, qrCode: String, photoItems: Set<String>) -> Unit,
     onDismiss: () -> Unit,
     initialHour: Int = 7,
-    initialMinute: Int = 0,
-    onVoicePermission: () -> Unit = {},
-    onVoicePreview: () -> Unit = {},
-    onVoiceRerecord: () -> Unit = {}
+    initialMinute: Int = 0
 ) {
     val context = LocalContext.current
 
@@ -269,6 +267,10 @@ fun AlarmBuilderSheetContent(
     var recordingCountdown by remember { mutableIntStateOf(15) }
     var isPlayingPreview by remember { mutableStateOf(false) }
     val hasSaved = remember { mutableStateOf(MemoStorage.hasSavedMemo(context)) }
+    // saveMemo() moves temp -> latest, so a second caller (native cap callback vs. the ticker)
+    // finds nothing left to move and returns false. The clip is still on disk in that case, and the
+    // CTA must not refuse a promise that exists.
+    val persistMemo = { MemoStorage.saveMemo(context) || MemoStorage.hasSavedMemo(context) }
 
     // ── Permission launcher ───────────────────────────────────────────────────
     val audioPermissionLauncher = rememberLauncherForActivityResult(
@@ -285,7 +287,7 @@ fun AlarmBuilderSheetContent(
                 },
                 onMaxDurationReached = {
                     voiceState = VoiceState.RECORDED_READY
-                    hasSaved.value = MemoStorage.saveMemo(context)
+                    hasSaved.value = persistMemo()
                 }
             )
             voiceState = VoiceState.RECORDING
@@ -306,7 +308,7 @@ fun AlarmBuilderSheetContent(
                 if (remainingMs <= 0L) {
                     MemoRecorder.stopRecording(context)
                     voiceState = VoiceState.RECORDED_READY
-                    hasSaved.value = MemoStorage.saveMemo(context)
+                    hasSaved.value = persistMemo()
                     break
                 }
                 delay(100L)
@@ -426,9 +428,31 @@ fun AlarmBuilderSheetContent(
                         wakeTimeStr = wakeTimeStr,
                         missionTargetName = missionTargetName,
                         onRecord = { audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO) },
-                        onStop = { MemoRecorder.stopRecording(context); voiceState = VoiceState.RECORDED_READY; hasSaved.value = MemoStorage.saveMemo(context) },
-                        onPreview = onVoicePreview,
-                        onRerecord = onVoiceRerecord
+                        onStop = { MemoRecorder.stopRecording(context); voiceState = VoiceState.RECORDED_READY; hasSaved.value = persistMemo() },
+                        // Preview and re-record are owned here: the playing flag and the voice
+                        // state machine live in this composable, so a caller-supplied no-op left
+                        // both buttons dead.
+                        onPreview = {
+                            val memoPath = MemoStorage.getLatestMemoPath(context)
+                            if (memoPath == null) {
+                                Toast.makeText(context, "No saved voice promise yet.", Toast.LENGTH_SHORT).show()
+                            } else {
+                                isPlayingPreview = true
+                                MemoPlayer.startPlayback(
+                                    context = context,
+                                    filePath = memoPath,
+                                    onCompletion = { isPlayingPreview = false },
+                                    onError = { isPlayingPreview = false }
+                                )
+                            }
+                        },
+                        onRerecord = {
+                            MemoPlayer.stopPlayback()
+                            isPlayingPreview = false
+                            // Recording again overwrites temp_memo.m4a and re-promotes it on stop.
+                            hasSaved.value = false
+                            voiceState = VoiceState.IDLE
+                        }
                     )
                 }
             )
@@ -447,8 +471,7 @@ fun AlarmBuilderSheetContent(
                         qrCodeValue = qrCodeValue,
                         showQrDialog = showQrDialog,
                         onQrDialogChange = { showQrDialog = it },
-                        context = context,
-                        selectedMission = selectedMission
+                        onQrCodeChange = { qrCodeValue = it }
                     )
                 }
             )
@@ -467,8 +490,7 @@ fun AlarmBuilderSheetContent(
                         selectedPhotoItems = selectedPhotoItems,
                         showPhotoSheet = showPhotoSheet,
                         onPhotoSheetChange = { showPhotoSheet = it },
-                        context = context,
-                        selectedMission = selectedMission
+                        onPhotoItemsChange = { selectedPhotoItems = it }
                     )
                 }
             )
@@ -496,7 +518,9 @@ fun AlarmBuilderSheetContent(
                     return@MorroPrimaryButton
                 }
 
-                onSave(selectedHour, selectedMinute, selectedMission)
+                // Persisting happens here, on "Save and arm", not in the QR/photo sub-dialogs:
+                // those used to write a mission and a pool the person could still cancel.
+                onSave(selectedHour, selectedMinute, selectedMission, qrCodeValue.trim(), selectedPhotoItems)
             },
             modifier = Modifier.fillMaxWidth()
         )
@@ -901,8 +925,7 @@ private fun VoiceExpandedContent(
             VoiceState.RECORDED_READY -> {
                 if (!hasSaved.value && MemoStorage.hasTempMemo(context)) {
                     LaunchedEffect(Unit) {
-                        MemoStorage.saveMemo(context)
-                        hasSaved.value = true
+                        hasSaved.value = MemoStorage.saveMemo(context) || MemoStorage.hasSavedMemo(context)
                     }
                 }
 
@@ -991,8 +1014,7 @@ private fun QrExpandedContent(
     qrCodeValue: String,
     showQrDialog: Boolean,
     onQrDialogChange: (Boolean) -> Unit,
-    context: Context,
-    selectedMission: MissionType
+    onQrCodeChange: (String) -> Unit
 ) {
     val colors = morroColors()
     val typo = morroTypography()
@@ -1033,13 +1055,7 @@ private fun QrExpandedContent(
             qrCodeValue = qrCodeValue,
             onDismiss = { onQrDialogChange(false) },
             onSave = { newCode ->
-                val trimmed = newCode.trim()
-                MissionPrefs.saveMission(
-                    context,
-                    selectedMission,
-                    trimmed,
-                    MissionPrefs.getSelectedPhotoItems(context)
-                )
+                onQrCodeChange(newCode.trim())
                 onQrDialogChange(false)
             }
         )
@@ -1106,8 +1122,7 @@ private fun PhotoExpandedContent(
     selectedPhotoItems: Set<String>,
     showPhotoSheet: Boolean,
     onPhotoSheetChange: (Boolean) -> Unit,
-    context: Context,
-    selectedMission: MissionType
+    onPhotoItemsChange: (Set<String>) -> Unit
 ) {
     val colors = morroColors()
     val typo = morroTypography()
@@ -1155,12 +1170,7 @@ private fun PhotoExpandedContent(
             selectedPhotoItems = selectedPhotoItems,
             onDismiss = { onPhotoSheetChange(false) },
             onSave = { newItems ->
-                MissionPrefs.saveMission(
-                    context,
-                    selectedMission,
-                    MissionPrefs.getQrCode(context),
-                    newItems
-                )
+                onPhotoItemsChange(newItems)
                 onPhotoSheetChange(false)
             }
         )
