@@ -76,7 +76,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.morro.alarm.ui.components.DriftingClouds
+import com.morro.alarm.ui.components.MorroSky
 import com.morro.alarm.ui.components.MorroSkyScrim
 import com.morro.alarm.ui.theme.MorroColors
 import com.morro.alarm.ui.theme.MorroShapes
@@ -269,7 +269,7 @@ fun PersonalizedQuestions(
 
     // Full-bleed so the clouds reach the edges; the column below owns the insets.
     Box(modifier = modifier.fillMaxSize()) {
-        DriftingClouds(intensity = 0.7f)
+        MorroSky(intensity = 0.7f)
 
         // The sky is scenery; the question is the page. The shared scrim keeps the clouds in the
         // margins so a longer question (the hour quote, the two free-text prompts) never sits on one.

@@ -32,6 +32,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.morro.alarm.BuildConfig
+import com.morro.alarm.ui.theme.MorroThemeChoice
 import com.morro.alarm.ui.theme.morroColors
 import com.morro.alarm.ui.theme.morroHairline
 import com.morro.alarm.ui.theme.morroShapes
@@ -40,12 +41,17 @@ import com.morro.alarm.ui.theme.morroTypography
 /**
  * MorroSettingsSheet — the few things a person can actually change, in one place.
  *
- * This holds no toggles of its own. Every row is a door to something that already exists: the
- * wake-up builder, the mission picker inside it, and the privacy policy. Inventing settings here
- * would mean storing values nothing reads, so the sheet stays a directory rather than a form.
+ * Almost every row is a door to something that already exists: the wake-up builder, the mission
+ * picker inside it, and the privacy policy. Inventing settings here would mean storing values
+ * nothing reads, so the sheet stays close to a directory rather than a form.
+ *
+ * The one real control is the theme switch. It is a switch rather than a picker because there are
+ * exactly two themes; a list of two would be a menu to read where a toggle is enough.
  *
  * @param wakeUpLabel the current wake-up time, or "Not set"
  * @param missionLabel the mission that will get the person out of bed
+ * @param themeChoice the theme in use right now, shown as the row's value
+ * @param onAutumnThemeChange true for Autumn, false for Midnight
  * @param onOpenWakeUp opens the alarm builder
  * @param onOpenPrivacy opens the privacy policy
  * @param onDismiss called on backdrop tap, drag-down, or Close
@@ -55,6 +61,8 @@ import com.morro.alarm.ui.theme.morroTypography
 fun MorroSettingsSheet(
     wakeUpLabel: String,
     missionLabel: String,
+    themeChoice: MorroThemeChoice,
+    onAutumnThemeChange: (Boolean) -> Unit,
     onOpenWakeUp: () -> Unit,
     onOpenPrivacy: () -> Unit,
     onDismiss: () -> Unit,
@@ -114,6 +122,13 @@ fun MorroSettingsSheet(
                 onClick = onOpenWakeUp
             )
 
+            SettingsToggleRow(
+                title = "Autumn theme",
+                value = themeChoice.label,
+                checked = themeChoice == MorroThemeChoice.AUTUMN,
+                onCheckedChange = onAutumnThemeChange
+            )
+
             SettingsRow(
                 title = "Privacy",
                 value = "On-device only",
@@ -148,6 +163,54 @@ fun MorroSettingsSheet(
                 )
             }
         }
+    }
+}
+
+/**
+ * A setting that is a value, not a door: title and current state on the left, the switch on the
+ * right. The whole 56dp row is the target, same as [SettingsRow], so the switch is easy to hit and
+ * the row and the switch never disagree about what is on.
+ */
+@Composable
+private fun SettingsToggleRow(
+    title: String,
+    value: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    val colors = morroColors()
+    val typo = morroTypography()
+    val shapes = morroShapes()
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp)
+            .clip(shapes.Card)
+            .background(colors.surfaceCard)
+            .morroHairline(radius = 16.dp, color = colors.borderSubtle)
+            .padding(horizontal = 18.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Column {
+            Text(
+                text = title,
+                style = typo.bodyLarge,
+                color = colors.textPrimary
+            )
+            Text(
+                text = value,
+                style = typo.bodyMedium,
+                fontSize = 12.sp,
+                color = colors.textTertiary
+            )
+        }
+        Spacer(modifier = Modifier.width(16.dp))
+        MorroSwitch(
+            checked = checked,
+            onCheckedChange = onCheckedChange
+        )
     }
 }
 

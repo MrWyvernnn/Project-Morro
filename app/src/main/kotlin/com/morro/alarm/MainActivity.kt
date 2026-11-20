@@ -93,6 +93,8 @@ import com.morro.alarm.ui.splash.MorroGhostSplash
 import com.morro.alarm.ui.motion.MorroMotion
 import com.morro.alarm.ui.motion.pressScale
 import com.morro.alarm.ui.theme.MorroTheme
+import com.morro.alarm.ui.theme.MorroThemeChoice
+import com.morro.alarm.ui.theme.ThemePrefs
 import com.morro.alarm.ui.theme.morroColors
 import com.morro.alarm.ui.theme.morroHairline
 import com.morro.alarm.ui.theme.morroShapes
@@ -486,12 +488,24 @@ fun MainAlarmScreen(context: Context) {
             MorroPrivacyPolicySheet(onDismiss = { showPrivacyPolicy = false })
         }
 
+        // The wrapper already reads the stored theme; this state only makes the switch respond on
+        // the same tap instead of waiting for the settings round trip.
+        var autumnTheme by remember { mutableStateOf(ThemePrefs.isAutumn(context)) }
+
         // Every row in Settings is a door to a sheet that already exists, so nothing here can
         // disagree with the dashboard about what the alarm currently is.
         if (showSettings) {
             MorroSettingsSheet(
                 wakeUpLabel = dockTime ?: "Not set",
                 missionLabel = missionLabel,
+                themeChoice = if (autumnTheme) MorroThemeChoice.AUTUMN else MorroThemeChoice.MIDNIGHT,
+                onAutumnThemeChange = { on ->
+                    autumnTheme = on
+                    ThemePrefs.set(
+                        context,
+                        if (on) MorroThemeChoice.AUTUMN else MorroThemeChoice.MIDNIGHT
+                    )
+                },
                 onOpenWakeUp = {
                     showSettings = false
                     showAlarmBuilder = true

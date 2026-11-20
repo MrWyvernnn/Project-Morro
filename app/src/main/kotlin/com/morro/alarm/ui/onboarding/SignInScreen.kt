@@ -46,7 +46,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.morro.alarm.ui.components.DriftingClouds
+import com.morro.alarm.ui.components.MorroSky
 import com.morro.alarm.ui.components.MorroGhostMascot
 import com.morro.alarm.ui.components.MorroSkyScrim
 import com.morro.alarm.ui.components.MorroPrimaryButton
@@ -78,7 +78,7 @@ fun SignInScreen(
 
     // Full-bleed so the sky reaches the edges; the reading column takes the insets, not the Box.
     Box(modifier = modifier.fillMaxSize()) {
-        DriftingClouds(intensity = 0.55f)
+        MorroSky(intensity = 0.55f)
 
         // Same scrim as the questions: scenery stays in the margins, copy stays legible.
         MorroSkyScrim()

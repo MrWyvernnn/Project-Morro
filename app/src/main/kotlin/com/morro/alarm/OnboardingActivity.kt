@@ -58,7 +58,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.morro.alarm.ui.components.MorroPrimaryButton
-import com.morro.alarm.ui.components.DriftingClouds
+import com.morro.alarm.ui.components.MorroSky
 import com.morro.alarm.ui.theme.MorroColors
 import com.morro.alarm.ui.theme.MorroShapes
 import com.morro.alarm.ui.theme.MorroTheme
@@ -250,7 +250,7 @@ fun PermissionsScreen(
     onContinue: () -> Unit
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
-        DriftingClouds(intensity = 0.75f)
+        MorroSky(intensity = 0.75f)
 
         Column(
             modifier = Modifier

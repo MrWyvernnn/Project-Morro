@@ -37,7 +37,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.morro.alarm.ui.components.DriftingClouds
+import com.morro.alarm.ui.components.MorroSky
 import com.morro.alarm.ui.components.MorroGhostMascot
 import com.morro.alarm.ui.motion.rememberReducedMotion
 import com.morro.alarm.ui.theme.MorroColors
@@ -95,7 +95,7 @@ fun MorroGhostSplash(
             .navigationBarsPadding()
             .clickable(onClick = { finish() }),
     ) {
-        DriftingClouds(modifier = Modifier.fillMaxSize(), intensity = 1f)
+        MorroSky(modifier = Modifier.fillMaxSize(), intensity = 1f)
 
         Column(
             modifier = Modifier

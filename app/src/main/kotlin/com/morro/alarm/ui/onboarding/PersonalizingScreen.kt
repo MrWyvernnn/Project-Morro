@@ -34,7 +34,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.morro.alarm.ui.components.DriftingClouds
+import com.morro.alarm.ui.components.MorroSky
 import com.morro.alarm.ui.components.MorroGhostMascot
 import com.morro.alarm.ui.components.MorroSkyScrim
 import com.morro.alarm.ui.motion.MorroMotion
@@ -100,7 +100,7 @@ fun PersonalizingScreen(
             ),
         contentAlignment = Alignment.Center
     ) {
-        DriftingClouds(intensity = 0.65f)
+        MorroSky(intensity = 0.65f)
         // The label and the rail sit on the same black band as every other intro screen.
         MorroSkyScrim()
 

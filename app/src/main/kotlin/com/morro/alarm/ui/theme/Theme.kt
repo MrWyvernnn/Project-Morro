@@ -11,9 +11,15 @@ import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
@@ -54,39 +60,54 @@ object MorroShapes {
 
 // ── Colours ───────────────────────────────────────────────────────────────
 object MorroColors {
+    /**
+     * The palette every getter below reads.
+     *
+     * It is snapshot state, so `MorroColors.Honey` inside a composable subscribes to it and repaints
+     * when [MorroTheme] swaps the theme. Keeping the object as plain getters is what let the two
+     * themes land without rewriting the ~160 existing `MorroColors.X` call sites.
+     */
+    private val active = mutableStateOf(MorroPalettes.of(MorroThemeChoice.MIDNIGHT))
+
+    /** Called by [MorroTheme] once the stored choice is known. */
+    internal fun use(choice: MorroThemeChoice) {
+        active.value = MorroPalettes.of(choice)
+    }
+
     // Warm neutral ramp
-    val Canvas          = Color(0xFF000000)
-    val Surface         = Color(0xFF0B0A08)
-    val SurfaceCard     = Color(0xFF121110)
-    val SurfaceElevated = Color(0xFF1A1714)
+    val Canvas get() = active.value.canvas
+    val Surface get() = active.value.surface
+    val SurfaceCard get() = active.value.surfaceCard
+    val SurfaceElevated get() = active.value.surfaceElevated
 
     /**
      * The lightest step, not the darkest: an inset well inside an elevated surface. It was called
      * `SurfaceLow`, which read as "below the canvas" and sent every reader looking in the wrong
      * direction in the ramp.
      */
-    val SurfaceHigh     = Color(0xFF231F19)
+    val SurfaceHigh get() = active.value.surfaceHigh
 
     /** Same tone as a card, named for the Material slot it fills. */
-    val SurfaceVariant = SurfaceCard
+    val SurfaceVariant get() = active.value.surfaceVariant
 
     // Text roles
-    val TextPrimary   = Color(0xFFEFE7D6) // honey white, never pure #FFFFFF
-    val TextSecondary = Color(0xFFA79E8D)
+    val TextPrimary get() = active.value.textPrimary // honey white, never pure #FFFFFF
+    val TextSecondary get() = active.value.textSecondary
 
     /**
-     * 5.3:1 on #000000, so 11–12sp metadata clears WCAG AA. The previous value sat at 4.47:1 and
-     * technically failed for text this small.
+     * 5.3:1 on #000000 in Midnight, so 11–12sp metadata clears WCAG AA. Autumn keeps the same
+     * requirement; check the new value before calling this done.
      */
-    val TextTertiary  = Color(0xFF877F70)
-    val TextDisabled  = Color(0xFF6B6458)
+    val TextTertiary get() = active.value.textTertiary
+    val TextDisabled get() = active.value.textDisabled
 
     /** The warm highlight: elapsed-hour arc, armed dot, second hand, selection checks. */
-    val Honey = Color(0xFFE8C58F)
+    val Honey get() = active.value.honey
 
     /**
      * Drawn-cloud white. A shade warmer than the text colour, so a solid cloud reads as paper in
-     * warm light rather than as a white cut-out sitting on the black.
+     * warm light rather than as a white cut-out sitting on the black. Not themed: only the Midnight
+     * sky draws clouds.
      */
     val CloudWhite = Color(0xFFF6EFE1)
 
@@ -98,13 +119,48 @@ object MorroColors {
     val EyeRose = Color(0xFFE8B4AE)
 
     // Hairlines: the text colour at low alpha, never a coloured border
-    val BorderSubtle = Color(0x14EFE7D6) // 8%
-    val BorderStrong = Color(0x2EEFE7D6) // 18%
-    val BorderActive = Color(0x59EFE7D6) // 35%
+    val BorderSubtle get() = active.value.borderSubtle // 8%
+    val BorderStrong get() = active.value.borderStrong // 18%
+    val BorderActive get() = active.value.borderActive // 35%
 
     // Status is tonal, not chromatic: the interface stays monochrome
-    val Success = Color(0xFFB9C4A6)
-    val Error   = Color(0xFFD8C1A4)
+    val Success get() = active.value.success
+    val Error get() = active.value.error
+}
+
+/**
+ * The two palettes, as data.
+ *
+ * Autumn is not a recolour of everything: the canvas stays #000000, the neutrals gain a little more
+ * amber, the accent becomes ember orange, and the type keeps the same three roles. Anything more
+ * would be a second design rather than a second theme.
+ */
+object MorroPalettes {
+    val Midnight = MorroColorPalette()
+
+    val Autumn = MorroColorPalette(
+        canvas = Color(0xFF000000),
+        surface = Color(0xFF0C0805),
+        surfaceCard = Color(0xFF15100B),
+        surfaceVariant = Color(0xFF15100B),
+        surfaceElevated = Color(0xFF1E1610),
+        surfaceHigh = Color(0xFF291E14),
+        textPrimary = Color(0xFFF4E7D4),
+        textSecondary = Color(0xFFB3A188),
+        textTertiary = Color(0xFF8E7D66),   // 5.2:1 on #000000
+        textDisabled = Color(0xFF6F5F4C),
+        honey = Color(0xFFEE9B57),          // ember, in the honey role
+        borderSubtle = Color(0x14F4E7D4),
+        borderStrong = Color(0x2EF4E7D4),
+        borderActive = Color(0x59F4E7D4),
+        success = Color(0xFFBCC29B),
+        error = Color(0xFFDDA57E),
+    )
+
+    fun of(choice: MorroThemeChoice): MorroColorPalette = when (choice) {
+        MorroThemeChoice.MIDNIGHT -> Midnight
+        MorroThemeChoice.AUTUMN -> Autumn
+    }
 }
 
 /**
@@ -229,30 +285,30 @@ private val MaterialTypography = Typography(
     labelSmall     = MorroTypography.LabelSmall,
 )
 
-private val MaterialColorScheme = darkColorScheme(
-    background         = MorroColors.Canvas,
-    surface            = MorroColors.Surface,
-    surfaceVariant     = MorroColors.SurfaceCard,
-    onBackground       = MorroColors.TextPrimary,
-    onSurface          = MorroColors.TextPrimary,
-    onSurfaceVariant   = MorroColors.TextSecondary,
-    primary            = MorroColors.TextPrimary,
-    onPrimary          = MorroColors.Canvas,
-    primaryContainer   = MorroColors.SurfaceElevated,
-    onPrimaryContainer = MorroColors.TextPrimary,
-    secondary          = MorroColors.TextSecondary,
-    onSecondary        = MorroColors.Canvas,
-    secondaryContainer = MorroColors.SurfaceHigh,
-    onSecondaryContainer = MorroColors.TextPrimary,
-    tertiary           = MorroColors.TextSecondary,
-    onTertiary         = MorroColors.Canvas,
-    error              = MorroColors.Error,
-    onError            = MorroColors.Canvas,
-    outline            = MorroColors.BorderSubtle,
-    outlineVariant     = MorroColors.BorderSubtle,
-    inverseSurface     = MorroColors.TextPrimary,
-    inverseOnSurface   = MorroColors.Canvas,
-    inversePrimary     = MorroColors.TextSecondary,
+private fun materialColorScheme(c: MorroColorPalette) = darkColorScheme(
+    background         = c.canvas,
+    surface            = c.surface,
+    surfaceVariant     = c.surfaceCard,
+    onBackground       = c.textPrimary,
+    onSurface          = c.textPrimary,
+    onSurfaceVariant   = c.textSecondary,
+    primary            = c.textPrimary,
+    onPrimary          = c.canvas,
+    primaryContainer   = c.surfaceElevated,
+    onPrimaryContainer = c.textPrimary,
+    secondary          = c.textSecondary,
+    onSecondary        = c.canvas,
+    secondaryContainer = c.surfaceHigh,
+    onSecondaryContainer = c.textPrimary,
+    tertiary           = c.textSecondary,
+    onTertiary         = c.canvas,
+    error              = c.error,
+    onError            = c.canvas,
+    outline            = c.borderSubtle,
+    outlineVariant     = c.borderSubtle,
+    inverseSurface     = c.textPrimary,
+    inverseOnSurface   = c.canvas,
+    inversePrimary     = c.textSecondary,
     surfaceTint        = Color.Transparent,
 )
 
@@ -272,22 +328,22 @@ object MorroSpring {
 
 // ── Theme ─────────────────────────────────────────────────────────────────
 data class MorroColorPalette(
-    val canvas: Color = MorroColors.Canvas,
-    val surface: Color = MorroColors.Surface,
-    val surfaceCard: Color = MorroColors.SurfaceCard,
-    val surfaceVariant: Color = MorroColors.SurfaceVariant,
-    val surfaceElevated: Color = MorroColors.SurfaceElevated,
-    val surfaceHigh: Color = MorroColors.SurfaceHigh,
-    val textPrimary: Color = MorroColors.TextPrimary,
-    val textSecondary: Color = MorroColors.TextSecondary,
-    val textTertiary: Color = MorroColors.TextTertiary,
-    val textDisabled: Color = MorroColors.TextDisabled,
-    val honey: Color = MorroColors.Honey,
-    val borderSubtle: Color = MorroColors.BorderSubtle,
-    val borderStrong: Color = MorroColors.BorderStrong,
-    val borderActive: Color = MorroColors.BorderActive,
-    val success: Color = MorroColors.Success,
-    val error: Color = MorroColors.Error,
+    val canvas: Color = Color(0xFF000000),
+    val surface: Color = Color(0xFF0B0A08),
+    val surfaceCard: Color = Color(0xFF121110),
+    val surfaceVariant: Color = Color(0xFF121110),
+    val surfaceElevated: Color = Color(0xFF1A1714),
+    val surfaceHigh: Color = Color(0xFF231F19),
+    val textPrimary: Color = Color(0xFFEFE7D6),
+    val textSecondary: Color = Color(0xFFA79E8D),
+    val textTertiary: Color = Color(0xFF877F70),
+    val textDisabled: Color = Color(0xFF6B6458),
+    val honey: Color = Color(0xFFE8C58F),
+    val borderSubtle: Color = Color(0x14EFE7D6),
+    val borderStrong: Color = Color(0x2EEFE7D6),
+    val borderActive: Color = Color(0x59EFE7D6),
+    val success: Color = Color(0xFFB9C4A6),
+    val error: Color = Color(0xFFD8C1A4),
 )
 
 data class MorroTextPalette(
@@ -307,8 +363,14 @@ private val LocalMorroColors = staticCompositionLocalOf { MorroColorPalette() }
 private val LocalMorroTypography = staticCompositionLocalOf { MorroTextPalette() }
 private val LocalMorroShapes = staticCompositionLocalOf { MorroShapes }
 
+/** The chosen theme, so decorations (the sky) can swap without reading a preference themselves. */
+private val LocalMorroThemeChoice = staticCompositionLocalOf { MorroThemeChoice.MIDNIGHT }
+
 @Composable
 fun morroColors(): MorroColorPalette = LocalMorroColors.current
+
+@Composable
+fun morroThemeChoice(): MorroThemeChoice = LocalMorroThemeChoice.current
 
 @Composable
 fun morroTypography(): MorroTextPalette = LocalMorroTypography.current
@@ -345,13 +407,32 @@ fun springToAlpha(spring: Animatable<Float, AnimationVector1D>, from: Float, to:
 
 @Composable
 fun MorroTheme(content: @Composable () -> Unit) {
+    val context = LocalContext.current
+    var choice by remember { mutableStateOf(ThemePrefs.get(context)) }
+
+    // The theme is a stored preference, not a parameter: a change made in Settings has to reach
+    // every screen, including ones that know nothing about the sheet.
+    DisposableEffect(context) {
+        val stop = ThemePrefs.observe(context) { choice = it }
+        onDispose(stop)
+    }
+
+    val palette = MorroPalettes.of(choice)
+
+    // The MorroColors getters read this snapshot state. Writing it after composition invalidates
+    // exactly the composables that read a colour, so the tree recolours without a restart or a key.
+    SideEffect { MorroColors.use(choice) }
+
+    val scheme = remember(palette) { materialColorScheme(palette) }
+
     CompositionLocalProvider(
-        LocalMorroColors provides MorroColorPalette(),
+        LocalMorroColors provides palette,
+        LocalMorroThemeChoice provides choice,
         LocalMorroTypography provides MorroTextPalette(),
         LocalMorroShapes provides MorroShapes
     ) {
         MaterialTheme(
-            colorScheme = MaterialColorScheme,
+            colorScheme = scheme,
             typography = MaterialTypography,
             shapes = Shapes(
                 extraSmall = MorroShapes.Chip,
