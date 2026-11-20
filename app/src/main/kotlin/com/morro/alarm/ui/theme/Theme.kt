@@ -12,7 +12,6 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -128,40 +127,6 @@ object MorroColors {
     val Error get() = active.value.error
 }
 
-/**
- * The two palettes, as data.
- *
- * Autumn is not a recolour of everything: the canvas stays #000000, the neutrals gain a little more
- * amber, the accent becomes ember orange, and the type keeps the same three roles. Anything more
- * would be a second design rather than a second theme.
- */
-object MorroPalettes {
-    val Midnight = MorroColorPalette()
-
-    val Autumn = MorroColorPalette(
-        canvas = Color(0xFF000000),
-        surface = Color(0xFF0C0805),
-        surfaceCard = Color(0xFF15100B),
-        surfaceVariant = Color(0xFF15100B),
-        surfaceElevated = Color(0xFF1E1610),
-        surfaceHigh = Color(0xFF291E14),
-        textPrimary = Color(0xFFF4E7D4),
-        textSecondary = Color(0xFFB3A188),
-        textTertiary = Color(0xFF8E7D66),   // 5.2:1 on #000000
-        textDisabled = Color(0xFF6F5F4C),
-        honey = Color(0xFFEE9B57),          // ember, in the honey role
-        borderSubtle = Color(0x14F4E7D4),
-        borderStrong = Color(0x2EF4E7D4),
-        borderActive = Color(0x59F4E7D4),
-        success = Color(0xFFBCC29B),
-        error = Color(0xFFDDA57E),
-    )
-
-    fun of(choice: MorroThemeChoice): MorroColorPalette = when (choice) {
-        MorroThemeChoice.MIDNIGHT -> Midnight
-        MorroThemeChoice.AUTUMN -> Autumn
-    }
-}
 
 /**
  * A hairline border drawn inside the component's own bounds.
@@ -327,25 +292,6 @@ object MorroSpring {
 }
 
 // ── Theme ─────────────────────────────────────────────────────────────────
-data class MorroColorPalette(
-    val canvas: Color = Color(0xFF000000),
-    val surface: Color = Color(0xFF0B0A08),
-    val surfaceCard: Color = Color(0xFF121110),
-    val surfaceVariant: Color = Color(0xFF121110),
-    val surfaceElevated: Color = Color(0xFF1A1714),
-    val surfaceHigh: Color = Color(0xFF231F19),
-    val textPrimary: Color = Color(0xFFEFE7D6),
-    val textSecondary: Color = Color(0xFFA79E8D),
-    val textTertiary: Color = Color(0xFF877F70),
-    val textDisabled: Color = Color(0xFF6B6458),
-    val honey: Color = Color(0xFFE8C58F),
-    val borderSubtle: Color = Color(0x14EFE7D6),
-    val borderStrong: Color = Color(0x2EEFE7D6),
-    val borderActive: Color = Color(0x59EFE7D6),
-    val success: Color = Color(0xFFB9C4A6),
-    val error: Color = Color(0xFFD8C1A4),
-)
-
 data class MorroTextPalette(
     val displayHero: TextStyle = MorroTypography.DisplayHero,
     val displayLarge: TextStyle = MorroTypography.DisplayLarge,
@@ -419,9 +365,11 @@ fun MorroTheme(content: @Composable () -> Unit) {
 
     val palette = MorroPalettes.of(choice)
 
-    // The MorroColors getters read this snapshot state. Writing it after composition invalidates
-    // exactly the composables that read a colour, so the tree recolours without a restart or a key.
-    SideEffect { MorroColors.use(choice) }
+    // Publish the palette before anything below reads a colour, so a cold start on Autumn paints
+    // correctly on its very first frame instead of flashing Midnight for one frame. The write is
+    // idempotent: the same palette instance is assigned on every later pass, and SnapshotMutableState
+    // compares by value, so it stops invalidating anything after the first composition.
+    MorroColors.use(choice)
 
     val scheme = remember(palette) { materialColorScheme(palette) }
 
