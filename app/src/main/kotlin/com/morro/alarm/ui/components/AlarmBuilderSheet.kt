@@ -87,6 +87,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.morro.alarm.MathEngine
+import com.morro.alarm.MathPrefs
 import com.morro.alarm.MemoPlayer
 import com.morro.alarm.MemoRecorder
 import com.morro.alarm.MemoStorage
@@ -418,7 +420,9 @@ fun AlarmBuilderSheetContent(
             // 1. Voice Commitment (with record button and yellow checkmark active state)
             MorroOptionChip(
                 title = "Voice Commitment",
-                subtitle = "Record a line in your own voice",
+                // The mission is the promise, but three sums open the ring first. Saying so here is
+                // the one place a person learns that before the alarm ever goes off.
+                subtitle = "A math puzzle, then your voice promise",
                 staggerIndex = 0,
                 icon = Icons.Filled.Mic,
                 isSelected = selectedMission == MissionType.VOICE_COMMITMENT || selectedMission == MissionType.VOICE_MEMO,
@@ -761,6 +765,10 @@ private fun VoiceExpandedContent(
     val shapes = morroShapes()
     val context = LocalContext.current
 
+    // Saved the moment it is tapped: the difficulty belongs to the alarm, not to this sheet, and
+    // the alarm screen must never be the place it turns out to be missing.
+    var difficulty by remember { mutableStateOf(MathPrefs.getDifficulty(context)) }
+
     Column(
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -1012,6 +1020,90 @@ private fun VoiceExpandedContent(
                 }
             }
         }
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        Text(
+            text = "MATH PUZZLE",
+            style = typo.labelSmall,
+            color = colors.textTertiary,
+            letterSpacing = 0.6.sp
+        )
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        Text(
+            text = "Three quick sums open the alarm before your promise plays. Pick how hard.",
+            style = typo.bodyMedium,
+            color = colors.textSecondary,
+            lineHeight = 19.sp
+        )
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        DifficultySelector(
+            selected = difficulty,
+            onSelect = { level ->
+                difficulty = level
+                MathPrefs.setDifficulty(context, level)
+            }
+        )
+    }
+}
+
+/**
+ * DifficultySelector — three pills, one selected.
+ *
+ * Three options on one row, not a menu: the choice is one tap and every level stays visible, so
+ * nobody has to remember what the others were called.
+ */
+@Composable
+private fun DifficultySelector(
+    selected: MathEngine.Difficulty,
+    onSelect: (MathEngine.Difficulty) -> Unit
+) {
+    val colors = morroColors()
+    val typo = morroTypography()
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            MathEngine.Difficulty.values().forEach { level ->
+                val active = level == selected
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(50))
+                        .background(if (active) colors.honey.copy(alpha = 0.14f) else Color.Transparent)
+                        .morroHairline(
+                            radius = 50.dp,
+                            color = if (active) colors.borderActive else colors.borderSubtle
+                        )
+                        .clickable { onSelect(level) }
+                        .heightIn(min = 48.dp)
+                        .wrapContentHeight(Alignment.CenterVertically)
+                        .padding(horizontal = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = level.label,
+                        style = typo.labelLarge,
+                        color = if (active) colors.honey else colors.textSecondary
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = selected.detail,
+            style = typo.bodyMedium,
+            fontSize = 12.sp,
+            color = colors.textTertiary
+        )
     }
 }
 

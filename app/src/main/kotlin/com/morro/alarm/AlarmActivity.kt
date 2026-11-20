@@ -12,6 +12,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -27,16 +28,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.selection.TextSelectionColors
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -60,6 +57,7 @@ import com.morro.alarm.mission.MissionType
 import com.morro.alarm.mission.PhotoMissionScreen
 import com.morro.alarm.mission.PhotoTargetPool
 import com.morro.alarm.mission.QrMissionScreen
+import com.morro.alarm.ui.components.MorroSky
 import com.morro.alarm.ui.theme.MorroTheme
 import com.morro.alarm.ui.theme.morroColors
 import com.morro.alarm.ui.theme.morroTypography
@@ -92,11 +90,14 @@ class AlarmActivity : ComponentActivity() {
     private var missionGraceSeconds by mutableIntStateOf(30)
     private var graceJob: Job? = null
 
-    // Math gate state
+    // Math gate state. One tap per puzzle: a question arrives with its own four choices, so there
+    // is no field to focus and no keyboard to fight at 6 a.m.
     private var problemsSolved by mutableStateOf(0)
     private val totalProblems = 3
     private var currentQuestion by mutableStateOf<MathEngine.Question?>(null)
-    private var userInput by mutableStateOf("")
+
+    /** The choice that was just missed, tinted until the next puzzle. -1 means nothing missed. */
+    private var wrongChoice by mutableIntStateOf(-1)
 
     // Recording gate state for tomorrow's commitment
     private var isRecording by mutableStateOf(false)
@@ -107,7 +108,6 @@ class AlarmActivity : ComponentActivity() {
     private companion object {
         const val KEY_GATE_STATE = "gate_state"
         const val KEY_PROBLEMS_SOLVED = "problems_solved"
-        const val KEY_USER_INPUT = "user_input"
         const val KEY_QUESTION_TEXT = "question_text"
         const val KEY_QUESTION_ANSWER = "question_answer"
     }
@@ -201,11 +201,9 @@ class AlarmActivity : ComponentActivity() {
                 AlarmScreen(
                     gateState = gateState,
                     missionGraceSeconds = missionGraceSeconds,
+                    problemsSolved = problemsSolved,
                     currentQuestion = currentQuestion,
-                    userInput = userInput,
-                    onAnswerChanged = { userInput = it },
-                    onBackspace = { clearInput() },
-                    onSubmit = { submitAnswer(it) },
+                    onSubmitChoice = { submitAnswer(it) },
                                 onMissionSuccess = { onMissionComplete() },
                     onRestartGracePeriod = { restoreFullVolume() },
                                 onRecordTomorrowContent = {
@@ -259,23 +257,25 @@ class AlarmActivity : ComponentActivity() {
         nm.cancel(AlarmForegroundService.NOTIFICATION_ID)
     }
 
+    /**
+     * The next puzzle, at the difficulty chosen when the alarm was set.
+     *
+     * Reading the preference per question, instead of caching it, means a difficulty changed in the
+     * builder applies to the next ring with nothing to restart.
+     */
     private fun nextQuestion() {
-        userInput = ""
-        currentQuestion = MathEngine.generateQuestion()
+        wrongChoice = -1
+        currentQuestion = MathEngine.generateQuestion(MathPrefs.getDifficulty(this))
     }
 
-    private fun clearInput() {
-        // The button says "Clear", so it clears. Backspace-per-keystroke is what the field itself
-        // is for; at 6 a.m. one tap should be one action.
-        userInput = ""
-    }
-
-    private fun submitAnswer(answer: String) {
+    /** A tap on one of the four choices. A miss is marked; the alarm keeps ringing. */
+    private fun submitAnswer(choice: Int) {
         val question = currentQuestion ?: return
-        if (!MathEngine.verify(answer, question)) {
-            userInput = ""
+        if (!MathEngine.isCorrect(choice, question)) {
+            wrongChoice = choice
             return
         }
+        wrongChoice = -1
         problemsSolved++
         if (problemsSolved >= totalProblems) {
             completePuzzle()
@@ -441,7 +441,6 @@ class AlarmActivity : ComponentActivity() {
         super.onSaveInstanceState(outState)
         outState.putString(KEY_GATE_STATE, gateState.name)
         outState.putInt(KEY_PROBLEMS_SOLVED, problemsSolved)
-        outState.putString(KEY_USER_INPUT, userInput)
         currentQuestion?.let { question ->
             outState.putString(KEY_QUESTION_TEXT, question.text)
             outState.putInt(KEY_QUESTION_ANSWER, question.answer)
@@ -454,11 +453,12 @@ class AlarmActivity : ComponentActivity() {
         val restoredGate = runCatching { AlarmGateState.valueOf(name) }.getOrNull() ?: return false
         gateState = restoredGate
         problemsSolved = state.getInt(KEY_PROBLEMS_SOLVED, 0)
-        userInput = state.getString(KEY_USER_INPUT) ?: ""
         val text = state.getString(KEY_QUESTION_TEXT)
         val answer = state.getInt(KEY_QUESTION_ANSWER, Int.MIN_VALUE)
         currentQuestion = if (text != null && answer != Int.MIN_VALUE) {
-            MathEngine.Question(text, answer)
+            // Choices are rebuilt rather than saved: they only ever contain the answer, and
+            // re-rolling them keeps the rotation path the same size as a fresh question.
+            MathEngine.Question(text, answer, MathEngine.optionsFor(answer))
         } else {
             MathEngine.generateQuestion()
         }
@@ -537,11 +537,9 @@ class AlarmActivity : ComponentActivity() {
     fun AlarmScreen(
         gateState: AlarmGateState,
         missionGraceSeconds: Int,
+        problemsSolved: Int,
         currentQuestion: MathEngine.Question?,
-        userInput: String,
-        onAnswerChanged: (String) -> Unit,
-        onBackspace: () -> Unit,
-        onSubmit: (String) -> Unit,
+        onSubmitChoice: (Int) -> Unit,
         onMissionSuccess: () -> Unit,
         onRestartGracePeriod: () -> Unit,
         onRecordTomorrowContent: @Composable () -> Unit
@@ -568,6 +566,10 @@ class AlarmActivity : ComponentActivity() {
                 // the status bar and the mission controls under the gesture bar.
                 .windowInsetsPadding(WindowInsets.systemBars)
         ) {
+            // The same sky as the rest of the app: clouds in Midnight, leaves in Autumn. It sits
+            // behind every gate, low enough to stay out of the way of the copy.
+            MorroSky(modifier = Modifier.fillMaxSize(), intensity = 0.5f)
+
             when (gateState) {
                 AlarmGateState.MISSION_QR -> {
                     Column(modifier = Modifier.fillMaxSize()) {
@@ -666,92 +668,61 @@ class AlarmActivity : ComponentActivity() {
                             ) {
                                 Text(
                                     text = question.text,
-                                    style = typo.headlineMedium,
+                                    style = typo.displayLarge,
                                     color = colors.textPrimary,
+                                    fontSize = 40.sp,
                                     fontWeight = FontWeight.Bold,
                                     textAlign = TextAlign.Center
                                 )
-                                Spacer(modifier = Modifier.height(16.dp))
-                                OutlinedTextField(
-                                    value = userInput,
-                                    onValueChange = { onAnswerChanged(it) },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    placeholder = { Text("Enter answer", color = colors.textDisabled) },
-                                    singleLine = true,
-                                    shape = RoundedCornerShape(4.dp),
-                                    colors = TextFieldDefaults.colors(
-                                        focusedTextColor = colors.textPrimary,
-                                        unfocusedTextColor = colors.textPrimary,
-                                        disabledTextColor = colors.textDisabled,
-                                        errorTextColor = colors.error,
-                                        focusedContainerColor = Color.Unspecified,
-                                        unfocusedContainerColor = Color.Unspecified,
-                                        disabledContainerColor = Color.Unspecified,
-                                        errorContainerColor = Color.Unspecified,
-                                        cursorColor = colors.honey,
-                                        errorCursorColor = colors.error,
-                                        selectionColors = TextSelectionColors(
-                                            handleColor = colors.honey,
-                                            backgroundColor = colors.honey.copy(alpha = 0.3f)
-                                        ),
-                                        focusedIndicatorColor = colors.honey,
-                                        unfocusedIndicatorColor = colors.borderSubtle,
-                                        disabledIndicatorColor = Color.Unspecified,
-                                        errorIndicatorColor = colors.error,
-                                        focusedLabelColor = Color.Unspecified,
-                                        unfocusedLabelColor = Color.Unspecified,
-                                        disabledLabelColor = Color.Unspecified,
-                                        errorLabelColor = Color.Unspecified,
-                                        focusedLeadingIconColor = Color.Unspecified,
-                                        unfocusedLeadingIconColor = Color.Unspecified,
-                                        disabledLeadingIconColor = Color.Unspecified,
-                                        errorLeadingIconColor = Color.Unspecified,
-                                        focusedTrailingIconColor = Color.Unspecified,
-                                        unfocusedTrailingIconColor = Color.Unspecified,
-                                        disabledTrailingIconColor = Color.Unspecified,
-                                        errorTrailingIconColor = Color.Unspecified,
-                                        focusedPlaceholderColor = colors.textDisabled,
-                                        unfocusedPlaceholderColor = colors.textDisabled,
-                                        disabledPlaceholderColor = colors.textDisabled,
-                                        errorPlaceholderColor = colors.error,
-                                        focusedSupportingTextColor = Color.Unspecified,
-                                        unfocusedSupportingTextColor = Color.Unspecified,
-                                        disabledSupportingTextColor = Color.Unspecified,
-                                        errorSupportingTextColor = Color.Unspecified,
-                                        focusedPrefixColor = Color.Unspecified,
-                                        unfocusedPrefixColor = Color.Unspecified,
-                                        disabledPrefixColor = Color.Unspecified,
-                                        errorPrefixColor = Color.Unspecified,
-                                        focusedSuffixColor = Color.Unspecified,
-                                        unfocusedSuffixColor = Color.Unspecified,
-                                        disabledSuffixColor = Color.Unspecified,
-                                        errorSuffixColor = Color.Unspecified
-                                    )
+                                Text(
+                                    text = "Problem ${problemsSolved + 1} of $totalProblems",
+                                    style = typo.labelLarge,
+                                    color = colors.textTertiary,
+                                    letterSpacing = 1.sp
                                 )
-                                Spacer(modifier = Modifier.height(16.dp))
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                                ) {
-                                    OutlinedButton(
-                                        onClick = onBackspace,
-                                        modifier = Modifier.weight(1f),
-                                        colors = ButtonDefaults.outlinedButtonColors(
-                                            contentColor = colors.textSecondary
-                                        )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                // Two rows of two: four answers big enough to hit without aiming,
+                                // and still one glance rather than a list to read.
+                                question.options.chunked(2).forEach { pair ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                                     ) {
-                                        Text("Clear")
-                                    }
-                                    Button(
-                                        onClick = { onSubmit(userInput) },
-                                        modifier = Modifier.weight(1f),
-                                        enabled = userInput.isNotBlank(),
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = colors.honey,
-                                            contentColor = Color.White
-                                        )
-                                    ) {
-                                        Text("Submit")
+                                        pair.forEach { option ->
+                                            val missed = option == wrongChoice
+                                            Button(
+                                                onClick = { onSubmitChoice(option) },
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .height(68.dp),
+                                                shape = RoundedCornerShape(14.dp),
+                                                border = BorderStroke(
+                                                    width = 1.dp,
+                                                    color = if (missed) {
+                                                        colors.error.copy(alpha = 0.65f)
+                                                    } else {
+                                                        colors.borderSubtle
+                                                    }
+                                                ),
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = if (missed) {
+                                                        colors.error.copy(alpha = 0.20f)
+                                                    } else {
+                                                        colors.surfaceElevated
+                                                    },
+                                                    contentColor = if (missed) colors.error else colors.textPrimary
+                                                )
+                                            ) {
+                                                Text(
+                                                    text = option.toString(),
+                                                    fontSize = 26.sp,
+                                                    fontWeight = FontWeight.Medium
+                                                )
+                                            }
+                                        }
+                                        if (pair.size == 1) {
+                                            Spacer(modifier = Modifier.weight(1f))
+                                        }
                                     }
                                 }
                             }

@@ -135,7 +135,10 @@ class MainActivity : ComponentActivity() {
 
                 // One flag for the intro; a returning person lands straight on the dashboard.
                 val alreadyOnboarded = OnboardingGate.isComplete(this@MainActivity)
-                var splashDone by rememberSaveable { mutableStateOf(alreadyOnboarded) }
+                // The Morro screen plays on every cold start, not only the first: the app opens as
+                // itself for a beat before it becomes the alarm. rememberSaveable keeps a rotation
+                // from replaying it, and a tap still skips it.
+                var splashDone by rememberSaveable { mutableStateOf(false) }
                 // Sign-in and the paywall are visual beats for now: no account is created, no
                 // billing is wired, and both can be skipped. Their state lives in the saved
                 // instance only, like the splash, so the intro replays until it is truly finished.
