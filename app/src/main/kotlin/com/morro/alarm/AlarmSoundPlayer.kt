@@ -33,6 +33,15 @@ object AlarmSoundPlayer {
     private var mediaPlayer: MediaPlayer? = null
 
     /**
+     * True between prepareAsync() and the first frame of sound.
+     *
+     * `isPlaying()` is false in that window, which made a caller asking "is it already ringing?"
+     * start a second player on top of a source that was about to play.
+     */
+    @Volatile
+    private var preparing = false
+
+    /**
      * Plays the alarm, walking a fallback chain of system sound URIs.
      *
      * A single TYPE_ALARM URI is not guaranteed to be playable: it can be null when the person has
@@ -47,10 +56,8 @@ object AlarmSoundPlayer {
         var lastFailure: String? = null
 
         for (uri in alarmSoundUris()) {
-            var candidate: MediaPlayer? = null
             try {
                 val player = MediaPlayer()
-                candidate = player
                 player.setAudioAttributes(audioAttributes)
                 player.setWakeMode(appContext, PowerManager.PARTIAL_WAKE_LOCK)
                 player.setDataSource(appContext, uri)
@@ -62,6 +69,7 @@ object AlarmSoundPlayer {
                     true
                 }
                 player.setOnPreparedListener { mp ->
+                    preparing = false
                     try {
                         mp.start()
                     } catch (e: Exception) {
@@ -70,21 +78,20 @@ object AlarmSoundPlayer {
                         onError?.invoke("Could not start alarm audio")
                     }
                 }
-                player.prepareAsync()
+                // Handed over before prepareAsync(): preparation reports its first error on the
+                // main thread, and that listener has to be able to release this exact instance.
                 mediaPlayer = player
+                preparing = true
+                player.prepareAsync()
                 Log.d(TAG, "Alarm sound prepareAsync called for $uri")
                 return
             } catch (e: Exception) {
                 lastFailure = e.message
                 Log.w(TAG, "Alarm sound source unusable, trying the next: $uri", e)
-                try {
-                    candidate?.release()
-                } catch (ignored: Exception) {
-                }
+                stopAndReleasePlayer()
             }
         }
 
-        stopAndReleasePlayer()
         Log.e(TAG, "No playable alarm sound source; last failure: $lastFailure")
         onError?.invoke(lastFailure ?: "Could not start alarm sound")
     }
@@ -114,6 +121,7 @@ object AlarmSoundPlayer {
      */
     @Synchronized
     fun stopAndReleasePlayer() {
+        preparing = false
         try {
             mediaPlayer?.let { player ->
                 try {
@@ -128,9 +136,15 @@ object AlarmSoundPlayer {
         mediaPlayer = null
     }
 
-    /** True while the alarm tone is actually sounding. */
+    /**
+     * True while a tone is live: either preparing or actually sounding.
+     *
+     * The distinction matters to callers that avoid restarting a tone that is already on its way —
+     * a source still being prepared is not silent, it is about to play, and restarting it there
+     * throws away the preparation and delays the sound.
+     */
     fun isPlaying(): Boolean = try {
-        mediaPlayer?.isPlaying == true
+        mediaPlayer?.let { it.isPlaying || preparing } == true
     } catch (e: Exception) {
         false
     }
@@ -155,32 +169,34 @@ object AlarmSoundPlayer {
         var fallbackFailure: String? = null
         for (uri in alarmSoundUris()) {
             try {
-                mediaPlayer = MediaPlayer().apply {
-                    setAudioAttributes(audioAttributes)
-                    setWakeMode(appContext, PowerManager.PARTIAL_WAKE_LOCK)
-                    setDataSource(appContext, uri)
-                    setOnCompletionListener {
-                        Log.d(TAG, "Fallback alarm tone completed")
-                        stopAndReleasePlayer()
-                        onCompletion?.invoke()
-                    }
-                    setOnErrorListener { _, what, extra ->
-                        Log.w(TAG, "Fallback alarm error what=$what extra=$extra")
-                        stopAndReleasePlayer()
-                        onError?.invoke("Fallback alarm error code $what")
-                        true
-                    }
-                    setOnPreparedListener { mp ->
-                        try {
-                            mp.start()
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Error starting fallback alarm on prepared", e)
-                            stopAndReleasePlayer()
-                            onError?.invoke("Could not start fallback alarm")
-                        }
-                    }
-                    prepareAsync()
+                val player = MediaPlayer()
+                player.setAudioAttributes(audioAttributes)
+                player.setWakeMode(appContext, PowerManager.PARTIAL_WAKE_LOCK)
+                player.setDataSource(appContext, uri)
+                player.setOnCompletionListener {
+                    Log.d(TAG, "Fallback alarm tone completed")
+                    stopAndReleasePlayer()
+                    onCompletion?.invoke()
                 }
+                player.setOnErrorListener { _, what, extra ->
+                    Log.w(TAG, "Fallback alarm error what=$what extra=$extra")
+                    stopAndReleasePlayer()
+                    onError?.invoke("Fallback alarm error code $what")
+                    true
+                }
+                player.setOnPreparedListener { mp ->
+                    preparing = false
+                    try {
+                        mp.start()
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error starting fallback alarm on prepared", e)
+                        stopAndReleasePlayer()
+                        onError?.invoke("Could not start fallback alarm")
+                    }
+                }
+                mediaPlayer = player
+                preparing = true
+                player.prepareAsync()
                 Log.d(TAG, "Fallback alarm tone prepareAsync called for $uri")
                 return
             } catch (e: Exception) {

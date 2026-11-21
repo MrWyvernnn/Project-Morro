@@ -90,10 +90,17 @@ object MemoStorage {
             return false
         }
 
-        return appCtx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        // The bytes on disk are the signal, the same rule the recorder uses. The move above is what
+        // saved the clip, so a failed preference write must not report the memo as unsaved; the
+        // lookup falls back to the canonical filename and still finds it.
+        val committed = appCtx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
             .putString(KEY_LATEST_MEMO_PATH, latest.absolutePath)
             .commit()
+        if (!committed) {
+            Log.w(TAG, "Memo saved to disk but the path preference did not commit")
+        }
+        return true
     }
 
     /** Deletes the work-in-progress recording. The saved memo is untouched. */
