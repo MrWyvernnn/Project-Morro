@@ -35,18 +35,7 @@ object AlarmScheduler {
      * Saves the hour and minute in SharedPreferences.
      */
     fun scheduleDailyAlarm(context: Context, hour: Int, minute: Int): Boolean {
-        val now = Calendar.getInstance()
-        val targetCal = Calendar.getInstance().apply {
-            set(Calendar.HOUR_OF_DAY, hour)
-            set(Calendar.MINUTE, minute)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-            if (timeInMillis <= now.timeInMillis) {
-                add(Calendar.DAY_OF_YEAR, 1)
-            }
-        }
-
-        val scheduled = scheduleAlarm(context, targetCal.timeInMillis)
+        val scheduled = scheduleAlarm(context, nextOccurrenceMillis(hour, minute))
         // Only persist hour/minute if the alarm was actually scheduled.
         // If setAlarmClock() failed (e.g. exact alarm permission revoked),
         // reading these prefs would falsely show the alarm as "armed" when it isn't.
@@ -55,9 +44,33 @@ object AlarmScheduler {
                 .putInt(KEY_ALARM_HOUR, hour)
                 .putInt(KEY_ALARM_MINUTE, minute)
                 .apply()
+            // The hour/minute write above is what a locked boot needs, so the mirror is refreshed
+            // last, once every value it copies is already in place.
+            AlarmBootMirror.mirrorFrom(context)
         }
         return scheduled
     }
+
+    /**
+     * The next wall-clock occurrence of [hour]:[minute], in the device's current time zone.
+     *
+     * Recomputed rather than stored so a time-zone change, a manual clock change, or a reboot all
+     * land on the same answer: the saved hour/minute are a wall-clock rule, not an instant.
+     */
+    internal fun nextOccurrenceMillis(
+        hour: Int,
+        minute: Int,
+        nowMillis: Long = System.currentTimeMillis(),
+    ): Long = Calendar.getInstance().apply {
+        timeInMillis = nowMillis
+        set(Calendar.HOUR_OF_DAY, hour)
+        set(Calendar.MINUTE, minute)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+        if (timeInMillis <= nowMillis) {
+            add(Calendar.DAY_OF_YEAR, 1)
+        }
+    }.timeInMillis
 
     /**
      * Retrieves the saved daily alarm hour and minute, or null if not yet configured.
@@ -73,19 +86,35 @@ object AlarmScheduler {
     }
 
     fun scheduleAlarm(context: Context, triggerTimeMillis: Long): Boolean {
-        var finalTriggerTime = triggerTimeMillis
-        val now = System.currentTimeMillis()
-        if (finalTriggerTime <= now) {
-            // Fix Past-Time Crashing: if in past, advance by 1 day until in future
-            val cal = Calendar.getInstance().apply {
-                timeInMillis = finalTriggerTime
-                while (timeInMillis <= now) {
-                    add(Calendar.DAY_OF_YEAR, 1)
-                }
-            }
-            finalTriggerTime = cal.timeInMillis
-        }
+        val finalTriggerTime = rollForwardIfPast(triggerTimeMillis)
+        if (!armAlarmClock(context, finalTriggerTime)) return false
+        savePrefs(context, finalTriggerTime)
+        return true
+    }
 
+    /**
+     * Arms a trigger without writing anything to credential-protected storage.
+     *
+     * This exists for exactly one caller: [BootReceiver] handling `LOCKED_BOOT_COMPLETED`, which
+     * runs before the first unlock. Normal `SharedPreferences` and `filesDir` live in
+     * credential-encrypted storage and are unreadable (or unwritable) at that moment, so the usual
+     * [scheduleAlarm] path would either persist nothing or fail. The trigger comes from
+     * [AlarmBootMirror] instead, and the authoritative prefs are untouched until the normal
+     * `BOOT_COMPLETED` pass runs after unlock.
+     *
+     * Note what this does *not* fix: the ring itself. `AlarmReceiver`, `AlarmForegroundService` and
+     * `AlarmActivity` are not direct-boot aware, so Android defers the ring until the person
+     * unlocks. This path re-arms the alarm across a locked boot; it does not make it ring before
+     * unlock. See [BootReceiver] for the full explanation.
+     */
+    fun armWithoutPersisting(context: Context, triggerTimeMillis: Long): Boolean =
+        armAlarmClock(context, rollForwardIfPast(triggerTimeMillis))
+
+    /**
+     * Every scheduling call lands here, so the exact-alarm guard and the PendingIntent identity
+     * exist in one place and cannot drift between the persistent and locked-boot paths.
+     */
+    private fun armAlarmClock(context: Context, finalTriggerTime: Long): Boolean {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
 
         // API 31+ exact alarm permission check
@@ -115,7 +144,6 @@ object AlarmScheduler {
         val clockInfo = AlarmManager.AlarmClockInfo(finalTriggerTime, showPendingIntent)
         return try {
             alarmManager.setAlarmClock(clockInfo, pendingIntent)
-            savePrefs(context, finalTriggerTime)
             true
         } catch (e: Exception) {
             // Defensive: never crash the caller if scheduling fails (e.g. revoked exact-alarm
@@ -124,6 +152,21 @@ object AlarmScheduler {
             Log.w(TAG, "Failed to schedule alarm via setAlarmClock()", e)
             false
         }
+    }
+
+    /**
+     * A past trigger is a bug in the caller, not a reason to hand AlarmManager an instant that
+     * fires immediately. Advancing by whole days keeps the wall-clock time the person chose.
+     */
+    private fun rollForwardIfPast(triggerTimeMillis: Long): Long {
+        val now = System.currentTimeMillis()
+        if (triggerTimeMillis > now) return triggerTimeMillis
+        return Calendar.getInstance().apply {
+            timeInMillis = triggerTimeMillis
+            while (timeInMillis <= now) {
+                add(Calendar.DAY_OF_YEAR, 1)
+            }
+        }.timeInMillis
     }
 
     /**
@@ -137,7 +180,12 @@ object AlarmScheduler {
      */
     fun snoozeAlarm(context: Context, minutes: Int = 10): Boolean {
         val triggerTime = System.currentTimeMillis() + minutes * 60_000L
-        if (scheduleAlarm(context, triggerTime)) return true
+        if (scheduleAlarm(context, triggerTime)) {
+            // A snooze is the most likely pending trigger at the moment of a reboot, so the mirror
+            // has to know about it too, not just the daily time.
+            AlarmBootMirror.mirrorFrom(context)
+            return true
+        }
         Log.w(TAG, "Snooze could not be armed; falling back to the daily alarm")
         getSavedAlarmTime(context)?.let { (hour, minute) ->
             scheduleDailyAlarm(context, hour, minute)
@@ -160,6 +208,7 @@ object AlarmScheduler {
             // Ignore
         }
         clearPrefs(context)
+        AlarmBootMirror.clear(context)
     }
 
     /** True when the person armed the alarm and has not cancelled it since. */

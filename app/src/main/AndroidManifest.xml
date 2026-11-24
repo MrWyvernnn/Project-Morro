@@ -97,11 +97,16 @@
             </intent-filter>
         </receiver>
 
-        <!-- Boot receiver to reschedule alarms -->
+        <!-- Alarm reschedule across reboots, app updates and clock changes.
+             directBootAware so the armed alarm is re-armed at LOCKED_BOOT_COMPLETED, before
+             credential storage is readable. It reads morro_boot (device-protected). The ring
+             itself is still deferred by Android until unlock; see BootReceiver. -->
         <receiver
             android:name=".BootReceiver"
-            android:exported="true">
+            android:directBootAware="true"
+            android:exported="false">
             <intent-filter>
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
                 <action android:name="android.intent.action.TIME_SET" />
