@@ -14,10 +14,23 @@ import androidx.core.app.NotificationCompat
 class AlarmReceiver : BroadcastReceiver() {
     companion object {
         private const val TAG = "AlarmReceiver"
+        private const val ACTION_TEST_ALARM = "com.morro.alarm.ACTION_TEST_ALARM"
     }
 
     override fun onReceive(context: Context, intent: Intent) {
         Log.d(TAG, "(2) Broadcast received: AlarmReceiver fired")
+
+        // Health log first: the expected trigger is still in prefs at this instant, and the
+        // dismissal path re-arms tomorrow's alarm later in the same ring, which would overwrite it.
+        // A debug test ring is not a morning ring, so it is never logged.
+        if (intent.action != ACTION_TEST_ALARM) {
+            val expected = AlarmScheduler.getNextAlarmTime(context)
+            val now = System.currentTimeMillis()
+            MissedAlarmLog.recordFired(context, now)
+            if (expected != null && lateFireFor(expected, now) != null) {
+                MissedAlarmLog.recordLateFire(context, expected, now)
+            }
+        }
 
         // Acquire PARTIAL_WAKE_LOCK immediately so the CPU stays alive while we
         // start the foreground service and launch the full-screen alarm activity.

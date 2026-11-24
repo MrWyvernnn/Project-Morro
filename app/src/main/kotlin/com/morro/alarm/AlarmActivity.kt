@@ -344,6 +344,10 @@ class AlarmActivity : ComponentActivity() {
         }
         cancelAlarm()
 
+        // The gates are solved, so this occurrence is finished rather than missed. Recorded before
+        // the re-arm below, which moves the expected trigger to tomorrow.
+        MissedAlarmLog.recordCompleted(this)
+
         if (wasScheduled) {
             rearmNextWakeUp()
         }
