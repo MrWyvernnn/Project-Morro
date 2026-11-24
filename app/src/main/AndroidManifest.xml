@@ -114,6 +114,18 @@
             </intent-filter>
         </receiver>
 
+        <!-- The wake-up check: asks "Still up?" three minutes after dismissal and rings once if
+             the question goes unanswered. Exported=false: every action is sent by this app. -->
+        <receiver
+            android:name=".WakeUpCheckReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.morro.alarm.ACTION_WAKE_CHECK" />
+                <action android:name="com.morro.alarm.ACTION_WAKE_CHECK_ALERT" />
+                <action android:name="com.morro.alarm.ACTION_I_AM_UP" />
+            </intent-filter>
+        </receiver>
+
         <!-- Foreground service to keep alarm alive with wake-lock -->
         <service
             android:name=".AlarmForegroundService"

@@ -123,7 +123,7 @@ object AlarmScheduler {
         }
 
         val intent = Intent(context, AlarmReceiver::class.java).apply {
-            action = "com.morro.alarm.ACTION_TRIGGER_ALARM"
+            action = AlarmReceiver.ACTION_TRIGGER_ALARM
         }
         val pendingIntent = PendingIntent.getBroadcast(
             context, ALARM_REQUEST_CODE, intent,
@@ -196,7 +196,7 @@ object AlarmScheduler {
     fun cancelAlarm(context: Context) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val intent = Intent(context, AlarmReceiver::class.java).apply {
-            action = "com.morro.alarm.ACTION_TRIGGER_ALARM"
+            action = AlarmReceiver.ACTION_TRIGGER_ALARM
         }
         val pendingIntent = PendingIntent.getBroadcast(
             context, ALARM_REQUEST_CODE, intent,

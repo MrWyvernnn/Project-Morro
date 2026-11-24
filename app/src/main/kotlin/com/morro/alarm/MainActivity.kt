@@ -288,6 +288,13 @@ fun MainAlarmScreen(context: Context) {
     var showAlarmBuilder by remember { mutableStateOf(false) }
     var showPrivacyPolicy by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+    var wakeCheckEnabled by remember { mutableStateOf(WakeUpCheck.isEnabled(context)) }
+
+    // Opening the app at all is an answer: a pending "Still up?" has served its purpose, and its
+    // 90-second escalation must not ring while the person is looking at the dashboard.
+    LaunchedEffect(Unit) {
+        WakeUpCheck.resolve(context)
+    }
 
     val missionType = remember(prefsUpdateTrigger) { MissionPrefs.getMissionType(context) }
     val photoItems = remember(prefsUpdateTrigger) { MissionPrefs.getSelectedPhotoItems(context) }
@@ -549,6 +556,7 @@ fun MainAlarmScreen(context: Context) {
                 wakeUpLabel = dockTime ?: "Not set",
                 missionLabel = missionLabel,
                 oemLabel = oemGuidance.brandLabel,
+                wakeCheckEnabled = wakeCheckEnabled,
                 themeChoice = if (autumnTheme) MorroThemeChoice.AUTUMN else MorroThemeChoice.MIDNIGHT,
                 onAutumnThemeChange = { on ->
                     autumnTheme = on
@@ -556,6 +564,10 @@ fun MainAlarmScreen(context: Context) {
                         context,
                         if (on) MorroThemeChoice.AUTUMN else MorroThemeChoice.MIDNIGHT
                     )
+                },
+                onWakeCheckChange = { on ->
+                    wakeCheckEnabled = on
+                    WakeUpCheck.setEnabled(context, on)
                 },
                 onOpenWakeUp = {
                     showSettings = false

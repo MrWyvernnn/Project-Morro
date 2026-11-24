@@ -45,14 +45,18 @@ import com.morro.alarm.ui.theme.morroTypography
  * picker inside it, and the privacy policy. Inventing settings here would mean storing values
  * nothing reads, so the sheet stays close to a directory rather than a form.
  *
- * The one real control is the theme switch. It is a switch rather than a picker because there are
- * exactly two themes; a list of two would be a menu to read where a toggle is enough.
+ * The two real controls are the theme switch and the wake-up check. Both are switches rather than
+ * pickers because each has exactly two states; a list of two would be a menu to read where a toggle
+ * is enough. The wake-up check is the only behaviour here that changes how an alarm feels, so its
+ * subtitle says plainly what turning it off gives up.
  *
  * @param wakeUpLabel the current wake-up time, or "Not set"
  * @param missionLabel the mission that will get the person out of bed
  * @param oemLabel the phone's manufacturer, shown as the reliability row's value
+ * @param wakeCheckEnabled whether the "Still up?" follow-up runs after a dismissal
  * @param themeChoice the theme in use right now, shown as the row's value
  * @param onAutumnThemeChange true for Autumn, false for Midnight
+ * @param onWakeCheckChange turns the follow-up question on or off
  * @param onOpenWakeUp opens the alarm builder
  * @param onOpenOemGuidance opens the manufacturer-specific reliability screen
  * @param onOpenPrivacy opens the privacy policy
@@ -64,8 +68,10 @@ fun MorroSettingsSheet(
     wakeUpLabel: String,
     missionLabel: String,
     oemLabel: String,
+    wakeCheckEnabled: Boolean,
     themeChoice: MorroThemeChoice,
     onAutumnThemeChange: (Boolean) -> Unit,
+    onWakeCheckChange: (Boolean) -> Unit,
     onOpenWakeUp: () -> Unit,
     onOpenOemGuidance: () -> Unit,
     onOpenPrivacy: () -> Unit,
@@ -130,6 +136,17 @@ fun MorroSettingsSheet(
                 title = "Alarm reliability",
                 value = oemLabel,
                 onClick = onOpenOemGuidance
+            )
+
+            SettingsToggleRow(
+                title = "Wake-up check",
+                value = if (wakeCheckEnabled) {
+                    "Asks \"Still up?\" 3 min after you dismiss"
+                } else {
+                    "Off — dismissing ends the alarm"
+                },
+                checked = wakeCheckEnabled,
+                onCheckedChange = onWakeCheckChange
             )
 
             SettingsToggleRow(

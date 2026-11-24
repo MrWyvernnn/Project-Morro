@@ -14,16 +14,22 @@ import androidx.core.app.NotificationCompat
 class AlarmReceiver : BroadcastReceiver() {
     companion object {
         private const val TAG = "AlarmReceiver"
+
+        /** The one action `AlarmScheduler` and the wake-up re-ring both send. */
+        const val ACTION_TRIGGER_ALARM = "com.morro.alarm.ACTION_TRIGGER_ALARM"
+
         private const val ACTION_TEST_ALARM = "com.morro.alarm.ACTION_TEST_ALARM"
     }
 
     override fun onReceive(context: Context, intent: Intent) {
         Log.d(TAG, "(2) Broadcast received: AlarmReceiver fired")
 
+        val isWakeUpRering = intent.getBooleanExtra(WakeUpCheck.EXTRA_RERING, false)
+
         // Health log first: the expected trigger is still in prefs at this instant, and the
         // dismissal path re-arms tomorrow's alarm later in the same ring, which would overwrite it.
-        // A debug test ring is not a morning ring, so it is never logged.
-        if (intent.action != ACTION_TEST_ALARM) {
+        // A debug test ring and a wake-up re-ring are not the morning ring, so neither is logged.
+        if (intent.action != ACTION_TEST_ALARM && !isWakeUpRering) {
             val expected = AlarmScheduler.getNextAlarmTime(context)
             val now = System.currentTimeMillis()
             MissedAlarmLog.recordFired(context, now)
@@ -86,6 +92,8 @@ class AlarmReceiver : BroadcastReceiver() {
                 val intent = Intent(context, com.morro.alarm.AlarmActivity::class.java).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                    // Carried through so the activity knows this ring must not reschedule anything.
+                    if (isWakeUpRering) putExtra(WakeUpCheck.EXTRA_RERING, true)
                 }
                 context.startActivity(intent)
             } catch (e: Exception) {

@@ -113,6 +113,15 @@ class AlarmActivity : ComponentActivity() {
     }
     private var wakeLock: PowerManager.WakeLock? = null
 
+    /**
+     * True when this ring is the wake-up check's one re-ring.
+     *
+     * Read from the intent *and* from prefs: the foreground service's full-screen intent can launch
+     * this activity without the extra, and a re-ring that rescheduled tomorrow's alarm would be the
+     * loop the whole feature exists to avoid.
+     */
+    private var isWakeUpCheckRing = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge(
@@ -120,7 +129,11 @@ class AlarmActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT)
         )
 
-        Log.d(TAG, "AlarmActivity onCreate")
+        isWakeUpCheckRing =
+            intent?.getBooleanExtra(WakeUpCheck.EXTRA_RERING, false) == true ||
+                WakeUpCheck.isRingInProgress(this)
+
+        Log.d(TAG, "AlarmActivity onCreate (wakeUpCheckRing=$isWakeUpCheckRing)")
 
         // Show over the lock screen, turn screen on, and keep screen on (Wake-Lock Maintenance).
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O_MR1) {
@@ -325,6 +338,13 @@ class AlarmActivity : ComponentActivity() {
 
     /** Transition the Compose state to CaptureTomorrow (RECORDING_TOMORROW). */
     private fun promptForTomorrowMemo() {
+        // A wake-up check re-ring exists only to confirm the person is awake. Asking them to record
+        // tomorrow's promise a second time in the same morning would duplicate the capture, so this
+        // ring ends as soon as the gates are solved.
+        if (isWakeUpCheckRing) {
+            finishAlarm()
+            return
+        }
         gateState = AlarmGateState.RECORDING_TOMORROW
     }
 
@@ -342,14 +362,27 @@ class AlarmActivity : ComponentActivity() {
         } catch (e: Exception) {
             Log.w(TAG, "Error releasing wakeLock in finishAlarm", e)
         }
-        cancelAlarm()
 
-        // The gates are solved, so this occurrence is finished rather than missed. Recorded before
-        // the re-arm below, which moves the expected trigger to tomorrow.
-        MissedAlarmLog.recordCompleted(this)
+        if (isWakeUpCheckRing) {
+            // A re-ring is confirmation, not a new morning. Tomorrow's alarm is already armed and
+            // this morning's single re-ring is already spent, so neither is touched here: calling
+            // cancelAlarm() would delete the pending alarm and leave the person with nothing.
+            cancelForegroundNotification()
+            WakeUpCheck.resolve(this)
+            Log.i(TAG, "Wake-up re-ring completed; left the daily alarm and the check untouched")
+        } else {
+            cancelAlarm()
 
-        if (wasScheduled) {
-            rearmNextWakeUp()
+            // The gates are solved, so this occurrence is finished rather than missed. Recorded
+            // before the re-arm below, which moves the expected trigger to tomorrow.
+            MissedAlarmLog.recordCompleted(this)
+
+            if (wasScheduled) {
+                rearmNextWakeUp()
+                // Armed only after a real dismissal. WakeUpCheck itself refuses a second one inside
+                // the same morning, which is the cap that stops this becoming a loop.
+                WakeUpCheck.arm(this)
+            }
         }
 
         finishAndRemoveTask()

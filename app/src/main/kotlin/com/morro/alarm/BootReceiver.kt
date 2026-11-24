@@ -85,6 +85,10 @@ class BootReceiver : BroadcastReceiver() {
     }
 
     private fun rearmAfterUnlock(context: Context) {
+        // After unlock the normal prefs are authoritative again, so the wake-up check is restored
+        // from them here rather than from the device-protected mirror.
+        WakeUpCheck.restoreAfterBoot(context)
+
         if (!AlarmScheduler.isArmed(context)) return
 
         val nextAlarmTime = AlarmScheduler.getNextAlarmTime(context)
