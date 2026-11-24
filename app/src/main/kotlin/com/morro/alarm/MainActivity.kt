@@ -46,6 +46,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
@@ -82,6 +83,7 @@ import com.morro.alarm.mission.MissionType
 import com.morro.alarm.ui.components.AlarmBuilderSheet
 import com.morro.alarm.ui.components.AlarmBuilderSheetContent
 import com.morro.alarm.ui.components.MorroAnalogClock
+import com.morro.alarm.ui.components.MorroCard
 import com.morro.alarm.ui.components.MorroPrimaryButton
 import com.morro.alarm.ui.components.MorroSettingsSheet
 import com.morro.alarm.ui.components.MorroSky
@@ -110,6 +112,7 @@ import com.morro.alarm.ui.theme.morroHairline
 import com.morro.alarm.ui.theme.morroShapes
 import java.text.SimpleDateFormat
 import java.util.Calendar
+import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.delay
 
@@ -264,7 +267,15 @@ fun MainAlarmScreen(context: Context) {
 
     // A ring that died before AlarmActivity could re-arm (process death, crash, force-stop) leaves
     // the one-shot trigger consumed. If the person never cancelled, put the next occurrence back.
+    var missedRing by remember { mutableStateOf<AlarmEvent?>(null) }
     LaunchedEffect(Unit) {
+        // Inference first: the re-arm below moves the expected trigger to tomorrow, which would
+        // erase the evidence this check depends on.
+        val missed = MissedAlarmLog.evaluateMissedRing(context)
+        if (missed != null && !MissedAlarmLog.isDismissed(context, missed)) {
+            missedRing = missed
+        }
+
         if (!AlarmScheduler.isArmed(context)) return@LaunchedEffect
         val pending = AlarmScheduler.getNextAlarmTime(context)
         if (pending != null && pending > System.currentTimeMillis()) return@LaunchedEffect
@@ -430,6 +441,23 @@ fun MainAlarmScreen(context: Context) {
             }
 
             Spacer(modifier = Modifier.weight(1f))
+
+            // ── A ring that did not happen ────────────────────────────────────
+            missedRing?.let { event ->
+                MissedRingCard(
+                    event = event,
+                    onFix = {
+                        missedRing = null
+                        MissedAlarmLog.dismiss(context, event)
+                        context.startActivity(Intent(context, OemGuidanceActivity::class.java))
+                    },
+                    onDismiss = {
+                        missedRing = null
+                        MissedAlarmLog.dismiss(context, event)
+                    }
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+            }
 
             // ── Alarm dock ────────────────────────────────────────────────────
             if (!showAlarmBuilder) {
@@ -713,6 +741,77 @@ private fun AlarmDock(
                     .heightIn(min = 48.dp)
                     .wrapContentHeight(Alignment.CenterVertically)
                     .padding(horizontal = 8.dp)
+            )
+        }
+    }
+}
+
+/**
+ * One quiet card for a morning that never happened, with the one action that can stop it repeating.
+ *
+ * It only ever describes one event and only until it is acted on or dismissed, because a permanent
+ * banner would become furniture and stop meaning anything. The copy names the time and the cause;
+ * it never implies the person did something wrong.
+ */
+@Composable
+private fun MissedRingCard(
+    event: AlarmEvent,
+    onFix: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val colors = morroColors()
+    val timeFormat = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
+    val expectedLabel = remember(event.expectedAtMillis) {
+        timeFormat.format(Date(event.expectedAtMillis))
+    }
+
+    MorroCard {
+        Column {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top
+            ) {
+                Text(
+                    text = "Your $expectedLabel alarm didn't ring on time.",
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = colors.textPrimary,
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
+                    Icon(
+                        imageVector = Icons.Filled.Close,
+                        contentDescription = "Dismiss",
+                        tint = colors.textTertiary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Text(
+                text = "This phone stopped the app from starting. One setting fixes it.",
+                fontSize = 12.sp,
+                lineHeight = 17.sp,
+                color = colors.textTertiary
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Text(
+                text = "Show me how to fix this",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                color = colors.honey,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .morroHairline(radius = 24.dp, color = colors.borderStrong)
+                    .clickable(onClick = onFix)
+                    .heightIn(min = 48.dp)
+                    .wrapContentHeight(Alignment.CenterVertically)
+                    .padding(horizontal = 16.dp)
             )
         }
     }
