@@ -49,6 +49,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -59,6 +60,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.morro.alarm.ui.components.MorroPrimaryButton
 import com.morro.alarm.ui.components.MorroSky
+import com.morro.alarm.ui.components.OemGuidanceCard
 import com.morro.alarm.ui.theme.MorroColors
 import com.morro.alarm.ui.theme.MorroShapes
 import com.morro.alarm.ui.theme.MorroTheme
@@ -132,6 +134,9 @@ class OnboardingActivity : ComponentActivity() {
                     onRequestAudio = { audioLauncher.launch(Manifest.permission.RECORD_AUDIO) },
                     onRequestExactAlarm = { requestExactAlarm() },
                     onRequestBattery = { requestIgnoreBattery() },
+                    onOpenOemGuidance = {
+                        startActivity(Intent(this, OemGuidanceActivity::class.java))
+                    },
                     onContinue = { finishOnboarding() }
                 )
             }
@@ -247,6 +252,7 @@ fun PermissionsScreen(
     onRequestAudio: () -> Unit,
     onRequestExactAlarm: () -> Unit,
     onRequestBattery: () -> Unit,
+    onOpenOemGuidance: () -> Unit,
     onContinue: () -> Unit
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
@@ -323,6 +329,18 @@ fun PermissionsScreen(
                 onRequestExactAlarm = onRequestExactAlarm,
                 onRequestBattery = onRequestBattery
             )
+
+            // Only the families whose software blocks alarms get a second card: on stock Android
+            // the row above already says everything about battery, and a generic card would be
+            // noise on the first screen a person sees.
+            val oemGuidance = remember { OemReliability.current() }
+            if (OemReliability.needsGuidance(oemGuidance)) {
+                Spacer(modifier = Modifier.height(12.dp))
+                OemGuidanceCard(
+                    guidance = oemGuidance,
+                    onOpen = onOpenOemGuidance
+                )
+            }
 
             Spacer(modifier = Modifier.height(28.dp))
 

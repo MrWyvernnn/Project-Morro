@@ -284,6 +284,8 @@ fun MainAlarmScreen(context: Context) {
 
     val missionType = remember(prefsUpdateTrigger) { MissionPrefs.getMissionType(context) }
     val photoItems = remember(prefsUpdateTrigger) { MissionPrefs.getSelectedPhotoItems(context) }
+    // Build.MANUFACTURER never changes at runtime, so this is read once per screen.
+    val oemGuidance = remember { OemReliability.current() }
 
     val missionLabel = when (missionType) {
         MissionType.VOICE_COMMITMENT, MissionType.VOICE_MEMO -> "Voice promise"
@@ -522,6 +524,7 @@ fun MainAlarmScreen(context: Context) {
             MorroSettingsSheet(
                 wakeUpLabel = dockTime ?: "Not set",
                 missionLabel = missionLabel,
+                oemLabel = oemGuidance.brandLabel,
                 themeChoice = if (autumnTheme) MorroThemeChoice.AUTUMN else MorroThemeChoice.MIDNIGHT,
                 onAutumnThemeChange = { on ->
                     autumnTheme = on
@@ -533,6 +536,10 @@ fun MainAlarmScreen(context: Context) {
                 onOpenWakeUp = {
                     showSettings = false
                     showAlarmBuilder = true
+                },
+                onOpenOemGuidance = {
+                    showSettings = false
+                    context.startActivity(Intent(context, OemGuidanceActivity::class.java))
                 },
                 onOpenPrivacy = {
                     showSettings = false

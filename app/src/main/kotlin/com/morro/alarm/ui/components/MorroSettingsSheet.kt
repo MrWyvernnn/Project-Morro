@@ -50,9 +50,11 @@ import com.morro.alarm.ui.theme.morroTypography
  *
  * @param wakeUpLabel the current wake-up time, or "Not set"
  * @param missionLabel the mission that will get the person out of bed
+ * @param oemLabel the phone's manufacturer, shown as the reliability row's value
  * @param themeChoice the theme in use right now, shown as the row's value
  * @param onAutumnThemeChange true for Autumn, false for Midnight
  * @param onOpenWakeUp opens the alarm builder
+ * @param onOpenOemGuidance opens the manufacturer-specific reliability screen
  * @param onOpenPrivacy opens the privacy policy
  * @param onDismiss called on backdrop tap, drag-down, or Close
  */
@@ -61,9 +63,11 @@ import com.morro.alarm.ui.theme.morroTypography
 fun MorroSettingsSheet(
     wakeUpLabel: String,
     missionLabel: String,
+    oemLabel: String,
     themeChoice: MorroThemeChoice,
     onAutumnThemeChange: (Boolean) -> Unit,
     onOpenWakeUp: () -> Unit,
+    onOpenOemGuidance: () -> Unit,
     onOpenPrivacy: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -120,6 +124,12 @@ fun MorroSettingsSheet(
                 title = "Mission",
                 value = missionLabel,
                 onClick = onOpenWakeUp
+            )
+
+            SettingsRow(
+                title = "Alarm reliability",
+                value = oemLabel,
+                onClick = onOpenOemGuidance
             )
 
             SettingsToggleRow(

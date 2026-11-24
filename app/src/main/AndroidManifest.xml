@@ -66,6 +66,12 @@
             android:exported="false"
             android:theme="@style/Theme.Morro" />
 
+        <!-- Manufacturer-specific alarm reliability guidance -->
+        <activity
+            android:name=".OemGuidanceActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Morro" />
+
         <!-- Alarm firing activity (full-screen over lock screen) -->
         <activity
             android:name=".AlarmActivity"
