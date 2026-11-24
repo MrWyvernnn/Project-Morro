@@ -6,20 +6,22 @@ import org.junit.Test
 /**
  * The first-run order is a product rule, not an implementation detail: the plans may never be shown
  * before the personalizing beat, and a returning user must never see the intro again.
+ *
+ * There is no sign-in step to assert here. Morro has no accounts, and the Play purchase is tied to
+ * the Google account already on the device. The order test below is the guard: if an account step
+ * is ever reintroduced, it has to appear in this expected list first.
  */
 class IntroSequenceTest {
 
     /** Every step defaults to "done", so a test only names the ones it cares about. */
     private fun step(
         splash: Boolean = true,
-        signIn: Boolean = true,
         questions: Boolean = true,
         personalize: Boolean = true,
         paywall: Boolean = true,
         permissions: Boolean = true,
     ): IntroStep = nextIntroStep(
         splashDone = splash,
-        signInDone = signIn,
         questionsDone = questions,
         personalizeDone = personalize,
         paywallDone = paywall,
@@ -33,13 +35,12 @@ class IntroSequenceTest {
 
     @Test
     fun `a fresh install starts at the splash`() {
-        assertEquals(IntroStep.Splash, step(splash = false, signIn = false))
+        assertEquals(IntroStep.Splash, step(splash = false, questions = false))
     }
 
     @Test
     fun `the whole sequence runs in order`() {
         var splash = false
-        var signIn = false
         var questions = false
         var personalize = false
         var paywall = false
@@ -48,11 +49,10 @@ class IntroSequenceTest {
 
         // Stand in for the UI: render the current step, then mark it done, as MainActivity does.
         while (true) {
-            val current = nextIntroStep(splash, signIn, questions, personalize, paywall, permissions)
+            val current = nextIntroStep(splash, questions, personalize, paywall, permissions)
             seen += current
             when (current) {
                 IntroStep.Splash -> splash = true
-                IntroStep.SignIn -> signIn = true
                 IntroStep.Questions -> questions = true
                 IntroStep.Personalizing -> personalize = true
                 IntroStep.Paywall -> paywall = true
@@ -64,7 +64,6 @@ class IntroSequenceTest {
         assertEquals(
             listOf(
                 IntroStep.Splash,
-                IntroStep.SignIn,
                 IntroStep.Questions,
                 IntroStep.Personalizing,
                 IntroStep.Paywall,
@@ -73,6 +72,13 @@ class IntroSequenceTest {
             ),
             seen
         )
+    }
+
+    @Test
+    fun `a fresh install asks the questions straight after the splash`() {
+        // No account, no sign-in: the second thing anyone sees is the question that personalises
+        // the app.
+        assertEquals(IntroStep.Questions, step(splash = true, questions = false))
     }
 
     @Test

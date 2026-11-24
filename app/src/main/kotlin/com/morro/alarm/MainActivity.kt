@@ -97,7 +97,6 @@ import com.morro.alarm.ui.onboarding.PaywallScreen
 import com.morro.alarm.ui.onboarding.PersonalizingScreen
 import com.morro.alarm.ui.onboarding.PersonalizationStorage
 import com.morro.alarm.ui.onboarding.PersonalizedQuestions
-import com.morro.alarm.ui.onboarding.SignInScreen
 import com.morro.alarm.ui.onboarding.nextIntroStep
 import com.morro.alarm.ui.splash.MorroGhostSplash
 import com.morro.alarm.ui.motion.MorroMotion
@@ -152,10 +151,10 @@ class MainActivity : ComponentActivity() {
                 // itself for a beat before it becomes the alarm. rememberSaveable keeps a rotation
                 // from replaying it, and a tap still skips it.
                 var splashDone by rememberSaveable { mutableStateOf(false) }
-                // Sign-in and the paywall are visual beats for now: no account is created, no
-                // billing is wired, and both can be skipped. Their state lives in the saved
-                // instance only, like the splash, so the intro replays until it is truly finished.
-                var signInDone by rememberSaveable { mutableStateOf(alreadyOnboarded) }
+                // The paywall is a visual beat for now: no billing is wired, and it can be
+                // skipped. Their state lives in the saved instance, like the splash, so the intro
+                // replays until it is truly finished. There is no sign-in state because there is
+                // no account: entitlement comes from the Google account on the device.
                 var questionsDone by rememberSaveable {
                     mutableStateOf(alreadyOnboarded || PersonalizationStorage.isComplete(this@MainActivity))
                 }
@@ -174,7 +173,6 @@ class MainActivity : ComponentActivity() {
                 when (
                     nextIntroStep(
                         splashDone = splashDone,
-                        signInDone = signInDone,
                         questionsDone = questionsDone,
                         personalizeDone = personalizeDone,
                         paywallDone = paywallDone,
@@ -185,8 +183,6 @@ class MainActivity : ComponentActivity() {
                         onDismiss = { splashDone = true },
                         modifier = Modifier.fillMaxSize()
                     )
-
-                    IntroStep.SignIn -> SignInScreen(onContinue = { signInDone = true })
 
                     IntroStep.Questions -> PersonalizedQuestions(
                         onComplete = {

@@ -71,7 +71,7 @@ Play Billing only. Everything else in the app is offline and local.
 ## 4. Tech stack
 
 - Kotlin, Jetpack Compose only. No XML layouts.
-- minSdk 26 (Android 8.0), target 34.
+- minSdk 26 (Android 8.0), target 35.
 - `AlarmManager.setAlarmClock()`, reschedule on `BOOT_COMPLETED`.
 - Full-screen `Activity` from a `BroadcastReceiver` via `PendingIntent`;
   `setShowWhenLocked(true)`, `setTurnScreenOn(true)`.
@@ -94,6 +94,9 @@ app/src/main/kotlin/com/morro/alarm/
 ├── MainActivity.kt              intro routing + dashboard + alarm dock
 ├── AlarmScheduler.kt            setAlarmClock, boot reschedule
 ├── AlarmReceiver.kt             broadcast → full-screen activity
+├── MissedAlarmLog.kt            local late/missed-ring log, no network
+├── OemGuidance.kt               per-manufacturer autostart guidance
+├── OemGuidanceActivity.kt       the one reliability screen
 ├── AlarmForegroundService.kt    keeps the alarm alive
 ├── AlarmSoundPlayer.kt          alarm-stream ringtone
 ├── MemoRecorder.kt              15s capture state machine
@@ -158,8 +161,8 @@ founder should verify it on their phone.
   technical risk. Mitigated by `setAlarmClock` + foreground service + OEM guidance.
 - **Skipped recordings** → fallback to last clip.
 - **Habituation to a repeated clip** → do not solve in v1.
-- **Doc drift** → `AGENTS.md` still describes an orange/pink palette that was abandoned.
-  `MORRO_VISUAL_SYSTEM.md` and `Theme.kt` are correct. Follow those.
+- **Doc drift** → none known. `AGENTS.md`, `design/MORRO_VISUAL_SYSTEM.md` and
+  `ui/theme/Theme.kt` agree today. If they disagree again, `Theme.kt` wins.
 
 ## 10. Open decisions — ask, don't guess
 

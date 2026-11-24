@@ -57,16 +57,21 @@ import com.morro.alarm.ui.theme.MorroShapes
 import com.morro.alarm.ui.theme.morroHairline
 
 /**
- * Sign-in — a visual placeholder in front of the questions.
+ * Sign-in — NOT ROUTED. Kept on disk, deliberately outside [IntroStep].
  *
- * The app is offline and there is no account system, so neither button authenticates anything: both
- * simply move the flow on, and Skip exists for anyone who does not want to pretend. The screen earns
- * its place in the sequence as a normal first-run beat, and it is written so that wiring a real
- * identity provider later replaces two callbacks instead of the layout.
+ * Morro has no accounts and does not want any. A Play purchase is tied to the Google account
+ * already on the device, so a sign-in screen would add a credential for us to store, plus an
+ * in-app and web account-deletion obligation under Play policy, in exchange for nothing. Voice
+ * memos, alarms and mission choices stay local.
  *
- * Layout follows the questions screen: one reading column, clouds behind it, a soft scrim so the
- * copy never sits on a cloud, and a single filled action (the email continue). Gmail is the outlined
- * secondary, because one screen gets one bright thing.
+ * Do not wire this back into the first-run flow. If a future feature seems to need it, the answer
+ * is almost certainly to key that feature to the Play entitlement instead.
+ *
+ * What is left here is a faithful placeholder: neither button authenticates anything, so the screen
+ * would have to be rebuilt around a real identity provider before it could ship. The layout follows
+ * the questions screen — one reading column, clouds behind it, a soft scrim so the copy never sits
+ * on a cloud, and a single filled action. Gmail is the outlined secondary, because one screen gets
+ * one bright thing.
  */
 @Composable
 fun SignInScreen(
