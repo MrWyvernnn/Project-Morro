@@ -8,6 +8,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.expandVertically
@@ -99,6 +100,7 @@ import com.morro.alarm.ui.motion.MorroMotion
 import com.morro.alarm.ui.motion.pressScale
 import com.morro.alarm.ui.motion.staggeredReveal
 import com.morro.alarm.ui.motion.rememberReducedMotion
+import com.morro.alarm.ui.theme.MorroSpring
 import com.morro.alarm.ui.theme.morroColors
 import com.morro.alarm.ui.theme.morroHairline
 import com.morro.alarm.ui.theme.morroShapes
@@ -556,9 +558,8 @@ private fun TimePickerCard(
     // Every change of time lands with a small spring, so the numbers feel set rather than typed.
     val pop = remember { Animatable(1f) }
     LaunchedEffect(selectedHour, selectedMinute) {
-        // A set time snaps, then settles. No bounce: this happens on every minute change.
         pop.snapTo(0.97f)
-        pop.animateTo(1f, MorroMotion.PressRelease)
+        pop.animateTo(1f, MorroSpring.FloatSpringPlayful)
     }
 
     Column(
@@ -613,24 +614,55 @@ private fun TimePickerCard(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf(6 to 0, 7 to 0, 8 to 0).forEach { (hour, minute) ->
                 val active = selectedHour == hour && selectedMinute == minute
-                Text(
-                    text = String.format(Locale.getDefault(), "%02d:00", hour),
-                    fontSize = 12.sp,
-                    color = if (active) colors.honey else colors.textSecondary,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(50))
-                        .morroHairline(
-                            radius = 50.dp,
-                            color = if (active) colors.borderStrong else colors.borderSubtle
-                        )
-                        .clickable { onTimeChange(hour, minute) }
-                        .heightIn(min = 48.dp)
-                        .wrapContentHeight(Alignment.CenterVertically)
-                        .padding(horizontal = 16.dp)
+                QuickTimeChip(
+                    label = String.format(Locale.getDefault(), "%02d:00", hour),
+                    active = active,
+                    onClick = { onTimeChange(hour, minute) }
                 )
             }
         }
     }
+}
+
+@Composable
+private fun QuickTimeChip(
+    label: String,
+    active: Boolean,
+    onClick: () -> Unit
+) {
+    val colors = morroColors()
+    val interactionSource = remember { MutableInteractionSource() }
+    val textColor by animateColorAsState(
+        targetValue = if (active) colors.honey else colors.textSecondary,
+        animationSpec = tween(180),
+        label = "chipTextColor"
+    )
+    val borderColor by animateColorAsState(
+        targetValue = if (active) colors.borderStrong else colors.borderSubtle,
+        animationSpec = tween(180),
+        label = "chipBorderColor"
+    )
+
+    Text(
+        text = label,
+        fontSize = 12.sp,
+        color = textColor,
+        modifier = Modifier
+            .pressScale(interactionSource, pressedScale = 0.96f)
+            .clip(RoundedCornerShape(50))
+            .morroHairline(
+                radius = 50.dp,
+                color = borderColor
+            )
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            )
+            .heightIn(min = 48.dp)
+            .wrapContentHeight(Alignment.CenterVertically)
+            .padding(horizontal = 16.dp)
+    )
 }
 
 /**

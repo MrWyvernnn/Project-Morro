@@ -1,5 +1,6 @@
 package com.morro.alarm.ui.components
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -44,6 +45,12 @@ fun MorroStatusDot(
         wasArmed = armed
     }
 
+    val dotColor by animateColorAsState(
+        targetValue = if (armed) MorroColors.Honey else MorroColors.TextDisabled,
+        animationSpec = tween(durationMillis = 300),
+        label = "statusDotColor"
+    )
+
     Box(
         modifier = modifier
             .size(10.dp)
@@ -63,7 +70,7 @@ fun MorroStatusDot(
         Box(
             modifier = Modifier
                 .size(6.dp)
-                .background(if (armed) MorroColors.Honey else MorroColors.TextDisabled, CircleShape)
+                .background(dotColor, CircleShape)
         )
     }
 }

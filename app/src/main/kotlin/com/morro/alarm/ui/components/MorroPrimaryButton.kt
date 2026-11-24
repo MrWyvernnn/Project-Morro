@@ -16,6 +16,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -23,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.morro.alarm.ui.motion.pressScale
 import com.morro.alarm.ui.theme.MorroColors
+import com.morro.alarm.ui.theme.MorroSpring
 import com.morro.alarm.ui.theme.lerpColor
 import com.morro.alarm.ui.theme.morroColors
 import com.morro.alarm.ui.theme.morroShapes
@@ -48,6 +51,7 @@ fun MorroPrimaryButton(
     val colors = morroColors()
     val shapes = morroShapes()
     val typo = morroTypography()
+    val haptics = LocalHapticFeedback.current
 
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
@@ -62,7 +66,11 @@ fun MorroPrimaryButton(
         modifier = modifier
             .fillMaxWidth()
             .height(52.dp)
-            .pressScale(interactionSource, enabled)
+            .pressScale(
+                interactionSource = interactionSource,
+                enabled = enabled,
+                releaseSpec = MorroSpring.FloatSpringPlayful
+            )
             .graphicsLayer {
                 translationY = if (isPressed) 1f else 0f
             }
@@ -73,7 +81,10 @@ fun MorroPrimaryButton(
                 indication = null,
                 enabled = enabled,
                 role = Role.Button,
-                onClick = onClick
+                onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onClick()
+                }
             ),
         contentAlignment = Alignment.Center
     ) {

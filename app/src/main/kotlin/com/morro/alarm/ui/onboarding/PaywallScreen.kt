@@ -1,7 +1,11 @@
 package com.morro.alarm.ui.onboarding
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -48,6 +52,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.morro.alarm.ui.components.MorroGhostMascot
 import com.morro.alarm.ui.components.MorroPrimaryButton
+import com.morro.alarm.ui.components.MorroSky
+import com.morro.alarm.ui.components.MorroSkyScrim
 import com.morro.alarm.ui.motion.MorroMotion
 import com.morro.alarm.ui.motion.pressScale
 import com.morro.alarm.ui.motion.staggeredReveal
@@ -113,14 +119,22 @@ fun PaywallScreen(
 ) {
     var selected by rememberSaveable { mutableIntStateOf(0) }
 
-    Column(
+    Box(
         modifier = modifier
             .fillMaxSize()
-            .windowInsetsPadding(WindowInsets.systemBars)
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .background(MorroColors.Canvas)
     ) {
+        MorroSky(intensity = 0.5f)
+        MorroSkyScrim(alpha = 0.90f)
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.systemBars)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             TextButton(onClick = onContinue) {
                 Text(
@@ -210,6 +224,7 @@ fun PaywallScreen(
             Spacer(modifier = Modifier.height(32.dp))
         }
     }
+}
 }
 
 /**
@@ -322,7 +337,14 @@ private fun PlanCard(
                     ),
                 contentAlignment = Alignment.Center
             ) {
-                if (selected) {
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = selected,
+                    enter = fadeIn(tween(140)) + scaleIn(
+                        initialScale = 0.5f,
+                        animationSpec = tween(140, easing = MorroMotion.EnterEasing)
+                    ),
+                    exit = fadeOut(tween(100))
+                ) {
                     Icon(
                         imageVector = Icons.Filled.Check,
                         contentDescription = null,

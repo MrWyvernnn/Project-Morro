@@ -28,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
@@ -39,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.morro.alarm.ui.components.MorroSky
 import com.morro.alarm.ui.components.MorroGhostMascot
+import com.morro.alarm.ui.motion.MorroMotion
 import com.morro.alarm.ui.motion.rememberReducedMotion
 import com.morro.alarm.ui.theme.MorroColors
 import com.morro.alarm.ui.theme.MorroSpring
@@ -66,6 +68,7 @@ fun MorroGhostSplash(
 
     val entrance = remember { Animatable(if (reducedMotion) 1f else 0f) }
     val textReveal = remember { Animatable(if (reducedMotion) 1f else 0f) }
+    val signatureProgress = remember { Animatable(if (reducedMotion) 1f else 0f) }
 
     fun finish() {
         if (!dismissed) {
@@ -78,7 +81,8 @@ fun MorroGhostSplash(
         if (!reducedMotion) {
             entrance.animateTo(1f, MorroSpring.FloatSpringPlayful)
             delay(90L)
-            textReveal.animateTo(1f, tween(durationMillis = 420, easing = FastOutSlowInEasing))
+            textReveal.animateTo(1f, tween(durationMillis = 380, easing = MorroMotion.EnterEasing))
+            signatureProgress.animateTo(1f, tween(durationMillis = 400, easing = MorroMotion.EnterEasing))
         }
     }
 
@@ -139,9 +143,10 @@ fun MorroGhostSplash(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // The signature: a short, slightly uneven rule that looks drawn rather than ruled.
+                // The signature: hand-drawn in real time with progressive ink stroke
+                val pathMeasure = remember { PathMeasure() }
                 Canvas(modifier = Modifier.width(30.dp).height(6.dp)) {
-                    val path = Path().apply {
+                    val fullPath = Path().apply {
                         moveTo(1f, size.height * 0.55f)
                         cubicTo(
                             size.width * 0.32f, size.height * 0.20f,
@@ -149,9 +154,14 @@ fun MorroGhostSplash(
                             size.width - 1f, size.height * 0.42f
                         )
                     }
+                    val segmentPath = Path()
+                    pathMeasure.setPath(fullPath, false)
+                    val stopDist = pathMeasure.length * signatureProgress.value.coerceIn(0f, 1f)
+                    pathMeasure.getSegment(0f, stopDist, segmentPath, true)
+
                     drawPath(
-                        path = path,
-                        color = MorroColors.Honey.copy(alpha = 0.65f),
+                        path = segmentPath,
+                        color = MorroColors.Honey.copy(alpha = 0.75f),
                         style = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round)
                     )
                 }

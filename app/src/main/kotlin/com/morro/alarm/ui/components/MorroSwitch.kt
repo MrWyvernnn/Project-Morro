@@ -20,7 +20,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.morro.alarm.ui.motion.MorroMotion
@@ -43,6 +45,7 @@ fun MorroSwitch(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
+    val haptics = LocalHapticFeedback.current
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
 
@@ -74,7 +77,10 @@ fun MorroSwitch(
                 role = Role.Switch,
                 interactionSource = interactionSource,
                 indication = null,
-                onValueChange = onCheckedChange
+                onValueChange = { newValue ->
+                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onCheckedChange(newValue)
+                }
             ),
         contentAlignment = Alignment.Center
     ) {

@@ -64,7 +64,7 @@ private val CloudLayers = listOf(
 fun DriftingClouds(
     modifier: Modifier = Modifier,
     intensity: Float = 1f,
-    durationMillis: Int = 180_000,
+    durationMillis: Int = 36_000,
 ) {
     val reduced = rememberReducedMotion()
 

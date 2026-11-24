@@ -40,11 +40,11 @@ private data class LeafSpec(
     val tint: Color,
 )
 
-/** Autumn in four tones: ember, straw, ochre, rust. Flat fills, no gradients. */
-private val LeafEmber = Color(0xFFE79056)
-private val LeafStraw = Color(0xFFD8B06A)
-private val LeafOchre = Color(0xFFC9A15A)
-private val LeafRust = Color(0xFFB2643C)
+/** Autumn in four tones: ember, straw, ochre, rust. Bold, luminous and glowing warm tones. */
+private val LeafEmber = Color(0xFFFF9E4A)
+private val LeafStraw = Color(0xFFFFD67A)
+private val LeafOchre = Color(0xFFFFC566)
+private val LeafRust = Color(0xFFE8814D)
 
 private val Leaves = listOf(
     LeafSpec(0.12f, 0.02f, 0.55f, 0.052f, 0.030f, 0.4f, 0.55f, 1.7f, LeafEmber),
@@ -93,7 +93,7 @@ private val LeafBody = Path().apply {
 fun FallingLeaves(
     modifier: Modifier = Modifier,
     intensity: Float = 1f,
-    durationMillis: Int = 180_000,
+    durationMillis: Int = 26_000,
 ) {
     val reduced = rememberReducedMotion()
 
@@ -110,7 +110,8 @@ fun FallingLeaves(
             val raw = leaf.start + t * leaf.fall
             val wrapped = ((raw % span) + span) % span
             val y = (wrapped - 0.1f) * size.height
-            val length = size.minDimension * leaf.sizeFraction * presence
+            // Scaled 1.85x so leaves read bold, distinct, and tactile as real autumn leaves.
+            val length = size.minDimension * leaf.sizeFraction * presence * 1.85f
 
             // Skip anything whose whole body is outside the viewport: a leaf near the wrap edge
             // costs a clip check instead of a path draw.

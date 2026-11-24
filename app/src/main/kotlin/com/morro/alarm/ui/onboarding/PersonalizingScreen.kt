@@ -117,7 +117,8 @@ fun PersonalizingScreen(
                 modifier = Modifier
                     .size(width = 124.dp, height = 138.dp)
                     .staggeredReveal(0),
-                happy = true
+                happy = true,
+                gazeBiasY = if (reduced) 0f else progress.value * 0.85f
             )
 
             Spacer(modifier = Modifier.height(26.dp))

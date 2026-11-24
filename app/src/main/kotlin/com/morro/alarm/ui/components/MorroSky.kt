@@ -24,7 +24,7 @@ import com.morro.alarm.ui.theme.morroThemeChoice
 fun MorroSky(
     modifier: Modifier = Modifier,
     intensity: Float = 1f,
-    durationMillis: Int = 180_000,
+    durationMillis: Int = 36_000,
 ) {
     val choice = morroThemeChoice()
     val reduced = rememberReducedMotion()
@@ -47,7 +47,7 @@ fun MorroSky(
             MorroThemeChoice.AUTUMN -> FallingLeaves(
                 modifier = modifier,
                 intensity = intensity,
-                durationMillis = durationMillis
+                durationMillis = (durationMillis * 0.72f).toInt()
             )
         }
     }

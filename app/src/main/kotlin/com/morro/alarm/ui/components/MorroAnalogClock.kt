@@ -8,6 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -22,12 +23,13 @@ import kotlin.math.sin
 /**
  * The dashboard clock.
  *
- * A dial, not a decoration: near-black face, one hairline rim, honey-white hands. The only warm
- * element is the second hand and a thin arc that sweeps minute/60 of the dial — the fraction of the
- * current hour that has passed, a quiet sign that time is actually moving.
+ * A precision timepiece: warm near-black dial, crisp hairline rim, and richly detailed
+ * hour markers with distinct cardinal indices (12, 3, 6, 9) and fine minute pips.
  *
- * No gradients, no glow, no numerals. The dashboard owns the digital readout, so the dial stays
- * silent and the two can never disagree.
+ * Warm accents:
+ *  - The sweeping elapsed-hour progress arc that tracks the fraction of the current hour passed.
+ *  - The hairline honey needle second hand with a counterweight tail.
+ *  - The jewel-like center cap nut with honey collar and ink core pin.
  */
 @Composable
 fun MorroAnalogClock(
@@ -49,93 +51,143 @@ fun MorroAnalogClock(
             val radius = this.size.minDimension / 2f
             val center = Offset(this.size.width / 2f, this.size.height / 2f)
 
-            // Face: a warm near-black disc, one tone above the canvas.
-            drawCircle(color = Color(0xFF080706), radius = radius, center = center)
+            // Face: a warm near-black disc
+            drawCircle(color = Color(0xFF070605), radius = radius, center = center)
 
-            // Rim hairline.
+            // Outer rim hairline
             drawCircle(
-                color = MorroColors.TextPrimary.copy(alpha = 0.12f),
+                color = MorroColors.TextPrimary.copy(alpha = 0.14f),
                 radius = radius - 1.dp.toPx(),
                 center = center,
-                style = Stroke(width = 1.dp.toPx())
+                style = Stroke(width = 1.2.dp.toPx())
             )
 
-            // Hour-progress arc: 0 at twelve, filling clockwise with minute/60. The one warm mark.
+            // Inner chapter ring connecting the hour markers
+            drawCircle(
+                color = MorroColors.TextPrimary.copy(alpha = 0.08f),
+                radius = radius - 16.dp.toPx(),
+                center = center,
+                style = Stroke(width = 0.8.dp.toPx())
+            )
+
+            // Hour-progress arc: sweeps from twelve (top) clockwise with minute/60
             drawArc(
-                color = MorroColors.Honey.copy(alpha = 0.55f),
+                color = MorroColors.Honey.copy(alpha = 0.65f),
                 startAngle = -90f,
                 sweepAngle = ((minuteFloat / 60f) * 360f),
                 useCenter = false,
-                topLeft = Offset(center.x - (radius - 2.dp.toPx()), center.y - (radius - 2.dp.toPx())),
-                size = androidx.compose.ui.geometry.Size(
-                    (radius - 2.dp.toPx()) * 2f,
-                    (radius - 2.dp.toPx()) * 2f
+                topLeft = Offset(center.x - (radius - 2.5.dp.toPx()), center.y - (radius - 2.5.dp.toPx())),
+                size = Size(
+                    (radius - 2.5.dp.toPx()) * 2f,
+                    (radius - 2.5.dp.toPx()) * 2f
                 ),
-                style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
+                style = Stroke(width = 2.4.dp.toPx(), cap = StrokeCap.Round)
             )
 
-            // Markers: hour ticks, minute dots. Two weights, no numerals.
+            // ── Crisp Clock Markings ─────────────────────────────────────────
+            // 12 hour batons with prominent cardinal hierarchy + 60 minute pips
             for (i in 0 until 60) {
-                val angle = (i * 6f - 90f) * (Math.PI / 180f).toFloat()
-                if (i % 5 == 0) {
-                    val inner = radius - 13.dp.toPx()
-                    val outer = radius - 7.dp.toPx()
+                val angleDeg = i * 6f - 90f
+                val rad = Math.toRadians(angleDeg.toDouble())
+                val cosA = cos(rad).toFloat()
+                val sinA = sin(rad).toFloat()
+
+                val isHour = i % 5 == 0
+                val isCardinal = i % 15 == 0
+                val isTwelve = i == 0
+
+                if (isTwelve) {
+                    // Double baton at 12 o'clock for immediate tactile orientation
+                    val outerR = radius - 5.dp.toPx()
+                    val innerR = radius - 17.dp.toPx()
+                    val offsetPerp = 2.2.dp.toPx()
+                    val perpX = -sinA
+                    val perpY = cosA
+
+                    listOf(-1f, 1f).forEach { side ->
+                        val startX = center.x + innerR * cosA + side * offsetPerp * perpX
+                        val startY = center.y + innerR * sinA + side * offsetPerp * perpY
+                        val endX = center.x + outerR * cosA + side * offsetPerp * perpX
+                        val endY = center.y + outerR * sinA + side * offsetPerp * perpY
+
+                        drawLine(
+                            color = MorroColors.TextPrimary.copy(alpha = 0.85f),
+                            start = Offset(startX, startY),
+                            end = Offset(endX, endY),
+                            strokeWidth = 2.dp.toPx(),
+                            cap = StrokeCap.Round
+                        )
+                    }
+                } else if (isCardinal) {
+                    // 3, 6, 9 cardinal markers: bold, confident length
+                    val outerR = radius - 5.dp.toPx()
+                    val innerR = radius - 17.dp.toPx()
                     drawLine(
-                        color = MorroColors.TextPrimary.copy(alpha = if (i % 15 == 0) 0.55f else 0.32f),
-                        start = Offset(center.x + inner * cos(angle), center.y + inner * sin(angle)),
-                        end = Offset(center.x + outer * cos(angle), center.y + outer * sin(angle)),
-                        strokeWidth = if (i % 15 == 0) 1.8.dp.toPx() else 1.dp.toPx(),
+                        color = MorroColors.TextPrimary.copy(alpha = 0.80f),
+                        start = Offset(center.x + innerR * cosA, center.y + innerR * sinA),
+                        end = Offset(center.x + outerR * cosA, center.y + outerR * sinA),
+                        strokeWidth = 2.8.dp.toPx(),
+                        cap = StrokeCap.Round
+                    )
+                } else if (isHour) {
+                    // Standard hour markers (1, 2, 4, 5, 7, 8, 10, 11)
+                    val outerR = radius - 6.dp.toPx()
+                    val innerR = radius - 14.dp.toPx()
+                    drawLine(
+                        color = MorroColors.TextPrimary.copy(alpha = 0.55f),
+                        start = Offset(center.x + innerR * cosA, center.y + innerR * sinA),
+                        end = Offset(center.x + outerR * cosA, center.y + outerR * sinA),
+                        strokeWidth = 1.8.dp.toPx(),
                         cap = StrokeCap.Round
                     )
                 } else {
-                    val dotRadius = radius - 9.dp.toPx()
+                    // Minute pips
+                    val dotR = radius - 7.5.dp.toPx()
                     drawCircle(
-                        color = MorroColors.TextPrimary.copy(alpha = 0.16f),
-                        radius = 0.7.dp.toPx(),
-                        center = Offset(
-                            center.x + dotRadius * cos(angle),
-                            center.y + dotRadius * sin(angle)
-                        )
+                        color = MorroColors.TextPrimary.copy(alpha = 0.22f),
+                        radius = 0.9.dp.toPx(),
+                        center = Offset(center.x + dotR * cosA, center.y + dotR * sinA)
                     )
                 }
             }
 
-            // Hour hand.
+            // ── Hands ────────────────────────────────────────────────────────
+            // Hour hand (confident, rounded pill)
             rotate(degrees = hourFloat * 30f, pivot = center) {
                 drawLine(
                     color = MorroColors.TextPrimary,
-                    start = Offset(center.x, center.y + radius * 0.05f),
-                    end = Offset(center.x, center.y - radius * 0.46f),
-                    strokeWidth = 4.dp.toPx(),
+                    start = Offset(center.x, center.y + radius * 0.06f),
+                    end = Offset(center.x, center.y - radius * 0.48f),
+                    strokeWidth = 4.2.dp.toPx(),
                     cap = StrokeCap.Round
                 )
             }
 
-            // Minute hand.
+            // Minute hand (sleek, elegant baton)
             rotate(degrees = minuteFloat * 6f, pivot = center) {
                 drawLine(
                     color = MorroColors.TextPrimary,
-                    start = Offset(center.x, center.y + radius * 0.07f),
-                    end = Offset(center.x, center.y - radius * 0.68f),
-                    strokeWidth = 2.6.dp.toPx(),
+                    start = Offset(center.x, center.y + radius * 0.08f),
+                    end = Offset(center.x, center.y - radius * 0.70f),
+                    strokeWidth = 2.8.dp.toPx(),
                     cap = StrokeCap.Round
                 )
             }
 
-            // Second hand: honey, hairline, with a counterweight.
+            // Second hand: honey, hairline needle with counterweight
             rotate(degrees = second * 6f, pivot = center) {
                 drawLine(
-                    color = MorroColors.Honey.copy(alpha = 0.85f),
-                    start = Offset(center.x, center.y + radius * 0.16f),
-                    end = Offset(center.x, center.y - radius * 0.78f),
-                    strokeWidth = 1.2.dp.toPx(),
+                    color = MorroColors.Honey.copy(alpha = 0.90f),
+                    start = Offset(center.x, center.y + radius * 0.18f),
+                    end = Offset(center.x, center.y - radius * 0.82f),
+                    strokeWidth = 1.4.dp.toPx(),
                     cap = StrokeCap.Round
                 )
             }
 
-            // Centre pin.
-            drawCircle(color = MorroColors.TextPrimary, radius = 3.2.dp.toPx(), center = center)
-            drawCircle(color = Color.Black, radius = 1.3.dp.toPx(), center = center)
+            // Centre pin: jewel collar in Honey with ink core
+            drawCircle(color = MorroColors.Honey, radius = 4.dp.toPx(), center = center)
+            drawCircle(color = Color(0xFF0B0908), radius = 1.8.dp.toPx(), center = center)
         }
     }
 }

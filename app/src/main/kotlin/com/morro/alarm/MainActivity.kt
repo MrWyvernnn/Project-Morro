@@ -37,6 +37,11 @@ import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -59,6 +64,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
@@ -78,6 +84,8 @@ import com.morro.alarm.ui.components.AlarmBuilderSheetContent
 import com.morro.alarm.ui.components.MorroAnalogClock
 import com.morro.alarm.ui.components.MorroPrimaryButton
 import com.morro.alarm.ui.components.MorroSettingsSheet
+import com.morro.alarm.ui.components.MorroSky
+import com.morro.alarm.ui.components.MorroSkyScrim
 import com.morro.alarm.ui.components.MorroStatusDot
 import com.morro.alarm.ui.components.MorroSwitch
 import com.morro.alarm.ui.components.MorroPrivacyPolicySheet
@@ -92,6 +100,8 @@ import com.morro.alarm.ui.onboarding.nextIntroStep
 import com.morro.alarm.ui.splash.MorroGhostSplash
 import com.morro.alarm.ui.motion.MorroMotion
 import com.morro.alarm.ui.motion.pressScale
+import com.morro.alarm.ui.motion.rememberReducedMotion
+import com.morro.alarm.ui.theme.MorroSpring
 import com.morro.alarm.ui.theme.MorroTheme
 import com.morro.alarm.ui.theme.MorroThemeChoice
 import com.morro.alarm.ui.theme.ThemePrefs
@@ -298,13 +308,21 @@ fun MainAlarmScreen(context: Context) {
         dayFormat.format(clockCal.time)
     }
 
-    // One entrance for the clock, a beat later for the dock: the screen assembles instead of
-    // appearing all at once.
-    val clockReveal = remember { Animatable(0f) }
-    val dockReveal = remember { Animatable(0f) }
+    // One entrance for the clock, a beat later for the dock: the screen assembles on springs
+    // instead of appearing all at once.
+    val reducedMotion = rememberReducedMotion()
+    val clockReveal = remember { Animatable(if (reducedMotion) 1f else 0f) }
+    val dockReveal = remember { Animatable(if (reducedMotion) 1f else 0f) }
     LaunchedEffect(Unit) {
-        clockReveal.animateTo(1f, tween(MorroMotion.EnterMillis, easing = MorroMotion.EnterEasing))
-        dockReveal.animateTo(1f, tween(MorroMotion.EnterMillis, easing = MorroMotion.EnterEasing))
+        if (!reducedMotion) {
+            clockReveal.animateTo(1f, MorroSpring.FloatSpringDefault)
+        }
+    }
+    LaunchedEffect(Unit) {
+        if (!reducedMotion) {
+            delay(140L)
+            dockReveal.animateTo(1f, MorroSpring.FloatSpringPlayful)
+        }
     }
 
     val dockTime = remember(prefsUpdateTrigger, savedAlarm) {
@@ -317,8 +335,10 @@ fun MainAlarmScreen(context: Context) {
         modifier = Modifier
             .fillMaxSize()
             .background(colors.canvas)
-            .windowInsetsPadding(WindowInsets.systemBars)
     ) {
+        MorroSky(intensity = 0.85f)
+        MorroSkyScrim(alpha = 0.60f)
+
         Column(
             modifier = Modifier
                 // A phone column on a tablet: the clock and dock stay one reading width instead of
@@ -326,6 +346,7 @@ fun MainAlarmScreen(context: Context) {
                 .fillMaxHeight()
                 .widthIn(max = 520.dp)
                 .align(Alignment.Center)
+                .windowInsetsPadding(WindowInsets.systemBars)
                 .padding(horizontal = 24.dp, vertical = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -545,6 +566,18 @@ private fun AlarmDock(
     val shape = morroShapes().Card
     val dockInteraction = remember { MutableInteractionSource() }
 
+    val reducedMotion = rememberReducedMotion()
+    val breathTransition = rememberInfiniteTransition(label = "dockTimeBreath")
+    val timeBreath by breathTransition.animateFloat(
+        initialValue = 0.998f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 3_800, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "timeBreathScale"
+    )
+
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -602,6 +635,7 @@ private fun AlarmDock(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
+                val timeScale = if (hasActiveAlarm && !reducedMotion) timeBreath else 1f
                 Text(
                     text = dockTime,
                     fontSize = 46.sp,
@@ -612,7 +646,13 @@ private fun AlarmDock(
                     maxLines = 1,
                     // Takes the remaining width so a large system font size cannot push the switch
                     // off the card.
-                    modifier = Modifier.weight(1f, fill = false)
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .graphicsLayer {
+                            scaleX = timeScale
+                            scaleY = timeScale
+                            transformOrigin = TransformOrigin(0f, 0.5f)
+                        }
                 )
                 MorroSwitch(
                     checked = hasActiveAlarm,

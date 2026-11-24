@@ -1,5 +1,6 @@
 package com.morro.alarm.ui.components
 
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -8,11 +9,14 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -24,54 +28,67 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
+import com.morro.alarm.ui.motion.MorroMotion
+import com.morro.alarm.ui.motion.rememberReducedMotion
 import com.morro.alarm.ui.theme.MorroColors
+import com.morro.alarm.ui.theme.MorroSpring
 import kotlin.math.PI
+import kotlin.math.cos
 import kotlin.math.sin
+import kotlinx.coroutines.launch
 
 /**
- * MorroGhostMascot — a small, warm ghost who is clearly pleased to see you.
+ * MorroGhostMascot — an adorable, friendly, living ghost mascot.
  *
- * He used to be drawn as a dark shape on a dark screen: a near-black body with two pale eyes, which
- * read as a silhouette in a window rather than as a character. The fix was light, not detail. The
- * body is now warm paper with a high value at the dome and a honey shadow at the hem, so it is the
- * brightest thing on any screen it appears on, and the face is drawn dark on light instead of light
- * on dark. Dark eyes with a glint, two rose cheeks, a small smile — the universal shape of friendly.
+ * Silhouette:
+ *  - Plush, rounded dome head tapering out gracefully into a cuddly, bell-shaped floating skirt.
+ *  - Two sweet floating ghost nub-arms that bob with gentle out-of-phase secondary motion.
+ *  - Four wavy, fluid scalloped folds at the hem with dynamic harmonic cloth ripples.
  *
- * Silhouette: taller than it is wide, and still curves only. A narrow dome, two convex flanks and
- * three deep round hem scallops. The flanks tuck in below the dome, hold, then flare late into the
- * hem; that late flare is the hip, and it is what makes the body read as a figure rather than a
- * cone. Drop the pinch and it is a bell; drop the hold and it is an egg.
- *
- * Motion: it floats. A slow rise and fall with a second, quicker bob on top, a side-to-side sway
- * with a matching tilt, a breathing stretch, a two-frame blink whose eyes follow the drift, and a
- * hem that ripples as it hovers. No landing squash — the mascot hovers rather than hops, which
- * reads calmer next to the copy it sits above.
+ * Face & Character:
+ *  - Soulful, glossy dark-ink eyes with lively dual specular glints that blink naturally.
+ *  - Warm rosy cheeks (MorroColors.EyeRose) that breathe and blush deeper on touch.
+ *  - Sweet curved smile that perks up with breathing and joy.
+ *  - Tactile marshmallow squish and playful wink with MorroSpring.FloatSpringPlayful on tap.
  */
 @Composable
 fun MorroGhostMascot(
     modifier: Modifier = Modifier,
-    happy: Boolean = true
+    happy: Boolean = true,
+    interactive: Boolean = true,
+    gazeBiasY: Float = 0f,
 ) {
     val reduced = rememberReducedMotion()
+    val scope = rememberCoroutineScope()
+    val haptics = LocalHapticFeedback.current
     val transition = rememberInfiniteTransition(label = "ghostMascot")
 
-    // One linear clock drives the float; sway, tilt and blink are derived from its phase.
+    // Interactive tap squish, blush, and wink response
+    val tapSquish = remember { Animatable(1f) }
+    val tapBlush = remember { Animatable(0f) }
+    val tapWink = remember { Animatable(0f) }
+
+    // Primary hover cycle (3.2 seconds for serene, lively floating)
     val drift by transition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = if (happy) 3_000 else 4_200, easing = LinearEasing),
+            animation = tween(durationMillis = if (happy) 3_200 else 4_000, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "ghostFloat"
     )
+
+    // Gentle breathing cycle
     val breath by transition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 5_200, easing = FastOutSlowInEasing),
+            animation = tween(durationMillis = 4_800, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "ghostBreath"
@@ -80,14 +97,45 @@ fun MorroGhostMascot(
     val phase = if (reduced) 0f else drift
     val floatFraction = if (reduced) 0f else floatOffset(phase)
     val angle = phase * 2f * PI.toFloat()
-    val sway = if (reduced) 0f else sin(angle) * 3.6f
-    val tilt = if (reduced) 0f else sin(angle) * 2.2f + sin(angle * 2f) * 0.6f
-    val stretch = if (reduced) 1f else 0.975f + 0.045f * breath
-    val blink = if (reduced) 1f else blinkAmount(phase)
-    // Eyes travel with the drift: the mascot looks the way it leans.
-    val gaze = if (reduced) 0f else sin(angle)
 
-    Box(modifier = modifier) {
+    // Smooth lateral sway and pitch inertia
+    val sway = if (reduced) 0f else sin(angle) * 3.5f
+    val floatVelocity = -cos(angle) * 0.045f - 2f * cos(angle * 2f) * 0.012f
+    val tilt = if (reduced) 0f else sin(angle) * 2.0f + floatVelocity * 12f
+
+    // Squash & stretch (volume-preserving)
+    val baseStretch = if (reduced) 1f else 0.98f + 0.04f * breath
+    val currentStretch = (baseStretch * tapSquish.value).coerceIn(0.82f, 1.25f)
+
+    // Natural blinking + tap wink
+    val blink = if (reduced) 1f else blinkAmount(phase, tapWink.value)
+    // Eyes drift with micro-saccades
+    val gaze = if (reduced) 0f else sin(angle) * 0.85f + sin(angle * 3f) * 0.15f
+
+    val tapModifier = if (interactive && !reduced) {
+        Modifier.clickable(
+            interactionSource = remember { MutableInteractionSource() },
+            indication = null
+        ) {
+            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            scope.launch {
+                tapSquish.snapTo(0.84f)
+                tapSquish.animateTo(1f, MorroSpring.FloatSpringPlayful)
+            }
+            scope.launch {
+                tapBlush.snapTo(1f)
+                tapBlush.animateTo(0f, tween(800, easing = MorroMotion.EnterEasing))
+            }
+            scope.launch {
+                tapWink.animateTo(1f, tween(120))
+                tapWink.animateTo(0f, tween(180))
+            }
+        }
+    } else {
+        Modifier
+    }
+
+    Box(modifier = modifier.then(tapModifier)) {
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
@@ -99,9 +147,9 @@ fun MorroGhostMascot(
             val centerX = size.width / 2f
 
             scale(
-                scaleX = (2f - stretch) * stretch,
-                scaleY = stretch,
-                pivot = Offset(centerX, size.height * 0.94f)
+                scaleX = (2f - currentStretch) * currentStretch,
+                scaleY = currentStretch,
+                pivot = Offset(centerX, size.height * 0.92f)
             ) {
                 drawGhost(
                     canvasSize = size,
@@ -109,122 +157,192 @@ fun MorroGhostMascot(
                     happy = happy,
                     blink = blink,
                     gaze = gaze,
-                    hemWave = phase
+                    gazeY = gazeBiasY,
+                    hemWave = phase,
+                    breathProgress = if (reduced) 0.5f else breath,
+                    blushBoost = tapBlush.value,
+                    winkAmount = tapWink.value
                 )
             }
         }
     }
 }
 
-/**
- * Vertical hover, as a fraction of the canvas height. Positive is down.
- *
- * Two sine waves that both complete whole cycles per loop: the slow breath of the hover, plus a
- * shorter bob so the float never reads as a single mechanical pulse.
- */
+/** Vertical hover with dual harmonic bobbing. */
 private fun floatOffset(t: Float): Float =
-    -sin(t * 2f * PI.toFloat()) * 0.048f - sin(t * 4f * PI.toFloat()) * 0.010f
+    -sin(t * 2f * PI.toFloat()) * 0.045f - sin(t * 4f * PI.toFloat()) * 0.012f
 
-/** A two-frame blink, once per float cycle. */
-private fun blinkAmount(t: Float): Float = when {
-    t in 0.72f..0.76f -> 0.12f
-    t in 0.76f..0.80f -> 0.12f + 0.88f * ((t - 0.76f) / 0.04f)
-    else -> 1f
+/** Two-frame natural blink with occasional soft flutter. */
+private fun blinkAmount(t: Float, extraWink: Float = 0f): Float {
+    if (extraWink > 0f) {
+        return (1f - extraWink * 0.92f).coerceIn(0.08f, 1f)
+    }
+    return when {
+        t in 0.70f..0.74f -> 0.10f
+        t in 0.74f..0.78f -> 0.10f + 0.90f * ((t - 0.74f) / 0.04f)
+        t in 0.86f..0.88f -> 0.35f
+        t in 0.88f..0.90f -> 0.35f + 0.65f * ((t - 0.88f) / 0.02f)
+        else -> 1f
+    }
 }
 
-// ── The mascot's own colours ──────────────────────────────────────────────
-// Warm paper, not grey: the body is the light source of the screen, and a warm white reads as
-// lamplight rather than as a hole cut out of the black.
-private val BodyLight = Color(0xFFFFF7EB)
-private val BodyWarm = Color(0xFFF7E4C6)
-private val BodyShade = Color(0xFFE8CB9F)
-/** Ink for the face. Warm near-black, so the eyes belong to the paper instead of piercing it. */
-private val FaceInk = Color(0xFF352518)
+// ── Mascot Palette ────────────────────────────────────────────────────────
+private val BodyLight = Color(0xFFFFF8EE)
+private val BodyWarm = Color(0xFFF7E6CE)
+private val BodyShade = Color(0xFFEAD2AE)
+private val FaceInk = Color(0xFF2E2218)
 
-/**
- * Draws the ghost inside [canvasSize].
- *
- * The body is deliberately narrow: 0.70 of the canvas width against a dome that is 0.86 of that
- * width tall, so the shape reads as slim rather than squat. Every edge is a cubic; each hem scallop
- * is a near half-circle.
- */
+/** Draws the ghost mascot inside [canvasSize]. */
 private fun DrawScope.drawGhost(
     canvasSize: Size,
     centerYOffset: Float = 0f,
     happy: Boolean = true,
     blink: Float = 1f,
     gaze: Float = 0f,
+    gazeY: Float = 0f,
     hemWave: Float = 0f,
+    breathProgress: Float = 0f,
+    blushBoost: Float = 0f,
+    winkAmount: Float = 0f,
 ) {
     val centerX = canvasSize.width / 2f
-    val bodyWidth = canvasSize.width * 0.70f
+    // Plush, friendly proportions
+    val bodyWidth = canvasSize.width * 0.74f
     val halfWidth = bodyWidth / 2f
-    val headTop = canvasSize.height * 0.08f + centerYOffset
-    val headHeight = bodyWidth * 0.86f
-    val hemHeight = bodyWidth * 0.16f
-    val bodyBottom = canvasSize.height * 0.92f + centerYOffset
+    val headTop = canvasSize.height * 0.10f + centerYOffset
+    val headHeight = bodyWidth * 0.82f
+    val bodyBottom = canvasSize.height * 0.90f + centerYOffset
+    val hemHeight = bodyWidth * 0.18f
+
     val left = centerX - halfWidth
     val right = centerX + halfWidth
+    val waistY = headTop + headHeight * 0.88f
 
-    val waistY = headTop + headHeight * 0.94f
-    val bulge = bodyWidth * 0.080f
-    val pinch = bodyWidth * 0.135f
+    // ── Floating ghost arms (stubby nubs that bob gently out-of-phase) ────────
+    val armLag = hemWave * 2f * PI.toFloat() - 0.45f
+    val armBobLeft = sin(armLag) * (bodyWidth * 0.028f) - (winkAmount * bodyWidth * 0.04f)
+    val armBobRight = sin(armLag + 0.3f) * (bodyWidth * 0.028f) + (winkAmount * bodyWidth * 0.04f)
 
+    val leftArm = Path().apply {
+        val armRootX = left + bodyWidth * 0.08f
+        val armRootY = waistY + bodyWidth * 0.08f + armBobLeft
+        val armTipX = left - bodyWidth * 0.15f
+        val armTipY = waistY + bodyWidth * 0.22f + armBobLeft
+
+        moveTo(armRootX, armRootY - bodyWidth * 0.10f)
+        cubicTo(
+            armTipX, armRootY - bodyWidth * 0.08f,
+            armTipX - bodyWidth * 0.04f, armTipY + bodyWidth * 0.02f,
+            armTipX + bodyWidth * 0.06f, armTipY + bodyWidth * 0.06f
+        )
+        cubicTo(
+            armRootX - bodyWidth * 0.02f, armTipY + bodyWidth * 0.08f,
+            armRootX, armRootY + bodyWidth * 0.06f,
+            armRootX, armRootY + bodyWidth * 0.06f
+        )
+        close()
+    }
+
+    val rightArm = Path().apply {
+        val armRootX = right - bodyWidth * 0.08f
+        val armRootY = waistY + bodyWidth * 0.08f + armBobRight
+        val armTipX = right + bodyWidth * 0.15f
+        val armTipY = waistY + bodyWidth * 0.22f + armBobRight
+
+        moveTo(armRootX, armRootY - bodyWidth * 0.10f)
+        cubicTo(
+            armTipX, armRootY - bodyWidth * 0.08f,
+            armTipX + bodyWidth * 0.04f, armTipY + bodyWidth * 0.02f,
+            armTipX - bodyWidth * 0.06f, armTipY + bodyWidth * 0.06f
+        )
+        cubicTo(
+            armRootX + bodyWidth * 0.02f, armTipY + bodyWidth * 0.08f,
+            armRootX, armRootY + bodyWidth * 0.06f,
+            armRootX, armRootY + bodyWidth * 0.06f
+        )
+        close()
+    }
+
+    // Draw arms with gradient
+    val armBrush = Brush.verticalGradient(
+        colors = listOf(BodyLight, BodyWarm),
+        startY = waistY,
+        endY = waistY + bodyWidth * 0.30f
+    )
+    drawPath(path = leftArm, brush = armBrush)
+    drawPath(path = rightArm, brush = armBrush)
+
+    // Arm subtle hairline
+    val armStrokeBrush = Brush.verticalGradient(
+        colors = listOf(
+            MorroColors.Honey.copy(alpha = 0.40f),
+            MorroColors.Honey.copy(alpha = 0.20f)
+        ),
+        startY = waistY,
+        endY = waistY + bodyWidth * 0.30f
+    )
+    drawPath(path = leftArm, brush = armStrokeBrush, style = Stroke(width = 1.3.dp.toPx()))
+    drawPath(path = rightArm, brush = armStrokeBrush, style = Stroke(width = 1.3.dp.toPx()))
+
+    // ── Main Ghost Body ──────────────────────────────────────────────────────
     val body = Path().apply {
         moveTo(left, waistY)
 
-        // Left of the dome.
+        // Rounded friendly dome
         cubicTo(
-            left - bulge * 0.35f, headTop + headHeight * 0.30f,
-            left + bodyWidth * 0.10f, headTop,
+            left - bodyWidth * 0.02f, headTop + headHeight * 0.25f,
+            left + bodyWidth * 0.12f, headTop,
             centerX, headTop
         )
-        // Right of the dome.
         cubicTo(
-            right - bodyWidth * 0.10f, headTop,
-            right + bulge * 0.35f, headTop + headHeight * 0.30f,
+            right - bodyWidth * 0.12f, headTop,
+            right + bodyWidth * 0.02f, headTop + headHeight * 0.25f,
             right, waistY
         )
 
-        // Right flank: tucked at the waist, held through the middle, then a late flare into the hem.
+        // Right flank: gentle outward bell curve into the skirt
         cubicTo(
-            right - pinch, waistY + (bodyBottom - waistY) * 0.20f,
-            right - pinch * 0.82f, bodyBottom - hemHeight * 1.55f,
-            right, bodyBottom - hemHeight * 0.42f
+            right + bodyWidth * 0.03f, waistY + (bodyBottom - waistY) * 0.35f,
+            right + bodyWidth * 0.08f, bodyBottom - hemHeight * 0.6f,
+            right + bodyWidth * 0.04f, bodyBottom
         )
 
-        // Three deep scallops, right to left.
-        val scallop = bodyWidth / 3f
-        var startX = right
-        var index = 0
-        while (index < 3) {
-            val endX = startX - scallop
-            val midX = (startX + endX) / 2f
-            // Each scallop laps slightly out of phase, so the hem ripples instead of hanging still.
-            val ripple = sin(hemWave * 2f * PI.toFloat() + index * 1.7f) * hemHeight * 0.14f
+        // 4 flowing, rounded hem scallops
+        val scallopCount = 4
+        val scallopWidth = (bodyWidth * 1.08f) / scallopCount
+        var currX = right + bodyWidth * 0.04f
+
+        for (i in 0 until scallopCount) {
+            val nextX = currX - scallopWidth
+            val midX = (currX + nextX) / 2f
+            val ripple = (
+                sin(hemWave * 2f * PI.toFloat() + i * 1.5f) * 0.70f +
+                sin(hemWave * 4f * PI.toFloat() + i * 2.2f) * 0.30f
+            ) * hemHeight * 0.18f
+
             cubicTo(
-                startX - scallop * 0.10f, bodyBottom + hemHeight * 0.70f + ripple,
-                midX + scallop * 0.16f, bodyBottom + hemHeight * 0.72f + ripple,
-                midX, bodyBottom + hemHeight * 0.54f
+                currX - scallopWidth * 0.15f, bodyBottom + hemHeight * 0.75f + ripple,
+                midX + scallopWidth * 0.20f, bodyBottom + hemHeight * 0.78f + ripple,
+                midX, bodyBottom + hemHeight * 0.55f + ripple
             )
             cubicTo(
-                midX - scallop * 0.16f, bodyBottom + hemHeight * 0.72f + ripple,
-                endX + scallop * 0.10f, bodyBottom + hemHeight * 0.70f + ripple,
-                endX, bodyBottom - hemHeight * 0.42f
+                midX - scallopWidth * 0.20f, bodyBottom + hemHeight * 0.78f + ripple,
+                nextX + scallopWidth * 0.15f, bodyBottom + hemHeight * 0.75f + ripple,
+                nextX, bodyBottom
             )
-            startX = endX
-            index++
+            currX = nextX
         }
 
-        // Left flank back up, mirroring the waist pinch and the hip flare.
+        // Left flank back up to waist
         cubicTo(
-            left + pinch * 0.82f, bodyBottom - hemHeight * 1.55f,
-            left + pinch, waistY + (bodyBottom - waistY) * 0.20f,
+            left - bodyWidth * 0.08f, bodyBottom - hemHeight * 0.6f,
+            left - bodyWidth * 0.03f, waistY + (bodyBottom - waistY) * 0.35f,
             left, waistY
         )
         close()
     }
 
+    // Ghost body fill
     drawPath(
         path = body,
         brush = Brush.verticalGradient(
@@ -234,14 +352,14 @@ private fun DrawScope.drawGhost(
         )
     )
 
-    // Rim: the accent, at low alpha, so the edge picks up the theme without glowing.
+    // Soft subtle rim outline
     drawPath(
         path = body,
         brush = Brush.verticalGradient(
             colors = listOf(
                 MorroColors.Honey.copy(alpha = 0.55f),
-                MorroColors.Honey.copy(alpha = 0.45f),
-                MorroColors.Honey.copy(alpha = 0.30f)
+                MorroColors.Honey.copy(alpha = 0.40f),
+                MorroColors.Honey.copy(alpha = 0.20f)
             ),
             startY = headTop,
             endY = bodyBottom + hemHeight
@@ -249,73 +367,87 @@ private fun DrawScope.drawGhost(
         style = Stroke(width = 1.4.dp.toPx())
     )
 
-    // Face, a little high on the dome so the slim body keeps its proportions.
-    val eyeY = headTop + headHeight * 0.50f
-    val eyeSpacing = bodyWidth * 0.20f
-    val eyeWidth = bodyWidth * 0.105f
-    val eyeHeight = bodyWidth * 0.150f * blink.coerceIn(0.08f, 1f)
-    val eyeShift = bodyWidth * 0.030f * gaze
+    // ── Expressive Face ──────────────────────────────────────────────────────
+    val eyeY = headTop + headHeight * 0.46f + gazeY * (bodyWidth * 0.04f)
+    val eyeSpacing = bodyWidth * 0.185f
+    val eyeWidth = bodyWidth * 0.088f
+    val eyeHeight = bodyWidth * 0.125f * blink.coerceIn(0.08f, 1f)
+    val eyeShift = bodyWidth * 0.026f * gaze
 
     listOf(-1f, 1f).forEach { side ->
         val cx = centerX + side * eyeSpacing + eyeShift
+        val isWinkingEye = side > 0 && winkAmount > 0.4f
 
-        if (happy) {
-            // A closed, upturned eye: the shape of a grin, and it stays readable at 96dp wide.
+        if (isWinkingEye || (happy && winkAmount > 0.7f)) {
+            // Playful winking closed crescent
             val arc = Path().apply {
-                moveTo(cx - eyeWidth, eyeY + eyeHeight * 0.30f)
+                moveTo(cx - eyeWidth * 1.1f, eyeY + eyeHeight * 0.15f)
                 cubicTo(
-                    cx - eyeWidth * 0.55f, eyeY - eyeHeight * 0.72f,
-                    cx + eyeWidth * 0.55f, eyeY - eyeHeight * 0.72f,
-                    cx + eyeWidth, eyeY + eyeHeight * 0.30f
+                    cx - eyeWidth * 0.6f, eyeY - eyeHeight * 0.75f,
+                    cx + eyeWidth * 0.6f, eyeY - eyeHeight * 0.75f,
+                    cx + eyeWidth * 1.1f, eyeY + eyeHeight * 0.15f
                 )
             }
             drawPath(
                 path = arc,
                 color = FaceInk,
-                style = Stroke(width = eyeWidth * 0.60f, cap = StrokeCap.Round)
+                style = Stroke(width = eyeWidth * 0.55f, cap = StrokeCap.Round)
             )
         } else {
+            // Adorable rounded glossy eye
             drawOval(
                 color = FaceInk,
                 topLeft = Offset(cx - eyeWidth, eyeY - eyeHeight / 2f),
                 size = Size(eyeWidth * 2f, eyeHeight)
             )
-            // One glint per eye, high and toward the light. This is most of the "alive".
-            drawCircle(
-                color = Color.White.copy(alpha = 0.92f),
-                radius = eyeWidth * 0.30f,
-                center = Offset(cx + eyeWidth * 0.38f, eyeY - eyeHeight * 0.24f)
-            )
+
+            // Specular highlights: primary glossy glint
+            if (blink > 0.35f) {
+                drawCircle(
+                    color = Color.White.copy(alpha = 0.95f),
+                    radius = eyeWidth * 0.38f,
+                    center = Offset(cx + eyeWidth * 0.32f, eyeY - eyeHeight * 0.22f)
+                )
+                // Secondary cute micro-glint
+                drawCircle(
+                    color = Color.White.copy(alpha = 0.85f),
+                    radius = eyeWidth * 0.18f,
+                    center = Offset(cx - eyeWidth * 0.30f, eyeY + eyeHeight * 0.20f)
+                )
+            }
         }
     }
 
-    // Cheeks: two soft rose discs, well below the eyes and slightly outward.
+    // ── Rosy Cheeks (MorroColors.EyeRose) ────────────────────────────────────
+    val blushAlpha = (0.42f + 0.10f * breathProgress + 0.35f * blushBoost).coerceIn(0f, 0.85f)
+    val blushRadius = bodyWidth * (0.085f + 0.008f * breathProgress + 0.015f * blushBoost)
     listOf(-1f, 1f).forEach { side ->
         drawCircle(
-            color = MorroColors.EyeRose.copy(alpha = 0.38f),
-            radius = bodyWidth * 0.085f,
+            color = MorroColors.EyeRose.copy(alpha = blushAlpha),
+            radius = blushRadius,
             center = Offset(
-                centerX + side * eyeSpacing * 1.22f + eyeShift,
-                eyeY + bodyWidth * 0.115f
+                centerX + side * eyeSpacing * 1.35f + eyeShift,
+                eyeY + bodyWidth * 0.105f
             )
         )
     }
 
-    // Smile, a short curve that turns up at both ends.
-    val smileWidth = bodyWidth * 0.20f
-    val smileY = eyeY + bodyWidth * 0.145f
+    // ── Sweet Smile ──────────────────────────────────────────────────────────
+    val smileWidth = bodyWidth * (0.19f + 0.015f * breathProgress + 0.025f * blushBoost)
+    val smileY = eyeY + bodyWidth * (0.138f - 0.005f * breathProgress)
+    val smileLift = bodyWidth * (0.065f + 0.010f * breathProgress + 0.015f * blushBoost)
     val smile = Path().apply {
         moveTo(centerX - smileWidth / 2f, smileY)
         cubicTo(
-            centerX - smileWidth * 0.24f, smileY + bodyWidth * 0.062f,
-            centerX + smileWidth * 0.24f, smileY + bodyWidth * 0.062f,
+            centerX - smileWidth * 0.26f, smileY + smileLift,
+            centerX + smileWidth * 0.26f, smileY + smileLift,
             centerX + smileWidth / 2f, smileY
         )
     }
     drawPath(
         path = smile,
-        color = FaceInk.copy(alpha = 0.85f),
-        style = Stroke(width = bodyWidth * 0.022f, cap = StrokeCap.Round)
+        color = FaceInk.copy(alpha = 0.90f),
+        style = Stroke(width = bodyWidth * 0.024f, cap = StrokeCap.Round)
     )
 }
 

@@ -80,6 +80,7 @@ import com.morro.alarm.ui.components.MorroSky
 import com.morro.alarm.ui.components.MorroSkyScrim
 import com.morro.alarm.ui.theme.MorroColors
 import com.morro.alarm.ui.theme.MorroShapes
+import com.morro.alarm.ui.theme.MorroSpring
 import com.morro.alarm.ui.motion.MorroMotion
 import com.morro.alarm.ui.motion.pressScale
 import com.morro.alarm.ui.motion.staggeredReveal
@@ -517,7 +518,7 @@ private fun AnswerCard(
     )
     val lift by animateFloatAsState(
         targetValue = if (selected) -1.5f else 0f,
-        animationSpec = MorroMotion.PressRelease,
+        animationSpec = MorroSpring.FloatSpringPlayful,
         label = "answerLift"
     )
 
