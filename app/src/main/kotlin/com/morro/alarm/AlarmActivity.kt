@@ -48,6 +48,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -672,6 +673,15 @@ class AlarmActivity : ComponentActivity() {
     ) {
         val colors = morroColors()
         val typo = morroTypography()
+
+        // The gate can leave the composition without going through any of the named exits: an
+        // exception in a puzzle callback, a system-initiated teardown, a future branch someone
+        // adds. This is the structural restore, so the alarm cannot stay ducked because a path
+        // forgot to call restoreVolumeUnconditional(). It is idempotent with onPause/onDestroy.
+        DisposableEffect(Unit) {
+            onDispose { restoreVolumeUnconditional() }
+        }
+
         // One formatter, reused every tick. Creating one twice a second was avoidable churn.
         val timeFormat = remember { SimpleDateFormat("h:mm:ss a", Locale.getDefault()) }
         val currentTime = remember {

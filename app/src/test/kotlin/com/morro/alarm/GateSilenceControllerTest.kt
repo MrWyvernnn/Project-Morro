@@ -75,7 +75,7 @@ class GateSilenceControllerTest {
     }
 
     @Test
-    fun `leaving puzzle state stops watchdog without restoring`() {
+    fun `leaving puzzle state restores full volume`() {
         var now = 5_000L
         val transitions = mutableListOf<Float>()
         val controller = GateSilenceController(
@@ -87,7 +87,89 @@ class GateSilenceControllerTest {
         now = 25_000L
         assertNull(controller.checkWatchdog(isPuzzleActive = false))
         assertFalse(controller.isSilenced)
-        assertEquals(listOf(0.0f), transitions)
+        assertEquals(listOf(0.0f, 1.0f), transitions)
+    }
+
+    // ── F1: clearing the flag must always be audible ──────────────────────────
+
+    @Test
+    fun `resetImmediate restores full volume as its last emission`() {
+        var now = 1_000L
+        val transitions = mutableListOf<Pair<Float, Long>>()
+        val controller = GateSilenceController(
+            clock = { now },
+            onTargetVolume = { vol, ms -> transitions.add(vol to ms) }
+        )
+
+        controller.onUserAction()
+        now = 1_200L
+        controller.resetImmediate()
+
+        assertFalse(controller.isSilenced)
+        assertEquals(1.0f to 0L, transitions.last())
+    }
+
+    @Test
+    fun `resetImmediate on a controller that was never silenced emits nothing`() {
+        val transitions = mutableListOf<Pair<Float, Long>>()
+        val controller = GateSilenceController(
+            clock = { 1_000L },
+            onTargetVolume = { vol, ms -> transitions.add(vol to ms) }
+        )
+
+        controller.resetImmediate()
+
+        assertTrue(transitions.isEmpty())
+    }
+
+    @Test
+    fun `checkWatchdog inactive on a controller that was never silenced emits nothing`() {
+        val transitions = mutableListOf<Pair<Float, Long>>()
+        val controller = GateSilenceController(
+            clock = { 1_000L },
+            onTargetVolume = { vol, ms -> transitions.add(vol to ms) }
+        )
+
+        assertNull(controller.checkWatchdog(isPuzzleActive = false))
+
+        assertTrue(transitions.isEmpty())
+    }
+
+    @Test
+    fun `leaving the puzzle restores exactly once, not once per teardown`() {
+        var now = 5_000L
+        val transitions = mutableListOf<Float>()
+        val controller = GateSilenceController(
+            clock = { now },
+            onTargetVolume = { vol, _ -> transitions.add(vol) }
+        )
+
+        controller.onUserAction()
+        controller.checkWatchdog(isPuzzleActive = false)
+        controller.checkWatchdog(isPuzzleActive = false)
+        controller.resetImmediate()
+
+        assertEquals(listOf(0.0f, 1.0f), transitions)
+    }
+
+    @Test
+    fun `a further watchdog check after the idle restore does not re-emit`() {
+        var now = 1_000L
+        val transitions = mutableListOf<Float>()
+        val controller = GateSilenceController(
+            clock = { now },
+            onTargetVolume = { vol, _ -> transitions.add(vol) }
+        )
+
+        controller.onUserAction()
+        now = 16_000L
+        assertNull(controller.checkWatchdog(isPuzzleActive = true))
+        assertEquals(listOf(0.0f, 1.0f), transitions)
+
+        // The loop in AlarmActivity can tick one more time before it sees null and breaks.
+        now = 16_050L
+        assertNull(controller.checkWatchdog(isPuzzleActive = true))
+        assertEquals(listOf(0.0f, 1.0f), transitions)
     }
 
     @Test
