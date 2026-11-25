@@ -7,7 +7,7 @@ One row per finding. Updated as each phase lands.
 | 0 | Recon | **done** | `research/FIX_RECON.md` | — | Finding 1's user-visible outcome needs a device |
 | 1 | Lock existing helpers | **done** | `MissedAlarmLogTest.kt` (+3 cases) | `testDebugUnitTest` green | — |
 | 2 | F1 locked-boot catch-up | **done (build + unit only)** | `BootReceiver.kt`, `AlarmScheduler.kt`, `AlarmReceiver.kt`, `MissedAlarmLog.kt`, `CatchUpTest.kt` | 13 catch-up/duplicate tests green | the locked-boot race itself still needs the phone |
-| 3 | F2 mirror-write guard | pending | — | — | — |
+| 3 | F2 mirror-write guard | **done** | `AlarmBootMirror.kt` KDoc, `AlarmSchedulerContractTest.kt` | 3 contract tests green | absence is asserted at source level; there is no Android runtime in JVM tests |
 | 4 | F3 late vs never-fired | pending | — | — | — |
 | 5 | F4 restore window | pending | — | — | — |
 | 6 | F5 icon · F6A ring buffer | pending | — | — | — |

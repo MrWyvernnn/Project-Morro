@@ -40,6 +40,13 @@ object AlarmBootMirror {
      *
      * Called after every arm, re-arm, snooze and cancel, so the mirror is never older than the last
      * thing the person did. A few extra writes per day cost nothing; a stale mirror costs a morning.
+     *
+     * **Never call this before the first unlock.** It reads [AlarmScheduler.isArmed] from
+     * credential-encrypted prefs, which are unreadable until the person unlocks. That read returns
+     * the default `false`, so this takes its "not armed" branch and clears the device-protected
+     * mirror — the copy it was reading from, and the only reason the alarm survived the reboot. The
+     * locked-boot path therefore arms through `armWithoutPersisting`, which touches neither prefs nor
+     * this file; `AlarmSchedulerContractTest` fails if that ever changes.
      */
     fun mirrorFrom(context: Context) {
         val editor = prefs(context).edit()
