@@ -84,6 +84,25 @@ class MorroPaletteTest {
     }
 
     @Test
+    fun tertiaryTextIsLegibleInEveryTheme() {
+        // 11–12sp metadata. This is the one role whose card contrast was never checked when the
+        // second palette landed; both values measured 5.59:1 and 5.30:1 on black, 5.02:1 and
+        // 4.76:1 on a card. The requirement is now enforced rather than described.
+        palettes.forEach { (name, palette) ->
+            val onCanvas = contrast(palette.textTertiary, palette.canvas)
+            assertTrue(
+                "$name textTertiary is ${"%.2f".format(onCanvas)}:1 on the canvas, needs 4.5",
+                onCanvas >= 4.5
+            )
+            val onCard = contrast(palette.textTertiary, palette.surfaceCard)
+            assertTrue(
+                "$name textTertiary is ${"%.2f".format(onCard)}:1 on a card, needs 4.5",
+                onCard >= 4.5
+            )
+        }
+    }
+
+    @Test
     fun bothThemesShareTheAmoledCanvas() {
         // The whole point of a second theme is that it does not light the ground.
         assertEquals(MorroPalettes.Midnight.canvas, MorroPalettes.Autumn.canvas)

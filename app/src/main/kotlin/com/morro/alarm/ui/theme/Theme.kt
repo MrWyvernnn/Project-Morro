@@ -94,8 +94,10 @@ object MorroColors {
     val TextSecondary get() = active.value.textSecondary
 
     /**
-     * 5.3:1 on #000000 in Midnight, so 11–12sp metadata clears WCAG AA. Autumn keeps the same
-     * requirement; check the new value before calling this done.
+     * 5.30:1 on #000000 in Midnight, 5.59:1 on #000000 in Autumn, so 11–12sp metadata clears
+     * WCAG AA in both. On a card it measures 4.76:1 and 5.02:1. The ratios are asserted by
+     * `MorroPaletteTest.tertiaryTextIsLegibleInEveryTheme`, so a palette edit that darkens this
+     * role fails the build instead of a comment.
      */
     val TextTertiary get() = active.value.textTertiary
     val TextDisabled get() = active.value.textDisabled
