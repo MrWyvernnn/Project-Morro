@@ -675,8 +675,10 @@ class AlarmActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        super.onDestroy()
+        // Set before super.onDestroy(): Compose disposes the composition during lifecycle
+        // teardown, and its onDispose restore must already see this flag.
         isTearingDown = true
+        super.onDestroy()
         restoreVolumeUnconditional()
         graceJob?.cancel()
         AlarmSoundPlayer.stop()
