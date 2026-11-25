@@ -88,8 +88,8 @@ import kotlinx.coroutines.launch
  * AlarmActivity: Full-screen alarm that runs the wake-up verification gates:
  *
  *   - VOICE_MEMO: Math/Affirmation Puzzle -> Playing Voice Commitment -> Tomorrow's Memo.
- *   - QR_BARCODE: 30s 20% volume grace window -> QR/Barcode Scanner -> Tomorrow's Memo.
- *   - PHOTO_OBJECT: 30s 20% volume grace window -> 30-Item Photo Recognition -> Tomorrow's Memo.
+ *   - QR_BARCODE: 30s grace window at the shared duck level -> QR/Barcode Scanner -> Tomorrow's Memo.
+ *   - PHOTO_OBJECT: 30s grace window at the shared duck level -> 30-Item Photo Recognition -> Tomorrow's Memo.
  */
 class AlarmActivity : ComponentActivity() {
 
@@ -146,6 +146,15 @@ class AlarmActivity : ComponentActivity() {
          */
         const val KEY_GATE_HARD_RESTORE_AT = "gate_hard_restore_at"
         const val KEY_GATE_BUDGET_SPENT = "gate_budget_spent"
+
+        /**
+         * Whether the player was ducked when the gate was saved.
+         *
+         * The controller is recreated with the activity; the player is not. Restoring this is what
+         * lets a fresh controller reconcile itself with a player that is still at
+         * [GateSilenceController.DUCKED_VOLUME].
+         */
+        const val KEY_GATE_SILENCED = "gate_silenced"
     }
     private var wakeLock: PowerManager.WakeLock? = null
 
@@ -233,7 +242,8 @@ class AlarmActivity : ComponentActivity() {
         if (restored) {
             silenceController.restoreBudget(
                 hardRestoreAt = savedInstanceState!!.getLong(KEY_GATE_HARD_RESTORE_AT, 0L),
-                spent = savedInstanceState!!.getBoolean(KEY_GATE_BUDGET_SPENT, false)
+                spent = savedInstanceState!!.getBoolean(KEY_GATE_BUDGET_SPENT, false),
+                silenced = savedInstanceState!!.getBoolean(KEY_GATE_SILENCED, false)
             )
         }
         if (!restored) {
@@ -293,7 +303,8 @@ class AlarmActivity : ComponentActivity() {
     /**
      * Drops the ring back to full volume without touching the grace window.
      *
-     * The banner's button used to call startGraceCountdown(), which muted the alarm to 20% at the
+     * The banner's button used to call startGraceCountdown(), which ducked the alarm to the same
+     * low level at the
      * exact moment the banner was telling the person "MAX VOLUME ACTIVE". Nothing about the camera
      * is started by that button — the scanner is already live underneath.
      */
@@ -304,7 +315,7 @@ class AlarmActivity : ComponentActivity() {
     }
 
     /**
-     * Starts or restarts the 30-second grace window (volume 20%), then restores 100% when it ends.
+     * Starts or restarts the 30-second grace window at [GraceWindow.VOLUME], then restores 100% when it ends.
      *
      * Deadline-based on `elapsedRealtime` rather than a `delay(1000)` counter: a tick that arrives
      * late — a busy main thread, a backgrounded activity — must shorten the next sleep, not extend
@@ -617,6 +628,7 @@ class AlarmActivity : ComponentActivity() {
         outState.putInt(KEY_PROBLEMS_SOLVED, problemsSolved)
         outState.putLong(KEY_GATE_HARD_RESTORE_AT, silenceController.hardRestoreAtMs)
         outState.putBoolean(KEY_GATE_BUDGET_SPENT, silenceController.budgetSpent)
+        outState.putBoolean(KEY_GATE_SILENCED, silenceController.isSilenced)
         currentQuestion?.let { question ->
             outState.putString(KEY_QUESTION_TEXT, question.text)
             outState.putInt(KEY_QUESTION_ANSWER, question.answer)
@@ -1173,7 +1185,7 @@ class AlarmActivity : ComponentActivity() {
             Column {
                 Text(
                     text = if (isGraceActive) {
-                        "MUTED GRACE WINDOW: ${graceSeconds}s (20% VOL)"
+                        "GRACE WINDOW: ${graceSeconds}s (${GraceWindow.volumePercent}% VOL)"
                     } else {
                         "MAX VOLUME ACTIVE (100%)"
                     },

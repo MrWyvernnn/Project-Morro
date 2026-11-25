@@ -9,11 +9,13 @@ and are unverified until the founder runs them.
 | 1 | F1 restore on exit | **done (build + unit only)** | `GateSilenceController.kt`, `AlarmActivity.kt`, `GateSilenceControllerTest.kt` (+5, 1 rewritten) | 11 gate tests green | the throwing-callback exit needs the phone; no JVM Android runtime |
 | 2 | F2 duck + hard deadline | **done (build + unit only)** | `GateSilenceController.kt`, `AlarmActivity.kt`, `GateSilenceControllerTest.kt` (+8) | 19 gate tests green | rotation/process-death persistence is wired through the activity bundle but only the pure restore path is tested |
 | 3 | F5 contrast + test | **done** | `Theme.kt` KDoc, `MorroPaletteTest.kt` (+1) | 8 palette tests green | Autumn 11sp text not yet read on the phone; value is 5.59:1 on canvas, 5.02:1 on a card |
-| 4 | F3 recolour pass | **not needed — refuted** | none | — | no cached colour site exists; live switch still needs the phone |
+| 4 | F3 recolour pass | **closed — zero sites** | none | — | re-verified: no `remember`/`Animatable`/top-level `val` captures a palette colour; nothing to fix |
 | 5 | F4 guarded palette write | **done** | `Theme.kt`, `MorroPaletteTest.kt` (+1) | 9 palette tests green | first-frame timing needs the phone |
 | 6 | F6 stale APIs | **done** | `Theme.kt`, `MorroCard.kt`, `design/MORRO_VISUAL_SYSTEM.md`, `design/design.md` | `testDebugUnitTest` green | no behaviour change expected; build only |
 | 7 | Scope audit | **done (in recon)** | `research/FIX2_RECON.md` §8 | — | — |
 | 8 | Build + device pass | **build done, device pending** | — | `assembleDebug` + `testDebugUnitTest` (233 tests) + `lintDebug` (0 errors, 66 warnings) all green | the checklist below is unrun |
+| 9 | P0 reattach reconciliation | **done** | `GateSilenceController.kt`, `AlarmActivity.kt`, `GateSilenceControllerTest.kt` (+4) | 23 gate tests green | a real rotation also passes through `onPause`, so the stuck-ducked path was already masked; the controller no longer depends on that |
+| 10 | One duck level | **done** | `GraceWindow.kt`, `GraceWindowTest.kt` (+1), `AlarmActivity.kt` copy | grace + gate tests green | 30% chosen over 20%; needs a listen on the phone |
 
 ## Decisions
 
@@ -36,6 +38,16 @@ and are unverified until the founder runs them.
   values exist. Nothing was changed speculatively.
 - **F5** does not change a hex: Autumn tertiary already measures 5.59:1 on the canvas and 5.02:1 on
   a card. The stale TODO is replaced with the measured numbers and a named test.
+- **P0 reattach** saves `isSilenced` with the deadline and spent flag, and `restoreBudget` emits the
+  matching target **unconditionally** so a fresh controller and the surviving player agree. The
+  `isSilenced` guard stays on steady-state restores. Note: a real rotation also runs `onPause`,
+  which restores full volume before the bundle is written, so the saved flag is normally `false`;
+  the fix removes the controller's reliance on that ordering rather than changing today's path.
+- **One duck level**: `GateSilenceController.DUCKED_VOLUME` (0.30) is the only value either writer
+  uses; `GraceWindow.VOLUME` references it and the banner renders the percentage from the constant.
+  The two authorities are strictly exclusive — grace runs only in `MISSION_QR`/`MISSION_PHOTO`,
+  the controller only in `PUZZLE`, and `onMissionComplete` cancels the grace job before
+  `PLAYING_MEMO` — so no ownership refactor was needed, only one shared number.
 
 ## Device
 
@@ -124,12 +136,16 @@ The locked-boot catch-up ring cannot be verified any other way:
 
 ### G. Grace window — deadline, not ticks (after the review)
 
-1. Ring on the QR or Photo mission. The banner counts 30 → 0 and the alarm is ducked to 20%, then
-   it jumps to full at the 30 s mark. Time it with a stopwatch: it must be 30 s, not 31 or 32.
+1. Ring on the QR or Photo mission. The banner counts 30 → 0 and the alarm is ducked to 30% (the
+   same level the cognitive gate uses), then it jumps to full at the 30 s mark. Time it with a
+   stopwatch: it must be 30 s, not 31 or 32.
 2. Lock the phone for 20 s during the window, unlock, and confirm the remaining seconds are roughly
    where the clock says they should be — the window is real time, not screen-on time.
 3. Rotate during the window. Expected current behaviour: the banner restarts at 30 s even though
    `onPause` restored full volume. That is the known rotation gap in §9, not a regression.
+4. P0 reattach, on the cognitive gate: ring, tap once so it ducks, rotate, then stop touching the
+   screen. The alarm must come back to full (15 s idle or 60 s hard at the latest) — it must never
+   stay at 30% with a fresh controller that thinks it is loud.
 
 ## 9 · drift
 

@@ -296,7 +296,7 @@ class GateSilenceControllerTest {
             clock = { now },
             onTargetVolume = { _, _ -> }
         )
-        restored.restoreBudget(hardRestoreAt = deadline, spent = false)
+        restored.restoreBudget(hardRestoreAt = deadline, spent = false, silenced = false)
         restored.startSession()
 
         assertEquals(deadline, restored.hardRestoreAtMs)
@@ -318,7 +318,7 @@ class GateSilenceControllerTest {
             clock = { now },
             onTargetVolume = { _, _ -> }
         )
-        restored.restoreBudget(original.hardRestoreAtMs, original.budgetSpent)
+        restored.restoreBudget(original.hardRestoreAtMs, original.budgetSpent, original.isSilenced)
         restored.startSession()
         restored.onUserAction()
 
@@ -372,5 +372,84 @@ class GateSilenceControllerTest {
 
         controller.resetImmediate()
         assertFalse(controller.isSilenced)
+    }
+
+    // ── P0: a restored duck must still end ────────────────────────────────────
+
+    @Test
+    fun `a restored duck still gets its hard restore`() {
+        var now = 1_000L
+        val ducked = GateSilenceController(
+            clock = { now },
+            onTargetVolume = { _, _ -> }
+        )
+        ducked.startSession()
+        ducked.onUserAction()
+        assertTrue(ducked.isSilenced)
+        val deadline = ducked.hardRestoreAtMs
+
+        // Rotation at 21 s. The player is still ducked at 0.30; this controller is new.
+        now = 21_000L
+        val reattached = mutableListOf<Float>()
+        val restored = GateSilenceController(
+            clock = { now },
+            onTargetVolume = { vol, _ -> reattached.add(vol) }
+        )
+        restored.restoreBudget(
+            hardRestoreAt = deadline,
+            spent = false,
+            silenced = ducked.isSilenced
+        )
+        assertTrue(restored.isSilenced)
+
+        now = deadline
+        assertNull(restored.checkWatchdog(isPuzzleActive = true))
+
+        // Before the fix this list held only the duck: the watchdog returned early on
+        // !isSilenced and spendBudget skipped its guarded restore, so the alarm stayed quiet.
+        assertEquals(1.0f, reattached.last())
+        assertTrue(restored.budgetSpent)
+    }
+
+    @Test
+    fun `reattaching to a ducked player emits the duck once`() {
+        val emissions = mutableListOf<Float>()
+        val controller = GateSilenceController(
+            clock = { 1_000L },
+            onTargetVolume = { vol, _ -> emissions.add(vol) }
+        )
+
+        controller.restoreBudget(hardRestoreAt = 61_000L, spent = false, silenced = true)
+
+        assertEquals(listOf(GateSilenceController.DUCKED_VOLUME), emissions)
+        assertTrue(controller.isSilenced)
+    }
+
+    @Test
+    fun `reattaching to a loud player emits full volume once`() {
+        val emissions = mutableListOf<Float>()
+        val controller = GateSilenceController(
+            clock = { 1_000L },
+            onTargetVolume = { vol, _ -> emissions.add(vol) }
+        )
+
+        controller.restoreBudget(hardRestoreAt = 61_000L, spent = false, silenced = false)
+
+        assertEquals(listOf(1.0f), emissions)
+        assertFalse(controller.isSilenced)
+    }
+
+    @Test
+    fun `a restored spent budget is not ducked on reattach`() {
+        val emissions = mutableListOf<Float>()
+        val controller = GateSilenceController(
+            clock = { 1_000L },
+            onTargetVolume = { vol, _ -> emissions.add(vol) }
+        )
+
+        controller.restoreBudget(hardRestoreAt = 61_000L, spent = true, silenced = false)
+        controller.onUserAction()
+
+        assertEquals(listOf(1.0f), emissions)
     }
 }

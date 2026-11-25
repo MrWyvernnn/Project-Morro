@@ -1,5 +1,7 @@
 package com.morro.alarm
 
+import kotlin.math.roundToInt
+
 /**
  * Pure timing for the 30-second grace window that QR and photo gates open with.
  *
@@ -16,8 +18,17 @@ internal object GraceWindow {
     /** The full grace window. Volume is ducked for exactly this long. */
     const val DURATION_MS = 30_000L
 
-    /** What the alarm is ducked to during the window. Not a mute: the emergency is still audible. */
-    const val VOLUME = 0.2f
+    /**
+     * What the alarm is ducked to during the window.
+     *
+     * Shared with [GateSilenceController.DUCKED_VOLUME] on purpose: the grace window and the
+     * cognitive gate are mutually exclusive, but they write the same player, and a user must not
+     * hear 20% one morning and 30% the next depending on which gate their mission opened.
+     */
+    const val VOLUME = GateSilenceController.DUCKED_VOLUME
+
+    /** [VOLUME] as a whole percentage, for the on-screen banner. */
+    val volumePercent: Int get() = (VOLUME * 100).roundToInt()
 
     /** The window in whole seconds, for the initial banner value. */
     const val DURATION_SECONDS: Int = (DURATION_MS / 1_000L).toInt()

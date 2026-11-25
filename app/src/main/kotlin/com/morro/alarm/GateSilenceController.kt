@@ -56,14 +56,25 @@ internal class GateSilenceController(
     }
 
     /**
-     * Restores a deadline saved with the gate's state.
+     * Restores the gate's audio state saved with the puzzle, and reconciles the player with it.
      *
      * `elapsedRealtime` keeps counting across a process restart (it is time since boot), so an
      * absolute deadline saved in the activity's bundle is still comparable after process death.
+     *
+     * [silenced] travels with the deadline because the player outlives this controller on a
+     * rotation: without it a recreated controller would believe the alarm is loud while the
+     * player is still ducked, [checkWatchdog] would return early on `!isSilenced`, and nothing
+     * would ever restore full volume.
+     *
+     * The emit here is deliberately **unguarded** — the one write in this class that is. Steady
+     * state is already correct; this write exists to make an uncertain player correct. The
+     * `isSilenced` guard belongs on [restoreVolume], which must not write when nothing is ducked.
      */
-    fun restoreBudget(hardRestoreAt: Long, spent: Boolean) {
+    fun restoreBudget(hardRestoreAt: Long, spent: Boolean, silenced: Boolean) {
         hardRestoreAtMs = hardRestoreAt
         budgetSpent = spent
+        isSilenced = silenced
+        onTargetVolume(if (silenced) silencedVolume else fullVolume, 0L)
     }
 
     fun onUserAction() {

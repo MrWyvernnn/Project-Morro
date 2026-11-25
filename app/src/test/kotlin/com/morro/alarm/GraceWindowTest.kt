@@ -51,6 +51,15 @@ class GraceWindowTest {
     }
 
     @Test
+    fun `the grace duck uses the same level as the cognitive gate`() {
+        // Two duck authorities write one player. They are mutually exclusive today (the grace
+        // window only exists on QR/photo gates, the controller only on the puzzle gate), but the
+        // user should not be able to tell which one ducked them.
+        assertEquals(GateSilenceController.DUCKED_VOLUME, GraceWindow.VOLUME)
+        assertEquals(30, GraceWindow.volumePercent)
+    }
+
+    @Test
     fun `the grace duck is audible`() {
         assertTrue(GraceWindow.VOLUME > 0f)
         assertTrue(GraceWindow.VOLUME < 1f)
