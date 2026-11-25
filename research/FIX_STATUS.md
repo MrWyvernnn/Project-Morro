@@ -10,7 +10,7 @@ One row per finding. Updated as each phase lands.
 | 3 | F2 mirror-write guard | **done** | `AlarmBootMirror.kt` KDoc, `AlarmSchedulerContractTest.kt` | 3 contract tests green | absence is asserted at source level; there is no Android runtime in JVM tests |
 | 4 | F3 late vs never-fired | **done** | `MissedAlarmLog.kt`, `MainActivity.kt` card copy, `MissedAlarmLogTest.kt` (+6) | 20 log tests green | card copy not seen on a device yet |
 | 5 | F4 restore window | **done** | `WakeUpCheck.kt`, `WakeUpCheckTest.kt` (+8) | 13 wake-check tests green | reboot timing still needs the phone |
-| 6 | F5 icon · F6A ring buffer | pending | — | — | — |
+| 6 | F5 icon · F6A ring buffer | **F5 done** | `res/drawable/ic_morro_notification.xml`, 3 notification builders | `assembleDebug` green | glyph not seen in a real status bar yet |
 | 7 | F6B/F6C report | pending | — | — | — |
 | 8 | Build + device pass | pending | — | — | needs the phone |
 

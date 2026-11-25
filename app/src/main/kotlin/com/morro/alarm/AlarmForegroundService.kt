@@ -103,7 +103,7 @@ class AlarmForegroundService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Morro Alarm")
             .setContentText("Alarm is active")
-            .setSmallIcon(android.R.drawable.ic_dialog_alert)
+            .setSmallIcon(R.drawable.ic_morro_notification)
             .setContentIntent(fullScreenPendingIntent)
             .setFullScreenIntent(fullScreenPendingIntent, true)
             .setCategory(NotificationCompat.CATEGORY_ALARM)

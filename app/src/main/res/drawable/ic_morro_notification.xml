@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Morro's notification small icon: the ghost, in one colour.
+
+    Notification icons are drawn as a mask and tinted by the system, so this is a single white
+    silhouette with the eyes punched out (fillType="evenOdd") rather than a two-tone drawing. It has
+    to stay legible at 18dp in the status bar, which is why it is a bold outline and not detail.
+
+    Replaces the framework's `android.R.drawable.ic_dialog_alert` / `ic_popup_reminder`, which made
+    the alarm notification look like a system warning from another app.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M5,10 C5,6.13 8.13,3 12,3 C15.87,3 19,6.13 19,10 L19,21 L16.5,19 L14,21 L11.5,19 L9,21 L6.5,19 L5,21 Z M9.5,10 m-1.15,0 a1.15,1.15 0 1,0 2.3,0 a1.15,1.15 0 1,0 -2.3,0 Z M14.5,10 m-1.15,0 a1.15,1.15 0 1,0 2.3,0 a1.15,1.15 0 1,0 -2.3,0 Z" />
+</vector>

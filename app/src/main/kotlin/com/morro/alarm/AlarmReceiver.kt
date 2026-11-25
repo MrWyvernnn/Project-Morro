@@ -182,7 +182,7 @@ class AlarmReceiver : BroadcastReceiver() {
             val notification = NotificationCompat.Builder(context, AlarmForegroundService.CHANNEL_ID)
                 .setContentTitle("Morro Alarm")
                 .setContentText("Alarm is active — tap to dismiss")
-                .setSmallIcon(android.R.drawable.ic_dialog_alert)
+                .setSmallIcon(R.drawable.ic_morro_notification)
                 .setContentIntent(pending)
                 .setFullScreenIntent(pending, true)
                 .setCategory(NotificationCompat.CATEGORY_ALARM)

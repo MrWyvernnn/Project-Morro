@@ -324,7 +324,7 @@ object WakeUpCheck {
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setContentTitle("Still up?")
             .setContentText("Tap to confirm. Otherwise the alarm rings once more.")
-            .setSmallIcon(android.R.drawable.ic_popup_reminder)
+            .setSmallIcon(R.drawable.ic_morro_notification)
             .setContentIntent(openApp)
             .addAction(0, "I'm up", iAmUp)
             .setAutoCancel(true)
