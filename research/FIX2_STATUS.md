@@ -11,7 +11,7 @@ and are unverified until the founder runs them.
 | 3 | F5 contrast + test | **done** | `Theme.kt` KDoc, `MorroPaletteTest.kt` (+1) | 8 palette tests green | Autumn 11sp text not yet read on the phone; value is 5.59:1 on canvas, 5.02:1 on a card |
 | 4 | F3 recolour pass | **not needed — refuted** | none | — | no cached colour site exists; live switch still needs the phone |
 | 5 | F4 guarded palette write | **done** | `Theme.kt`, `MorroPaletteTest.kt` (+1) | 9 palette tests green | first-frame timing needs the phone |
-| 6 | F6 stale APIs | pending | — | — | — |
+| 6 | F6 stale APIs | **done** | `Theme.kt`, `MorroCard.kt`, `design/MORRO_VISUAL_SYSTEM.md`, `design/design.md` | `testDebugUnitTest` green | no behaviour change expected; build only |
 | 7 | Scope audit | **done (in recon)** | `research/FIX2_RECON.md` §8 | — | — |
 | 8 | Build + device pass | pending | — | — | needs the phone |
 

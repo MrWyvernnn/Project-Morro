@@ -75,7 +75,6 @@ Springs, one language:
 | Use | Damping / stiffness |
 | --- | --- |
 | Default (layout, focus) | 1.0 / 322 |
-| Settle after a gesture | 0.82 / 386 |
 | Press | 1.0 / 2741 |
 | Playful pop (buttons, mascot) | 0.55 / 438 |
 

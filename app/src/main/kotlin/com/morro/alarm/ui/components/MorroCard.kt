@@ -42,8 +42,7 @@ fun MorroCard(
     val cardRadiusDp = 16f
 
     val spring = rememberMorroSpring(
-        initialValue = if (isFocused || isPressed) 1f else 0f,
-        spec = if (isPressed) MorroSpring.FloatSpringPress else MorroSpring.FloatSpringDefault
+        initialValue = if (isFocused || isPressed) 1f else 0f
     )
 
     LaunchedEffect(isFocused, isPressed) {

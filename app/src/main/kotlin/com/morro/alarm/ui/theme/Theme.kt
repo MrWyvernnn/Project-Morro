@@ -297,7 +297,6 @@ private fun materialColorScheme(c: MorroColorPalette) = darkColorScheme(
 /**
  * Springs carry the feel:
  *   default  1.00 damping / 322 stiffness -> settles, no overshoot
- *   momentum 0.82 damping / 386 stiffness -> only after a gesture carried velocity
  *   press    1.00 damping / 2741 stiffness -> instant acknowledgement
  *   playful  0.55 damping / 438 stiffness -> the mascot and button pops
  */
@@ -341,12 +340,16 @@ fun morroTypography(): MorroTextPalette = LocalMorroTypography.current
 fun morroShapes(): MorroShapes = LocalMorroShapes.current
 
 // ── Spring helpers ────────────────────────────────────────────────────────
-/** Animatable factory kept here so every component starts from the same default spring. */
+/**
+ * Creates the numeric [Animatable] a colour or alpha ramp reads from.
+ *
+ * No spring is passed in: an `Animatable` takes its animation spec at `animateTo`, not at
+ * construction, so a spec parameter here would be silently ignored. Callers choose their spring
+ * where they animate — `LaunchedEffect` in `MorroCard`, for example.
+ */
 @Composable
-fun rememberMorroSpring(
-    initialValue: Float,
-    spec: SpringSpec<Float> = MorroSpring.FloatSpringDefault
-): Animatable<Float, AnimationVector1D> = remember { Animatable(initialValue) }
+fun rememberMorroSpring(initialValue: Float): Animatable<Float, AnimationVector1D> =
+    remember { Animatable(initialValue) }
 
 fun lerpColor(from: Color, to: Color, t: Float): Color {
     val p = t.coerceIn(0f, 1f)

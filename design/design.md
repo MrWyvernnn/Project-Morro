@@ -155,7 +155,6 @@ Before calling any UI work done:
 
 The UI works. Do not refactor it to match a doc. If you spot these, flag them:
 
-- `MORRO_VISUAL_SYSTEM.md` lists a momentum spring (0.82 / 386); `MorroSpring` no longer has it.
 - The doc says buttons settle "critically damped, no overshoot"; `MorroPrimaryButton` releases on the playful spring, which does overshoot.
 - The doc says clouds sit in a top band; `DriftingClouds` spreads eight layers down the full height.
 - The doc says the setup time is 62sp; the code uses 60sp.
