@@ -30,6 +30,17 @@ class MissedAlarmLogTest {
     }
 
     @Test
+    fun `exactly one minute is still on time, and one millisecond past it is late`() {
+        // The threshold is a strict "greater than", so this is the boundary that decides whether a
+        // person is told their alarm was late. It is pinned exactly rather than approximately.
+        assertNull(lateFireFor(expected, expected + 60_000L))
+        assertEquals(
+            AlarmEventKind.LATE_FIRE,
+            lateFireFor(expected, expected + 60_001L)
+        )
+    }
+
+    @Test
     fun `a ring that looks early is not late`() {
         // A manual clock change moves the stored trigger ahead of the ring; that is a time-change
         // case, not a late one, and logging it would be a false alarm.
@@ -70,6 +81,20 @@ class MissedAlarmLogTest {
     }
 
     @Test
+    fun `an alarm with no expected time is never missed`() {
+        // Nothing was ever armed at an instant, so there is no occurrence to have missed. This is
+        // the shape after a cancel and before the next arm.
+        assertFalse(
+            isNeverFired(
+                armed = true,
+                expectedAtMillis = null,
+                nowMillis = expected + 1L,
+                lastFiredAtMillis = 0L
+            )
+        )
+    }
+
+    @Test
     fun `the buffer keeps the newest events and drops the oldest`() {
         val events = (1..12).map {
             AlarmEvent(AlarmEventKind.LATE_FIRE, it.toLong(), it.toLong(), "Xiaomi", "Redmi")
@@ -87,5 +112,19 @@ class MissedAlarmLogTest {
         val newer = AlarmEvent(AlarmEventKind.LATE_FIRE, 9L, 10L, "Samsung", "SM-S911B")
 
         assertEquals(listOf(newer, older), appendEvent(listOf(older), newer))
+    }
+
+    @Test
+    fun `a capacity of zero keeps nothing`() {
+        val event = AlarmEvent(AlarmEventKind.LATE_FIRE, 1L, 2L, "vivo", "V21")
+        assertTrue(appendEvent(listOf(event), event, capacity = 0).isEmpty())
+    }
+
+    @Test
+    fun `a capacity of one keeps only the newest event`() {
+        val older = AlarmEvent(AlarmEventKind.NEVER_FIRED, 1L, 2L, "vivo", "V21")
+        val newer = AlarmEvent(AlarmEventKind.LATE_FIRE, 3L, 4L, "vivo", "V21")
+
+        assertEquals(listOf(newer), appendEvent(listOf(older), newer, capacity = 1))
     }
 }
