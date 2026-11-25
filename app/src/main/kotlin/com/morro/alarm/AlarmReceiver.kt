@@ -18,6 +18,16 @@ class AlarmReceiver : BroadcastReceiver() {
         /** The one action `AlarmScheduler` and the wake-up re-ring both send. */
         const val ACTION_TRIGGER_ALARM = "com.morro.alarm.ACTION_TRIGGER_ALARM"
 
+        /**
+         * The expected instant this delivery belongs to, when the sender knows it.
+         *
+         * Set on a catch-up ring, where it is load-bearing rather than informative: the receiver
+         * treats it as the occurrence being rung instead of trusting the stored trigger, and the
+         * duplicate guard compares against it. Matching a PendingIntent ignores extras, so it never
+         * changes which alarm slot is replaced.
+         */
+        const val EXTRA_OCCURRENCE = "com.morro.alarm.EXTRA_OCCURRENCE"
+
         private const val ACTION_TEST_ALARM = "com.morro.alarm.ACTION_TEST_ALARM"
     }
 
@@ -30,9 +40,27 @@ class AlarmReceiver : BroadcastReceiver() {
         // dismissal path re-arms tomorrow's alarm later in the same ring, which would overwrite it.
         // A debug test ring and a wake-up re-ring are not the morning ring, so neither is logged.
         if (intent.action != ACTION_TEST_ALARM && !isWakeUpRering) {
-            val expected = AlarmScheduler.getNextAlarmTime(context)
+            // A catch-up delivery carries the occurrence it is standing in for, and that is more
+            // trustworthy than the stored trigger: if the pending alarm was cancelled or replaced in
+            // the seconds between arming the catch-up and this broadcast, prefs no longer describe
+            // what is ringing. The extra does.
+            val carried = intent.getLongExtra(EXTRA_OCCURRENCE, Long.MIN_VALUE)
+            val expected = if (carried != Long.MIN_VALUE) {
+                carried
+            } else {
+                AlarmScheduler.getNextAlarmTime(context)
+            }
             val now = System.currentTimeMillis()
-            MissedAlarmLog.recordFired(context, now)
+
+            // One occurrence rings once. The locked-boot catch-up exists because a due alarm can be
+            // sitting undelivered; if that delivery then arrives too, both paths must agree that
+            // this instant has already rung. Read before recordFired() overwrites the evidence.
+            if (isDuplicateRing(expected, MissedAlarmLog.handledOccurrence(context))) {
+                Log.w(TAG, "Duplicate delivery for $expected, which already rang; not ringing again")
+                return
+            }
+
+            MissedAlarmLog.recordFired(context, expected, now)
             if (expected != null && lateFireFor(expected, now) != null) {
                 MissedAlarmLog.recordLateFire(context, expected, now)
             }
@@ -168,3 +196,17 @@ class AlarmReceiver : BroadcastReceiver() {
         }
     }
 }
+
+/**
+ * True when this delivery is for an occurrence that already rang.
+ *
+ * Identity, not arithmetic: [handledOccurrenceMillis] is the expected instant of the occurrence
+ * that last rang, so this answers "have I already rung for *this* one?" without comparing two
+ * wall-clock timestamps. A clock change makes any timestamp comparison lie; it cannot make two
+ * different instants equal.
+ *
+ * A null expected time means nothing is armed at an instant — a debug ring after a cancel — so
+ * there is no occurrence to have duplicated.
+ */
+internal fun isDuplicateRing(expectedAtMillis: Long?, handledOccurrenceMillis: Long): Boolean =
+    expectedAtMillis != null && expectedAtMillis == handledOccurrenceMillis

@@ -91,9 +91,36 @@ class BootReceiver : BroadcastReceiver() {
 
         if (!AlarmScheduler.isArmed(context)) return
 
-        val nextAlarmTime = AlarmScheduler.getNextAlarmTime(context)
-        if (nextAlarmTime != null && nextAlarmTime > System.currentTimeMillis()) {
-            rearm { AlarmScheduler.scheduleAlarm(context, nextAlarmTime) }
+        val now = System.currentTimeMillis()
+        val expected = AlarmScheduler.getNextAlarmTime(context)
+
+        // A due occurrence that never rang must not be replaced by tomorrow's. The locked-boot arm
+        // runs before credential storage is readable, so the ring it armed can sit undelivered
+        // until the person unlocks; if the stored trigger is already past and nothing rang for it,
+        // that morning is still owed to them.
+        if (
+            expected != null &&
+            catchUpNeeded(
+                armed = true,
+                expectedAtMillis = expected,
+                nowMillis = now,
+                lastFiredAtMillis = MissedAlarmLog.lastFiredAt(context),
+                handledOccurrenceMillis = MissedAlarmLog.handledOccurrence(context),
+            )
+        ) {
+            MissedAlarmLog.recordNeverFired(context, expected)
+            if (AlarmScheduler.armCatchUp(context, expected)) {
+                // The ring is armed, so the stored expected trigger stays on the missed occurrence
+                // until the person dismisses it. Dismissal is what arms tomorrow.
+                return
+            }
+            // Could not ring it. Falling through arms tomorrow so the person is not left with
+            // nothing, and the miss is already logged for the card to explain.
+            Log.w(TAG, "Catch-up could not be armed; rolling forward so an alarm still exists")
+        }
+
+        if (expected != null && expected > now) {
+            rearm { AlarmScheduler.scheduleAlarm(context, expected) }
         } else {
             // The stored trigger is gone or already past: the ring was lost to a reboot, not
             // cancelled, so the next occurrence is recomputed from the saved time.
@@ -127,4 +154,39 @@ class BootReceiver : BroadcastReceiver() {
     private fun rearmFailed() {
         Log.w(TAG, "Could not re-arm the alarm; exact alarm access may be revoked")
     }
+}
+
+/**
+ * Whether a reboot must ring a missed occurrence instead of rolling to the next one.
+ *
+ * The rule is the whole finding: a due, unfired alarm may never be silently replaced by the next
+ * occurrence. "Due" means the stored trigger is in the past; "unfired" means nothing rang for it.
+ * Both have to be true — a ring that was dismissed before the process died also leaves a past
+ * trigger behind, and that morning is finished, not missed.
+ *
+ * "Nothing rang" is checked two ways on purpose:
+ *
+ * - [handledOccurrenceMillis] is the identity of the last occurrence that rang. It stays correct
+ *   across a clock change, where the wall-clock comparison below does not: on a DST fall-back night
+ *   the ring can land an hour *before* the stored expected instant, and only identity says so.
+ * - `lastFiredAtMillis < expectedAtMillis` is the wall-clock rule the rest of the log uses, and it
+ *   is the only signal an install upgraded from a version without `alarm_handled_occurrence` has.
+ *
+ * A catch-up is only skipped when *either* signal shows the occurrence rang.
+ *
+ * Pure so the decision can be pinned down without a device: this branch is the difference between
+ * a ring and no ring, and it only runs on a path nobody exercises on purpose.
+ */
+internal fun catchUpNeeded(
+    armed: Boolean,
+    expectedAtMillis: Long?,
+    nowMillis: Long,
+    lastFiredAtMillis: Long,
+    handledOccurrenceMillis: Long,
+): Boolean {
+    if (!armed) return false
+    if (expectedAtMillis == null) return false
+    if (expectedAtMillis >= nowMillis) return false
+    if (handledOccurrenceMillis == expectedAtMillis) return false
+    return lastFiredAtMillis < expectedAtMillis
 }

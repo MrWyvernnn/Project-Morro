@@ -110,6 +110,17 @@ object MissedAlarmLog {
     private const val KEY_LAST_COMPLETED = "alarm_last_completed_at"
     private const val KEY_DISMISSED_EXPECTED = "alarm_log_dismissed_expected"
 
+    /**
+     * The occurrence that most recently rang, as its expected instant.
+     *
+     * Kept separately from [KEY_LAST_FIRED] because the two answer different questions.
+     * `alarm_last_fired_at` is *when* something rang, which is what the late/missed inference needs.
+     * This is *which* occurrence rang, which is what stops a second delivery for the same
+     * occurrence from ringing twice — and it survives a clock change, where comparing two
+     * wall-clock instants does not.
+     */
+    private const val KEY_HANDLED_OCCURRENCE = "alarm_handled_occurrence"
+
     private const val SLOT = "alarm_log_"
     private const val FIELD_KIND = ".kind"
     private const val FIELD_EXPECTED = ".expected"
@@ -120,9 +131,60 @@ object MissedAlarmLog {
     private fun prefs(context: Context): SharedPreferences =
         context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
-    /** Records that *something* rang. Called from the broadcast, before anything re-arms. */
-    fun recordFired(context: Context, atMillis: Long = System.currentTimeMillis()) {
-        prefs(context).edit().putLong(KEY_LAST_FIRED, atMillis).apply()
+    /**
+     * Records that the ring for [expectedAtMillis] started.
+     *
+     * Called from the broadcast, before anything re-arms. It stores both facts in one write: when
+     * it rang, and which occurrence it was. The occurrence is what makes the catch-up path
+     * idempotent — a second delivery for the same instant can see that this instant already rang.
+     */
+    fun recordFired(
+        context: Context,
+        expectedAtMillis: Long?,
+        atMillis: Long = System.currentTimeMillis(),
+    ) {
+        val editor = prefs(context).edit().putLong(KEY_LAST_FIRED, atMillis)
+        if (expectedAtMillis != null) {
+            editor.putLong(KEY_HANDLED_OCCURRENCE, expectedAtMillis)
+        }
+        editor.apply()
+    }
+
+    /** When something last rang, or 0 when nothing ever has. */
+    fun lastFiredAt(context: Context): Long = prefs(context).getLong(KEY_LAST_FIRED, 0L)
+
+    /**
+     * The expected instant of the occurrence that last rang, or [Long.MIN_VALUE] when none has.
+     *
+     * `Long.MIN_VALUE` rather than `0` because `0` is a legal (if ancient) instant, and a sentinel
+     * that can collide with real data is how a duplicate check starts suppressing real rings.
+     */
+    fun handledOccurrence(context: Context): Long =
+        prefs(context).getLong(KEY_HANDLED_OCCURRENCE, Long.MIN_VALUE)
+
+    /**
+     * Records an occurrence that came due and never rang.
+     *
+     * Used by the boot catch-up path, which is the one place that can know an occurrence was
+     * missed *before* ringing it: if the ring then fails to start, the record is the only trace
+     * that the morning went wrong.
+     */
+    fun recordNeverFired(
+        context: Context,
+        expectedAtMillis: Long,
+        observedAtMillis: Long = System.currentTimeMillis(),
+    ) {
+        record(
+            context,
+            AlarmEvent(
+                kind = AlarmEventKind.NEVER_FIRED,
+                expectedAtMillis = expectedAtMillis,
+                observedAtMillis = observedAtMillis,
+                manufacturer = Build.MANUFACTURER.orEmpty(),
+                model = Build.MODEL.orEmpty(),
+            )
+        )
+        Log.w(TAG, "Recorded a missed ring for $expectedAtMillis on ${Build.MANUFACTURER} ${Build.MODEL}")
     }
 
     /** Records that the person finished the gates and dismissed the ring. */
@@ -267,6 +329,7 @@ object MissedAlarmLog {
         }
         editor.remove(KEY_EVENT_COUNT)
         editor.remove(KEY_DISMISSED_EXPECTED)
+        editor.remove(KEY_HANDLED_OCCURRENCE)
         editor.apply()
     }
 }

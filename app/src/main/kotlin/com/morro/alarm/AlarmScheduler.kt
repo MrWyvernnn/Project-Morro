@@ -30,6 +30,18 @@ object AlarmScheduler {
     private const val ALARM_REQUEST_CODE = 1001
 
     /**
+     * The catch-up ring's own slot.
+     *
+     * Distinct from [ALARM_REQUEST_CODE] on purpose: the daily alarm, a snooze and a re-arm all
+     * share slot 1001 and `FLAG_UPDATE_CURRENT`, so whichever arms last wins. A catch-up ring must
+     * never be the thing that gets replaced, and must never be the thing that replaces.
+     */
+    private const val CATCH_UP_REQUEST_CODE = 1006
+
+    /** Long enough for this process to return, short enough that the ring feels immediate. */
+    internal const val CATCH_UP_DELAY_MILLIS = 2_000L
+
+    /**
      * Schedules the daily wake-up alarm for the given hour and minute.
      * Calculates the next occurrence (today if time is in future, else tomorrow).
      * Saves the hour and minute in SharedPreferences.
@@ -93,6 +105,47 @@ object AlarmScheduler {
     }
 
     /**
+     * Arms the ring for an occurrence that came due and never rang.
+     *
+     * This is the locked-boot catch-up: the alarm was armed before the first unlock, the person
+     * unlocked hours later, and the occurrence is now in the past with nothing in
+     * `alarm_last_fired_at` for it. Rolling straight to tomorrow would delete the morning they
+     * needed; this rings it instead.
+     *
+     * It deliberately does **not** write `morro_prefs`: the stored expected trigger must stay on
+     * the missed occurrence until the person actually dismisses the ring, so the miss stays visible
+     * and the normal dismissal path is the thing that arms tomorrow.
+     *
+     * Idempotent twice over: it refuses when the occurrence already rang, and it re-checks that
+     * immediately before arming, because the deferred broadcast may have been delivered between
+     * the caller's decision and this call.
+     *
+     * @return true when the catch-up was armed.
+     */
+    fun armCatchUp(context: Context, occurrenceAtMillis: Long): Boolean {
+        if (MissedAlarmLog.handledOccurrence(context) == occurrenceAtMillis) {
+            Log.i(TAG, "Catch-up skipped: the occurrence already rang")
+            return false
+        }
+
+        val intent = Intent(context, AlarmReceiver::class.java).apply {
+            action = AlarmReceiver.ACTION_TRIGGER_ALARM
+            // Carried so the ring can be tied to the occurrence it is catching up on.
+            putExtra(AlarmReceiver.EXTRA_OCCURRENCE, occurrenceAtMillis)
+        }
+        val armed = armAlarmClock(
+            context,
+            System.currentTimeMillis() + CATCH_UP_DELAY_MILLIS,
+            CATCH_UP_REQUEST_CODE,
+            intent
+        )
+        if (armed) {
+            Log.w(TAG, "Armed a catch-up ring for the missed occurrence at $occurrenceAtMillis")
+        }
+        return armed
+    }
+
+    /**
      * Arms a trigger without writing anything to credential-protected storage.
      *
      * This exists for exactly one caller: [BootReceiver] handling `LOCKED_BOOT_COMPLETED`, which
@@ -101,6 +154,11 @@ object AlarmScheduler {
      * [scheduleAlarm] path would either persist nothing or fail. The trigger comes from
      * [AlarmBootMirror] instead, and the authoritative prefs are untouched until the normal
      * `BOOT_COMPLETED` pass runs after unlock.
+     *
+     * It must never persist, and never call [AlarmBootMirror.mirrorFrom]: before the first unlock
+     * that function reads `isArmed` from credential storage, gets the default `false`, and clears
+     * the device-protected mirror it was just read from — destroying the only copy of the alarm.
+     * A contract test over this function's body fails if that ever changes.
      *
      * Note what this does *not* fix: the ring itself. `AlarmReceiver`, `AlarmForegroundService` and
      * `AlarmActivity` are not direct-boot aware, so Android defers the ring until the person
@@ -111,10 +169,20 @@ object AlarmScheduler {
         armAlarmClock(context, rollForwardIfPast(triggerTimeMillis))
 
     /**
-     * Every scheduling call lands here, so the exact-alarm guard and the PendingIntent identity
-     * exist in one place and cannot drift between the persistent and locked-boot paths.
+     * Every scheduling call lands here, so the exact-alarm guard exists in one place and cannot
+     * drift between the persistent, locked-boot and catch-up paths.
+     *
+     * The request code and intent are parameters because the catch-up ring needs its own slot and
+     * carries an extra; every other caller uses the daily alarm's identity.
      */
-    private fun armAlarmClock(context: Context, finalTriggerTime: Long): Boolean {
+    private fun armAlarmClock(
+        context: Context,
+        finalTriggerTime: Long,
+        requestCode: Int = ALARM_REQUEST_CODE,
+        triggerIntent: Intent = Intent(context, AlarmReceiver::class.java).apply {
+            action = AlarmReceiver.ACTION_TRIGGER_ALARM
+        },
+    ): Boolean {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
 
         // API 31+ exact alarm permission check
@@ -122,11 +190,8 @@ object AlarmScheduler {
             return false
         }
 
-        val intent = Intent(context, AlarmReceiver::class.java).apply {
-            action = AlarmReceiver.ACTION_TRIGGER_ALARM
-        }
         val pendingIntent = PendingIntent.getBroadcast(
-            context, ALARM_REQUEST_CODE, intent,
+            context, requestCode, triggerIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
@@ -207,6 +272,22 @@ object AlarmScheduler {
         } catch (e: Exception) {
             // Ignore
         }
+
+        // A catch-up armed seconds ago must not survive an explicit cancel: the person said no.
+        try {
+            alarmManager.cancel(
+                PendingIntent.getBroadcast(
+                    context, CATCH_UP_REQUEST_CODE,
+                    Intent(context, AlarmReceiver::class.java).apply {
+                        action = AlarmReceiver.ACTION_TRIGGER_ALARM
+                    },
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+            )
+        } catch (e: Exception) {
+            // Ignore
+        }
+
         clearPrefs(context)
         AlarmBootMirror.clear(context)
     }
