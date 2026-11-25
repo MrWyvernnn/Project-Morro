@@ -754,7 +754,11 @@ private fun AlarmDock(
 }
 
 /**
- * One quiet card for a morning that never happened, with the one action that can stop it repeating.
+ * One quiet card for a morning that went wrong, with the one action that can stop it repeating.
+ *
+ * Two shapes reach here and they are not the same news. A ring that never happened is the serious
+ * one. A ring that arrived late still woke the person, so the card says that instead of claiming
+ * nothing happened — the alarm did its job, the phone was slow, and the setting to fix is the same.
  *
  * It only ever describes one event and only until it is acted on or dismissed, because a permanent
  * banner would become furniture and stop meaning anything. The copy names the time and the cause;
@@ -771,6 +775,18 @@ private fun MissedRingCard(
     val expectedLabel = remember(event.expectedAtMillis) {
         timeFormat.format(Date(event.expectedAtMillis))
     }
+    val observedLabel = remember(event.observedAtMillis) {
+        timeFormat.format(Date(event.observedAtMillis))
+    }
+
+    val title = when (event.kind) {
+        AlarmEventKind.NEVER_FIRED -> "Your $expectedLabel alarm didn't ring on time."
+        AlarmEventKind.LATE_FIRE -> "Your $expectedLabel alarm rang at $observedLabel."
+    }
+    val detail = when (event.kind) {
+        AlarmEventKind.NEVER_FIRED -> "This phone stopped the app from starting. One setting fixes it."
+        AlarmEventKind.LATE_FIRE -> "This phone held the alarm back. One setting fixes it."
+    }
 
     MorroCard {
         Column {
@@ -779,7 +795,7 @@ private fun MissedRingCard(
                 verticalAlignment = Alignment.Top
             ) {
                 Text(
-                    text = "Your $expectedLabel alarm didn't ring on time.",
+                    text = title,
                     fontSize = 14.sp,
                     lineHeight = 20.sp,
                     fontWeight = FontWeight.Medium,
@@ -799,7 +815,7 @@ private fun MissedRingCard(
             Spacer(modifier = Modifier.height(6.dp))
 
             Text(
-                text = "This phone stopped the app from starting. One setting fixes it.",
+                text = detail,
                 fontSize = 12.sp,
                 lineHeight = 17.sp,
                 color = colors.textTertiary

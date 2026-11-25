@@ -127,4 +127,54 @@ class MissedAlarmLogTest {
 
         assertEquals(listOf(newer), appendEvent(listOf(older), newer, capacity = 1))
     }
+
+    // ── preferredEventFor ────────────────────────────────────────────────────
+
+    @Test
+    fun `nothing is shown when nothing was logged`() {
+        assertNull(preferredEventFor(emptyList(), expected))
+    }
+
+    @Test
+    fun `nothing is shown when no alarm is expected`() {
+        val event = AlarmEvent(AlarmEventKind.NEVER_FIRED, expected, expected + 1, "Xiaomi", "Redmi")
+        assertNull(preferredEventFor(listOf(event), expectedAtMillis = null))
+    }
+
+    @Test
+    fun `a miss is shown when that is all there is`() {
+        val miss = AlarmEvent(AlarmEventKind.NEVER_FIRED, expected, expected + 1, "Xiaomi", "Redmi")
+        assertEquals(miss, preferredEventFor(listOf(miss), expected))
+    }
+
+    @Test
+    fun `a late ring supersedes the miss logged for the same occurrence`() {
+        // The catch-up path writes NEVER_FIRED before it rings, so both records can exist for one
+        // morning. Telling the person it never rang while it is ringing would be a lie.
+        val miss = AlarmEvent(AlarmEventKind.NEVER_FIRED, expected, expected + 1, "Xiaomi", "Redmi")
+        val late = AlarmEvent(AlarmEventKind.LATE_FIRE, expected, expected + 3_600_000, "Xiaomi", "Redmi")
+
+        assertEquals(late, preferredEventFor(listOf(late, miss), expected))
+        assertEquals(late, preferredEventFor(listOf(miss, late), expected))
+    }
+
+    @Test
+    fun `an event for another occurrence is never shown`() {
+        val yesterday = AlarmEvent(
+            AlarmEventKind.NEVER_FIRED,
+            expected - 24 * 60 * 60 * 1000L,
+            expected,
+            "Xiaomi",
+            "Redmi"
+        )
+        assertNull(preferredEventFor(listOf(yesterday), expected))
+    }
+
+    @Test
+    fun `the newest record of a kind wins`() {
+        val olderLate = AlarmEvent(AlarmEventKind.LATE_FIRE, expected, expected + 60_001, "Xiaomi", "Redmi")
+        val newerLate = AlarmEvent(AlarmEventKind.LATE_FIRE, expected, expected + 120_000, "Xiaomi", "Redmi")
+
+        assertEquals(newerLate, preferredEventFor(listOf(newerLate, olderLate), expected))
+    }
 }

@@ -94,6 +94,31 @@ internal fun appendEvent(
 ): List<AlarmEvent> = (listOf(event) + existing).take(capacity)
 
 /**
+ * The one event worth showing for the occurrence at [expectedAtMillis], or null.
+ *
+ * A single occurrence can leave two records behind: the catch-up path writes
+ * [AlarmEventKind.NEVER_FIRED] before it rings, because a ring that then fails to start would
+ * otherwise leave no trace, and the ring itself writes [AlarmEventKind.LATE_FIRE] a moment later.
+ * Both are true, but only one is the story to tell.
+ *
+ * "It rang late" wins, because it is the more specific and more actionable fact: the alarm did its
+ * job, the phone was slow, and the person can still fix the cause. Showing "it never rang" while the
+ * ring is audible would be a lie, and it is exactly the stale card the person would then distrust.
+ *
+ * Matching on the occurrence — not on the newest event overall — keeps yesterday's miss from
+ * replacing today's. Events arrive newest first, so the first match of a kind is the newest.
+ */
+internal fun preferredEventFor(
+    events: List<AlarmEvent>,
+    expectedAtMillis: Long?,
+): AlarmEvent? {
+    if (expectedAtMillis == null) return null
+    val forOccurrence = events.filter { it.expectedAtMillis == expectedAtMillis }
+    return forOccurrence.firstOrNull { it.kind == AlarmEventKind.LATE_FIRE }
+        ?: forOccurrence.firstOrNull { it.kind == AlarmEventKind.NEVER_FIRED }
+}
+
+/**
  * Storage for [AlarmEvent]s and the two timestamps the inference in [isNeverFired] needs.
  *
  * Each event lives under its own keyed slot (`alarm_log_0.kind`, `alarm_log_0.expected`, …) rather
@@ -222,13 +247,16 @@ object MissedAlarmLog {
         val armed = AlarmScheduler.isArmed(context)
         val expected = AlarmScheduler.getNextAlarmTime(context)
         val firedAt = prefs(context).getLong(KEY_LAST_FIRED, 0L)
+        val logged = events(context)
 
-        if (!isNeverFired(armed, expected, nowMillis, firedAt)) return latestNeverFired(context, expected)
+        if (!isNeverFired(armed, expected, nowMillis, firedAt)) {
+            return preferredEventFor(logged, expected)
+        }
 
-        val alreadyLogged = events(context).any {
+        val alreadyLogged = logged.any {
             it.kind == AlarmEventKind.NEVER_FIRED && it.expectedAtMillis == expected
         }
-        if (alreadyLogged) return latestNeverFired(context, expected)
+        if (alreadyLogged) return preferredEventFor(logged, expected)
 
         val event = AlarmEvent(
             kind = AlarmEventKind.NEVER_FIRED,
@@ -264,11 +292,6 @@ object MissedAlarmLog {
             .putLong(KEY_DISMISSED_EXPECTED, event.expectedAtMillis)
             .apply()
     }
-
-    private fun latestNeverFired(context: Context, expectedAtMillis: Long?): AlarmEvent? =
-        events(context).firstOrNull {
-            it.kind == AlarmEventKind.NEVER_FIRED && it.expectedAtMillis == expectedAtMillis
-        }
 
     private fun record(context: Context, event: AlarmEvent) {
         val updated = appendEvent(events(context), event)
