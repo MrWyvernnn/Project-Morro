@@ -177,4 +177,59 @@ class MissedAlarmLogTest {
 
         assertEquals(newerLate, preferredEventFor(listOf(newerLate, olderLate), expected))
     }
+
+    // ── the stored ring buffer ───────────────────────────────────────────────
+
+    @Test
+    fun `the first record lands in slot zero`() {
+        assertEquals(0, nextHead(head = 0, count = 0, capacity = 10))
+        assertEquals(listOf(0), slotOrder(head = 0, count = 1, capacity = 10))
+    }
+
+    @Test
+    fun `the head steps backwards and wraps`() {
+        assertEquals(9, nextHead(head = 0, count = 1, capacity = 10))
+        assertEquals(0, nextHead(head = 1, count = 10, capacity = 10))
+        assertEquals(4, nextHead(head = 0, count = 1, capacity = 5))
+    }
+
+    @Test
+    fun `reading walks forward from the head`() {
+        assertEquals(listOf(9, 0, 1), slotOrder(head = 9, count = 3, capacity = 10))
+        assertEquals(listOf(8, 9, 0, 1), slotOrder(head = 8, count = 4, capacity = 10))
+    }
+
+    @Test
+    fun `an empty buffer has no slots`() {
+        assertTrue(slotOrder(head = 3, count = 0, capacity = 10).isEmpty())
+    }
+
+    @Test
+    fun `the head pointer buffer agrees with the reference ordering for every write`() {
+        // 25 writes through a 10-slot head-pointer buffer, checked against the list version that
+        // used to be the implementation. This is the test that would catch the two drifting apart.
+        val capacity = 10
+        var head = 0
+        var count = 0
+        val slots = mutableMapOf<Int, AlarmEvent>()
+        var reference = emptyList<AlarmEvent>()
+
+        repeat(25) { index ->
+            val event = AlarmEvent(
+                AlarmEventKind.LATE_FIRE,
+                expectedAtMillis = index.toLong(),
+                observedAtMillis = index.toLong(),
+                manufacturer = "Xiaomi",
+                model = "Redmi"
+            )
+
+            head = nextHead(head, count, capacity)
+            slots[head] = event
+            count = minOf(count + 1, capacity)
+            reference = appendEvent(reference, event, capacity)
+
+            val stored = slotOrder(head, count, capacity).map { slots.getValue(it) }
+            assertEquals("write $index", reference, stored)
+        }
+    }
 }

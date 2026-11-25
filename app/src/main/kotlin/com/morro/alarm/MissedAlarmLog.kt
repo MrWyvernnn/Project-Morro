@@ -86,6 +86,10 @@ internal fun isNeverFired(
 /**
  * Newest first, capped at [capacity]. A ring buffer, so the buffer never grows into a history
  * screen nobody asked for.
+ *
+ * This is the reference ordering rule. The stored buffer no longer rebuilds a list on every write —
+ * it moves a head pointer and overwrites one slot — so the tests check [nextHead] and [slotOrder]
+ * against this function rather than trusting the two implementations to agree by inspection.
  */
 internal fun appendEvent(
     existing: List<AlarmEvent>,
@@ -121,16 +125,38 @@ internal fun preferredEventFor(
 /**
  * Storage for [AlarmEvent]s and the two timestamps the inference in [isNeverFired] needs.
  *
- * Each event lives under its own keyed slot (`alarm_log_0.kind`, `alarm_log_0.expected`, …) rather
- * than in one delimited string. `Build.MODEL` can contain commas, quotes and newlines, and a single
- * blob would need an escaping scheme that fails quietly. Keyed primitives cannot be mis-parsed.
+ * Each event lives under its own keyed slot (`alarm_log_v2_0.kind`, `alarm_log_v2_0.expected`, …)
+ * rather than in one delimited string. `Build.MODEL` can contain commas, quotes and newlines, and a
+ * single blob would need an escaping scheme that fails quietly. Keyed primitives cannot be
+ * mis-parsed.
+ *
+ * The slots are addressed by a head pointer so a record writes one slot instead of rewriting the
+ * whole buffer; [nextHead] and [slotOrder] hold that arithmetic and are unit-tested on their own.
  */
 object MissedAlarmLog {
 
     private const val TAG = "MissedAlarmLog"
     private const val PREFS_NAME = "morro_prefs"
 
-    private const val KEY_EVENT_COUNT = "alarm_log_count"
+    /**
+     * v2 storage: a head pointer, a count, and one fixed-size slot per event.
+     *
+     * The previous layout rewrote the whole list on every record — ten slots times five fields, plus
+     * the count, on the same `SharedPreferences` file that holds the alarm time and the mission. That
+     * ran on the ring path, in the broadcast, where the process is about to hand off to a service and
+     * an activity. Writing one slot instead of ten is the difference between a ring that starts
+     * promptly and one that spends its first moments in `apply()`.
+     *
+     * Newest first, as before: `head` is the newest slot, and reading walks forward with wraparound.
+     */
+    private const val SLOT_V2 = "alarm_log_v2_"
+    private const val KEY_HEAD_V2 = "alarm_log_v2_head"
+    private const val KEY_COUNT_V2 = "alarm_log_v2_count"
+
+    /** v1 storage, read once on upgrade and then removed. */
+    private const val SLOT_V1 = "alarm_log_"
+    private const val KEY_COUNT_V1 = "alarm_log_count"
+
     private const val KEY_LAST_FIRED = "alarm_last_fired_at"
     private const val KEY_LAST_COMPLETED = "alarm_last_completed_at"
     private const val KEY_DISMISSED_EXPECTED = "alarm_log_dismissed_expected"
@@ -146,7 +172,6 @@ object MissedAlarmLog {
      */
     private const val KEY_HANDLED_OCCURRENCE = "alarm_handled_occurrence"
 
-    private const val SLOT = "alarm_log_"
     private const val FIELD_KIND = ".kind"
     private const val FIELD_EXPECTED = ".expected"
     private const val FIELD_OBSERVED = ".observed"
@@ -273,8 +298,15 @@ object MissedAlarmLog {
     /** Newest first. */
     fun events(context: Context): List<AlarmEvent> {
         val prefs = prefs(context)
-        val count = prefs.getInt(KEY_EVENT_COUNT, 0).coerceIn(0, EVENT_CAPACITY)
-        return (0 until count).mapNotNull { index -> readSlot(prefs, index) }
+        migrateLegacySlots(prefs)
+
+        val count = prefs.getInt(KEY_COUNT_V2, 0).coerceIn(0, EVENT_CAPACITY)
+        if (count == 0) return emptyList()
+
+        val head = prefs.getInt(KEY_HEAD_V2, 0)
+        return slotOrder(head, count, EVENT_CAPACITY).mapNotNull { index ->
+            readSlot(prefs, SLOT_V2, index)
+        }
     }
 
     /** The most recent event, or null when nothing has gone wrong yet. */
@@ -293,36 +325,81 @@ object MissedAlarmLog {
             .apply()
     }
 
+    /**
+     * Writes exactly one slot, plus the two integers that describe the buffer.
+     *
+     * Seven preference writes per event instead of fifty. When the buffer is full the head steps
+     * back onto the oldest slot and overwrites it, which is the same eviction the old
+     * rewrite-the-whole-list version performed, without touching the other nine.
+     */
     private fun record(context: Context, event: AlarmEvent) {
-        val updated = appendEvent(events(context), event)
         val prefs = prefs(context)
-        val editor = prefs.edit()
+        migrateLegacySlots(prefs)
 
-        // Slots beyond the new size are removed rather than left behind: a stale tenth slot would
-        // resurface as a phantom event the moment the count went back up.
-        for (index in 0 until EVENT_CAPACITY) {
-            val slot = "$SLOT$index"
-            val entry = updated.getOrNull(index)
-            if (entry == null) {
-                editor.remove(slot + FIELD_KIND)
-                editor.remove(slot + FIELD_EXPECTED)
-                editor.remove(slot + FIELD_OBSERVED)
-                editor.remove(slot + FIELD_MANUFACTURER)
-                editor.remove(slot + FIELD_MODEL)
-            } else {
-                editor.putString(slot + FIELD_KIND, entry.kind.name)
-                editor.putLong(slot + FIELD_EXPECTED, entry.expectedAtMillis)
-                editor.putLong(slot + FIELD_OBSERVED, entry.observedAtMillis)
-                editor.putString(slot + FIELD_MANUFACTURER, entry.manufacturer)
-                editor.putString(slot + FIELD_MODEL, entry.model)
-            }
-        }
-        editor.putInt(KEY_EVENT_COUNT, updated.size)
+        val previousCount = prefs.getInt(KEY_COUNT_V2, 0).coerceIn(0, EVENT_CAPACITY)
+        val previousHead = prefs.getInt(KEY_HEAD_V2, 0)
+        val head = nextHead(previousHead, previousCount, EVENT_CAPACITY)
+
+        val editor = prefs.edit()
+        writeSlot(editor, SLOT_V2, head, event)
+        editor.putInt(KEY_HEAD_V2, head)
+        editor.putInt(KEY_COUNT_V2, minOf(previousCount + 1, EVENT_CAPACITY))
         editor.apply()
     }
 
-    private fun readSlot(prefs: SharedPreferences, index: Int): AlarmEvent? {
-        val slot = "$SLOT$index"
+    private fun writeSlot(
+        editor: SharedPreferences.Editor,
+        slotPrefix: String,
+        index: Int,
+        entry: AlarmEvent,
+    ) {
+        val slot = "$slotPrefix$index"
+        editor.putString(slot + FIELD_KIND, entry.kind.name)
+        editor.putLong(slot + FIELD_EXPECTED, entry.expectedAtMillis)
+        editor.putLong(slot + FIELD_OBSERVED, entry.observedAtMillis)
+        editor.putString(slot + FIELD_MANUFACTURER, entry.manufacturer)
+        editor.putString(slot + FIELD_MODEL, entry.model)
+    }
+
+    /**
+     * Moves a v1 log into the v2 layout, once, then removes the v1 keys.
+     *
+     * Dropping the old slots outright would be simpler, but a miss that was recorded and never seen
+     * would silently disappear on upgrade — the one thing this log exists to make visible. The cost
+     * is a single rewrite of at most ten events, on the first read after the update, and never again.
+     *
+     * Detection is the presence of the v1 count key, which v1 wrote on every record and removed on
+     * clear. `alarm_log_v2_*` keys are deliberately not mistaken for v1 ones: the removal loop names
+     * exact keys (`alarm_log_0`, …) instead of sweeping the prefix.
+     */
+    private fun migrateLegacySlots(prefs: SharedPreferences) {
+        if (!prefs.contains(KEY_COUNT_V1)) return
+
+        val legacy = (0 until EVENT_CAPACITY).mapNotNull { index ->
+            readSlot(prefs, SLOT_V1, index)
+        }
+
+        val editor = prefs.edit()
+        legacy.forEachIndexed { index, entry -> writeSlot(editor, SLOT_V2, index, entry) }
+        if (legacy.isNotEmpty()) {
+            editor.putInt(KEY_HEAD_V2, 0)
+            editor.putInt(KEY_COUNT_V2, legacy.size)
+        }
+        for (index in 0 until EVENT_CAPACITY) {
+            val slot = "$SLOT_V1$index"
+            editor.remove(slot + FIELD_KIND)
+            editor.remove(slot + FIELD_EXPECTED)
+            editor.remove(slot + FIELD_OBSERVED)
+            editor.remove(slot + FIELD_MANUFACTURER)
+            editor.remove(slot + FIELD_MODEL)
+        }
+        editor.remove(KEY_COUNT_V1)
+        editor.apply()
+        Log.i(TAG, "Migrated ${legacy.size} legacy ring events to the head-pointer layout")
+    }
+
+    private fun readSlot(prefs: SharedPreferences, slotPrefix: String, index: Int): AlarmEvent? {
+        val slot = "$slotPrefix$index"
         val kindName = prefs.getString(slot + FIELD_KIND, null) ?: return null
         val kind = try {
             AlarmEventKind.valueOf(kindName)
@@ -342,17 +419,40 @@ object MissedAlarmLog {
     /** Debug-only: wipes the log so a test miss does not linger. */
     internal fun clear(context: Context) {
         val editor = prefs(context).edit()
-        for (index in 0 until EVENT_CAPACITY) {
-            val slot = "$SLOT$index"
-            editor.remove(slot + FIELD_KIND)
-            editor.remove(slot + FIELD_EXPECTED)
-            editor.remove(slot + FIELD_OBSERVED)
-            editor.remove(slot + FIELD_MANUFACTURER)
-            editor.remove(slot + FIELD_MODEL)
+        for (slotPrefix in listOf(SLOT_V2, SLOT_V1)) {
+            for (index in 0 until EVENT_CAPACITY) {
+                val slot = "$slotPrefix$index"
+                editor.remove(slot + FIELD_KIND)
+                editor.remove(slot + FIELD_EXPECTED)
+                editor.remove(slot + FIELD_OBSERVED)
+                editor.remove(slot + FIELD_MANUFACTURER)
+                editor.remove(slot + FIELD_MODEL)
+            }
         }
-        editor.remove(KEY_EVENT_COUNT)
+        editor.remove(KEY_HEAD_V2)
+        editor.remove(KEY_COUNT_V2)
+        editor.remove(KEY_COUNT_V1)
         editor.remove(KEY_DISMISSED_EXPECTED)
         editor.remove(KEY_HANDLED_OCCURRENCE)
         editor.apply()
     }
 }
+
+/**
+ * Where the newest event goes: one step back from the current head, or slot 0 on the first write.
+ *
+ * `floorMod` rather than `%` because the step back from slot 0 has to land on the last slot, and
+ * Kotlin's `%` keeps the sign of the dividend.
+ */
+internal fun nextHead(head: Int, count: Int, capacity: Int): Int =
+    if (count == 0) 0 else Math.floorMod(head - 1, capacity)
+
+/**
+ * The slot indices of the buffer, newest first.
+ *
+ * Separated from the storage code so the ordering can be checked without a `Context`, and so the
+ * read path and [nextHead] cannot drift apart.
+ */
+internal fun slotOrder(head: Int, count: Int, capacity: Int): List<Int> =
+    (0 until count).map { offset -> Math.floorMod(head + offset, capacity) }
+
