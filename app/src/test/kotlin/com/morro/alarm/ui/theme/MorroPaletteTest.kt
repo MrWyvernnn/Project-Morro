@@ -84,6 +84,19 @@ class MorroPaletteTest {
     }
 
     @Test
+    fun publishingAPaletteUpdatesTheChoiceGuard() {
+        // MorroTheme skips its publish when the choice already matches. This pins the read it uses
+        // so a refactor cannot leave the guard comparing against a value that never moves.
+        MorroColors.use(MorroThemeChoice.AUTUMN)
+        assertEquals(MorroThemeChoice.AUTUMN, MorroColors.currentChoice)
+        assertEquals(MorroPalettes.Autumn.honey, MorroColors.Honey)
+
+        MorroColors.use(MorroThemeChoice.MIDNIGHT)
+        assertEquals(MorroThemeChoice.MIDNIGHT, MorroColors.currentChoice)
+        assertEquals(MorroPalettes.Midnight.honey, MorroColors.Honey)
+    }
+
+    @Test
     fun tertiaryTextIsLegibleInEveryTheme() {
         // 11–12sp metadata. This is the one role whose card contrast was never checked when the
         // second palette landed; both values measured 5.59:1 and 5.30:1 on black, 5.02:1 and

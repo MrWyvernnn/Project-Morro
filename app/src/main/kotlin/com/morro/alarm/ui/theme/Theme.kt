@@ -68,8 +68,22 @@ object MorroColors {
      */
     private val active = mutableStateOf(MorroPalettes.of(MorroThemeChoice.MIDNIGHT))
 
-    /** Called by [MorroTheme] once the stored choice is known. */
+    /**
+     * The choice currently published, kept without snapshot tracking on purpose.
+     *
+     * It exists so [MorroTheme] can skip a write that would change nothing. Making it snapshot
+     * state would make the theme wrapper subscribe to its own write and schedule an extra
+     * recomposition on every cold start for no visible gain.
+     */
+    private var publishedChoice: MorroThemeChoice = MorroThemeChoice.MIDNIGHT
+
+    /** Internal read for the publish guard. Not a UI state source. */
+    internal val currentChoice: MorroThemeChoice get() = publishedChoice
+
+    /** Called by [MorroTheme] once the stored choice is known. Idempotent by choice. */
     internal fun use(choice: MorroThemeChoice) {
+        if (publishedChoice == choice) return
+        publishedChoice = choice
         active.value = MorroPalettes.of(choice)
     }
 
@@ -368,10 +382,14 @@ fun MorroTheme(content: @Composable () -> Unit) {
     val palette = MorroPalettes.of(choice)
 
     // Publish the palette before anything below reads a colour, so a cold start on Autumn paints
-    // correctly on its very first frame instead of flashing Midnight for one frame. The write is
-    // idempotent: the same palette instance is assigned on every later pass, and SnapshotMutableState
-    // compares by value, so it stops invalidating anything after the first composition.
-    MorroColors.use(choice)
+    // correctly on its very first frame instead of flashing Midnight for one frame. This has to
+    // stay in the composition body: SideEffect runs after composition succeeds, which is exactly
+    // the stale read that produces the flash. The guard makes the no-op explicit instead of
+    // relying on SnapshotMutableState's value equality, so the intent cannot be mistaken for a
+    // per-frame write.
+    if (MorroColors.currentChoice != choice) {
+        MorroColors.use(choice)
+    }
 
     val scheme = remember(palette) { materialColorScheme(palette) }
 
