@@ -5,6 +5,7 @@ import android.graphics.Color as AndroidColor
 import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
+import android.os.SystemClock
 import android.util.Log
 import android.view.WindowManager
 import android.widget.Toast
@@ -102,7 +103,11 @@ class AlarmActivity : ComponentActivity() {
 
     private var gateState by mutableStateOf(AlarmGateState.PUZZLE)
 
-    private var missionGraceSeconds by mutableIntStateOf(30)
+    private var missionGraceSeconds by mutableIntStateOf(GraceWindow.DURATION_SECONDS)
+
+    // Absolute elapsedRealtime instant the grace window ends. A deadline, not a tick count: a late
+    // tick is measured against this same instant instead of stretching the window.
+    private var missionGraceDeadlineMs = 0L
     private var graceJob: Job? = null
 
     // Math gate state. One tap per puzzle: a question arrives with its own four choices, so there
@@ -299,19 +304,28 @@ class AlarmActivity : ComponentActivity() {
     }
 
     /**
-     * Starts or restarts the 30-second grace window (volume 20%).
-     * Restores 100% volume when 30s expires.
+     * Starts or restarts the 30-second grace window (volume 20%), then restores 100% when it ends.
+     *
+     * Deadline-based on `elapsedRealtime` rather than a `delay(1000)` counter: a tick that arrives
+     * late — a busy main thread, a backgrounded activity — must shorten the next sleep, not extend
+     * the window. The loop wakes at most once a second so the banner can tick, and never past
+     * [missionGraceDeadlineMs] so the restore cannot overshoot.
      */
     private fun startGraceCountdown() {
-        missionGraceSeconds = 30
-        AlarmSoundPlayer.setVolume(0.2f)
+        missionGraceDeadlineMs = SystemClock.elapsedRealtime() + GraceWindow.DURATION_MS
+        missionGraceSeconds = GraceWindow.DURATION_SECONDS
+        AlarmSoundPlayer.setVolume(GraceWindow.VOLUME)
         graceJob?.cancel()
         graceJob = lifecycleScope.launch {
-            while (missionGraceSeconds > 0) {
-                delay(1000L)
-                missionGraceSeconds--
+            while (true) {
+                val now = SystemClock.elapsedRealtime()
+                val waitMs = GraceWindow.nextTickDelayMs(missionGraceDeadlineMs, now)
+                if (waitMs <= 0L) break
+                missionGraceSeconds = GraceWindow.secondsRemaining(missionGraceDeadlineMs, now)
+                delay(waitMs)
             }
             // Grace window expired -> restore 100% volume until user taps "Start Scan" or completes
+            missionGraceSeconds = 0
             AlarmSoundPlayer.setVolume(1.0f)
         }
     }
@@ -641,7 +655,7 @@ class AlarmActivity : ComponentActivity() {
             AlarmGateState.MISSION_QR, AlarmGateState.MISSION_PHOTO -> {
                 if (!alreadyRinging) AlarmSoundPlayer.start(this)
                 if (missionGraceSeconds > 0) {
-                    AlarmSoundPlayer.setVolume(0.2f)
+                    AlarmSoundPlayer.setVolume(GraceWindow.VOLUME)
                 } else {
                     AlarmSoundPlayer.setVolume(1.0f)
                 }
@@ -1172,7 +1186,11 @@ class AlarmActivity : ComponentActivity() {
                 Text(
                     text = if (isGraceActive) "Complete mission before volume increases" else "Alarm is sounding at full volume",
                     fontSize = 11.sp,
-                    color = colors.textDisabled
+                    // Secondary, not tertiary: this row sits on surfaceHigh (or the translucent
+                    // error wash), where tertiary measures 4.14:1 and 3.75:1 in Midnight against a
+                    // 4.5 target. Secondary is 6.18:1 and 5.60:1 there, and this is live status
+                    // copy, not a disabled control.
+                    color = colors.textSecondary
                 )
             }
 
@@ -1197,7 +1215,7 @@ class AlarmActivity : ComponentActivity() {
 
     /**
      * RecordingGateUI: Sleek screen asking the user to "Record tomorrow's commitment"
-     * with a massive Honey Record button and low-contrast Skip button.
+     * with a massive Honey Record button and a de-emphasised (but AA-legible) Skip button.
      */
     @Composable
     private fun RecordingGateUI(
@@ -1293,7 +1311,11 @@ class AlarmActivity : ComponentActivity() {
                         Text(
                             text = "Skip (Use yesterday's memo)",
                             style = typo.bodyMedium,
-                            color = colors.textDisabled
+                            // De-emphasised, not hidden: tertiary is 5.30:1 (Midnight) and 5.59:1
+                            // (Autumn) on the canvas, so the button still clears AA while staying
+                            // quieter than the record button above it. It was textDisabled, which
+                            // measured 3.59:1 / 3.73:1 even though this control is live.
+                            color = colors.textTertiary
                         )
                     }
                 }

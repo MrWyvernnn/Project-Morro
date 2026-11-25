@@ -13,7 +13,7 @@ and are unverified until the founder runs them.
 | 5 | F4 guarded palette write | **done** | `Theme.kt`, `MorroPaletteTest.kt` (+1) | 9 palette tests green | first-frame timing needs the phone |
 | 6 | F6 stale APIs | **done** | `Theme.kt`, `MorroCard.kt`, `design/MORRO_VISUAL_SYSTEM.md`, `design/design.md` | `testDebugUnitTest` green | no behaviour change expected; build only |
 | 7 | Scope audit | **done (in recon)** | `research/FIX2_RECON.md` §8 | — | — |
-| 8 | Build + device pass | **build done, device pending** | — | `assembleDebug` + `testDebugUnitTest` (225 tests) + `lintDebug` (0 errors, 66 warnings) all green | the checklist below is unrun |
+| 8 | Build + device pass | **build done, device pending** | — | `assembleDebug` + `testDebugUnitTest` (233 tests) + `lintDebug` (0 errors, 66 warnings) all green | the checklist below is unrun |
 
 ## Decisions
 
@@ -103,6 +103,10 @@ Run on the Nothing Phone. Install with `./gradlew installDebug`.
    settings sheet's helper lines, the alarm builder's captions.
 2. Measured ratios: tertiary 5.59:1 on black, 5.02:1 on a card. Confirm it is comfortably legible
    at arm's length in a dim room.
+3. Ring on the QR mission and read both banner states: "Complete mission before volume increases"
+   and, after 30 s, "Alarm is sounding at full volume". Both are now secondary-weight copy.
+4. On the voice-commitment gate, read the "Skip (Use yesterday's memo)" link. It should be quieter
+   than the honey record button and still readable.
 
 ### E. F6 — no visible change
 
@@ -118,15 +122,37 @@ The locked-boot catch-up ring cannot be verified any other way:
 3. Unlock. It must ring **exactly once**, full screen. Then `dumpsys alarm` shows tomorrow armed.
 4. Unlock before the trigger instead: exactly one ring at the set time, no second ring 2 s later.
 
-## 9 · drift found, not fixed
+### G. Grace window — deadline, not ticks (after the review)
 
-- `AlarmActivity.startGraceCountdown()` counts the 30 s QR/photo grace window with a
-  `delay(1000L)` loop. The project rule prefers `SystemClock.elapsedRealtime()`. It predates this
-  pass, is not one of the six findings, and works; reported, not touched.
-- `textDisabled` is used for active 11sp copy in `AlarmActivity` ("Alarm is sounding at full
-  volume", "Skip (Use yesterday's memo)"). Measured 3.59:1 (Midnight) / 3.73:1 (Autumn) on black.
-  WCAG exempts disabled text, but these two strings are not disabled. F5 scoped the change to
-  `TextTertiary`, so this is reported only.
+1. Ring on the QR or Photo mission. The banner counts 30 → 0 and the alarm is ducked to 20%, then
+   it jumps to full at the 30 s mark. Time it with a stopwatch: it must be 30 s, not 31 or 32.
+2. Lock the phone for 20 s during the window, unlock, and confirm the remaining seconds are roughly
+   where the clock says they should be — the window is real time, not screen-on time.
+3. Rotate during the window. Expected current behaviour: the banner restarts at 30 s even though
+   `onPause` restored full volume. That is the known rotation gap in §9, not a regression.
+
+## 9 · drift
+
+### Fixed after the review (commit follows §1–8)
+
+- `AlarmActivity.startGraceCountdown()` no longer counts with `delay(1000L)`. The window is an
+  absolute `SystemClock.elapsedRealtime()` deadline (`GraceWindow.kt`), the loop wakes at most once
+  a second and never past the deadline, and a late tick shortens the next sleep instead of
+  stretching the window. Covered by `GraceWindowTest` (7 tests).
+- The two live strings that used `textDisabled` are now legible: the grace banner's status line is
+  `textSecondary` (6.18:1 Midnight / 6.85:1 Autumn on `surfaceHigh`; 5.60:1 / 7.22:1 on the 20%
+  error wash) and the Skip button is `textTertiary` (5.30:1 / 5.59:1 on the canvas, still quieter
+  than the record button). `MorroPaletteTest.statusCopyClearsAaOnTheGraceBanner` pins the banner
+  grounds. `textDisabled` itself is unchanged and still measures 3.59:1 / 3.73:1 — fine for its
+  name, and no longer used for live copy.
+
+### Still open, reported only
+
+- The grace window does not survive a rotation. `onPause` restores the ring to full volume and the
+  recreated activity starts with `missionGraceSeconds = 30` and no running `graceJob`, so the banner
+  can claim a muted window that is not muted. The deadline would need to travel in
+  `onSaveInstanceState`, the way the gate's silence budget now does. Not changed — it predates this
+  pass and was not part of the requested fix.
 - Lint still warns `Wakelock` (released in `onDestroy` rather than `onPause`) and `ObsoleteSdkInt`
   in `AlarmActivity`. Both predate this pass.
 

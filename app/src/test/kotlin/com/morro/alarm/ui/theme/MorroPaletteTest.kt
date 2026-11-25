@@ -1,6 +1,7 @@
 package com.morro.alarm.ui.theme
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -112,6 +113,26 @@ class MorroPaletteTest {
                 "$name textTertiary is ${"%.2f".format(onCard)}:1 on a card, needs 4.5",
                 onCard >= 4.5
             )
+        }
+    }
+
+    @Test
+    fun statusCopyClearsAaOnTheGraceBanner() {
+        // The grace banner's live status line sits on surfaceHigh, or on an error wash over the
+        // canvas when the window has expired. It was textDisabled (3.59:1 / 3.73:1 on black) while
+        // being live copy; it is textSecondary now. This pins the requirement to the real grounds,
+        // not to the canvas.
+        palettes.forEach { (name, palette) ->
+            listOf(
+                "surfaceHigh" to palette.surfaceHigh,
+                "the error wash" to palette.error.copy(alpha = 0.2f).compositeOver(palette.canvas),
+            ).forEach { (where, background) ->
+                val ratio = contrast(palette.textSecondary, background)
+                assertTrue(
+                    "$name textSecondary is ${"%.2f".format(ratio)}:1 on $where, needs 4.5",
+                    ratio >= 4.5
+                )
+            }
         }
     }
 
