@@ -38,6 +38,16 @@ object WakeUpCheck {
     private const val KEY_ARMED_AT = "wake_check_armed_at"
     private const val KEY_RINGING = "wake_check_ringing"
 
+    /**
+     * When "Still up?" was first put in front of the person, or 0 if it never was.
+     *
+     * The 90-second window is counted from here, not from when the escalation was scheduled. Without
+     * this key a reboot cannot tell "asked, with 20 seconds left" from "never asked, 3 minutes of
+     * waiting still owed", and the restore path has to guess — which is how a question gets asked
+     * early and a window gets shortened.
+     */
+    private const val KEY_QUESTION_SHOWN_AT = "wake_check_question_shown_at"
+
     const val ACTION_CHECK = "com.morro.alarm.ACTION_WAKE_CHECK"
     const val ACTION_ALERT = "com.morro.alarm.ACTION_WAKE_CHECK_ALERT"
     const val ACTION_I_AM_UP = "com.morro.alarm.ACTION_I_AM_UP"
@@ -132,6 +142,7 @@ object WakeUpCheck {
             .putBoolean(KEY_PENDING, true)
             .putLong(KEY_ALERT_AT, alertAt)
             .putLong(KEY_RINGING, 0L)
+            .putLong(KEY_QUESTION_SHOWN_AT, 0L)
             .commit()
         if (!claimed) {
             Log.w(TAG, "Could not record the wake-up check; not arming an untracked one")
@@ -165,6 +176,7 @@ object WakeUpCheck {
             .putLong(KEY_ARMED_AT, 0L)
             .putBoolean(KEY_PENDING, false)
             .remove(KEY_ALERT_AT)
+            .putLong(KEY_QUESTION_SHOWN_AT, 0L)
             .commit()
     }
 
@@ -181,6 +193,7 @@ object WakeUpCheck {
         prefs.edit()
             .putBoolean(KEY_PENDING, false)
             .putLong(KEY_RINGING, System.currentTimeMillis())
+            .putLong(KEY_QUESTION_SHOWN_AT, 0L)
             .commit()
         cancelNotification(context)
         Log.i(TAG, "Wake-up check unanswered; re-ringing once")
@@ -195,15 +208,19 @@ object WakeUpCheck {
             .putBoolean(KEY_PENDING, false)
             .putLong(KEY_RINGING, 0L)
             .remove(KEY_ALERT_AT)
+            .putLong(KEY_QUESTION_SHOWN_AT, 0L)
             .commit()
         cancelNotification(context)
     }
 
     /**
-     * A reboot inside the window must not orphan the question.
+     * A reboot inside the window must not orphan the question, and must not shorten its deadline.
      *
-     * The escalation is re-armed for its original time, and the question is shown again: the person
-     * still has to answer it, and the 90 seconds are still counted from when it was first asked.
+     * What actually happened before the reboot decides this, and [KEY_QUESTION_SHOWN_AT] is the only
+     * thing that can tell the difference. Without it, a reboot two minutes after dismissal re-posts a
+     * question that was not due for another minute, and a reboot twenty seconds after the question
+     * was asked can leave the person one second to answer it. [restorePlan] names the four cases; this
+     * function only carries them out.
      */
     fun restoreAfterBoot(context: Context) {
         val prefs = prefs(context)
@@ -215,23 +232,79 @@ object WakeUpCheck {
             return
         }
 
+        val now = System.currentTimeMillis()
+        val armedAt = prefs.getLong(KEY_ARMED_AT, 0L)
+        val checkAt = if (armedAt > 0L) armedAt + CHECK_DELAY_MILLIS else 0L
         val alertAt = prefs.getLong(KEY_ALERT_AT, 0L)
-        if (alertAt <= System.currentTimeMillis()) {
-            Log.w(TAG, "Wake-up check window expired during the reboot")
-            resolve(context)
-            return
-        }
+        val shownAt = prefs.getLong(KEY_QUESTION_SHOWN_AT, 0L)
 
-        if (schedule(context, REQUEST_ALERT, ACTION_ALERT, alertAt)) {
-            showQuestion(context)
-        } else {
-            resolve(context)
+        when (restorePlan(shownAt, checkAt, alertAt, now)) {
+            RestorePlan.EXPIRED -> {
+                Log.w(TAG, "Wake-up check window expired during the reboot")
+                resolve(context)
+            }
+
+            RestorePlan.ASK_LATER -> {
+                // Nothing was asked yet and nothing is owed yet: put both alarms back on their
+                // original times and leave the question alone.
+                val checkArmed = schedule(context, REQUEST_CHECK, ACTION_CHECK, checkAt)
+                if (checkArmed && schedule(context, REQUEST_ALERT, ACTION_ALERT, alertAt)) {
+                    Log.d(TAG, "Wake-up check restored; the question is still ahead")
+                } else {
+                    resolve(context)
+                }
+            }
+
+            RestorePlan.RESCHEDULE_ORIGINAL -> {
+                // Asked already: re-post it (the reboot dropped the notification) and keep the
+                // deadline it already had. Re-posting must not move the window.
+                if (schedule(context, REQUEST_ALERT, ACTION_ALERT, alertAt)) {
+                    showQuestion(context)
+                } else {
+                    resolve(context)
+                }
+            }
+
+            RestorePlan.REARM_FULL_WINDOW -> {
+                // Due, but never asked. Start the window now so the person gets the whole 90 seconds
+                // instead of whatever was left of a window they never saw.
+                val freshAlertAt = now + ALERT_DELAY_MILLIS
+                val written = prefs.edit().putLong(KEY_ALERT_AT, freshAlertAt).commit()
+                if (!written) {
+                    Log.w(TAG, "Could not record the restored window; dropping the check")
+                    resolve(context)
+                    return
+                }
+                if (schedule(context, REQUEST_ALERT, ACTION_ALERT, freshAlertAt)) {
+                    showQuestion(context)
+                } else {
+                    resolve(context)
+                }
+            }
         }
     }
 
-    /** Posts the "Still up?" notification. Its own channel, no full-screen intent, no sound. */
+    /**
+     * Posts the "Still up?" notification. Its own channel, no full-screen intent, no sound.
+     *
+     * The first post is what starts the 90-second window, so the timestamp is written here rather
+     * than by the caller: every route to the question goes through this function, and the deadline
+     * must not be resettable by asking again.
+     */
     fun showQuestion(context: Context) {
         ensureChannel(context)
+
+        val questionShownAt = prefs(context).getLong(KEY_QUESTION_SHOWN_AT, 0L)
+        if (questionShownAt == 0L) {
+            val stamped = prefs(context).edit()
+                .putLong(KEY_QUESTION_SHOWN_AT, System.currentTimeMillis())
+                .commit()
+            if (!stamped) {
+                // Without a start time the window cannot be reasoned about after a reboot. Asking
+                // anyway is still better than staying silent: the escalation is already armed.
+                Log.w(TAG, "Could not record when the question was shown")
+            }
+        }
 
         val openApp = PendingIntent.getActivity(
             context,
@@ -355,3 +428,45 @@ object WakeUpCheck {
         }
     }
 }
+
+/**
+ * What a reboot inside the wake-up check window has to do about the question.
+ *
+ * Four outcomes, because "re-arm the escalation and ask again" is not one behaviour:
+ *
+ * - [ASK_LATER] — the question was never shown and is not due yet. Asking now would move it minutes
+ *   earlier and hand out a window the person never asked for; the original schedule is intact.
+ * - [RESCHEDULE_ORIGINAL] — it was already asked and its deadline is still ahead. The question is
+ *   re-posted (a reboot clears notifications) but the deadline is *not* moved: the 90 seconds stay
+ *   counted from the first ask.
+ * - [REARM_FULL_WINDOW] — it was never asked and its moment has passed. The person is owed the full
+ *   90 seconds, so the window starts now rather than being handed back half-spent.
+ * - [EXPIRED] — the deadline is gone. Nothing is owed; resolve and stop.
+ */
+internal enum class RestorePlan {
+    EXPIRED,
+    ASK_LATER,
+    RESCHEDULE_ORIGINAL,
+    REARM_FULL_WINDOW,
+}
+
+/**
+ * The restore decision, pure so the awkward cases can be pinned without a reboot.
+ *
+ * @param questionShownAt when "Still up?" was first posted, or 0 if it never was.
+ * @param checkAt when the question was due, or 0 when the claim has no recorded start.
+ * @param alertAt when the escalation is due, or 0 when it was never recorded.
+ */
+internal fun restorePlan(
+    questionShownAt: Long,
+    checkAt: Long,
+    alertAt: Long,
+    now: Long,
+): RestorePlan {
+    // A missing or already-passed deadline is the same thing: nothing left to ask about.
+    if (alertAt <= now) return RestorePlan.EXPIRED
+    if (questionShownAt != 0L) return RestorePlan.RESCHEDULE_ORIGINAL
+    if (now >= checkAt) return RestorePlan.REARM_FULL_WINDOW
+    return RestorePlan.ASK_LATER
+}
+
