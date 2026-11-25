@@ -71,6 +71,8 @@ object AlarmSoundPlayer {
                 player.setOnPreparedListener { mp ->
                     preparing = false
                     try {
+                        val vol = currentVolume
+                        mp.setVolume(vol, vol)
                         mp.start()
                     } catch (e: Exception) {
                         Log.e(TAG, "Error starting alarm MediaPlayer on prepared", e)
@@ -104,17 +106,28 @@ object AlarmSoundPlayer {
         Settings.System.DEFAULT_ALARM_ALERT_URI
     ).distinct()
 
+    @Volatile
+    private var currentVolume = 1.0f
+
     /**
      * Sets the volume of the playing alarm sound (clamped between 0.0 and 1.0).
      */
+    @Synchronized
     fun setVolume(volume: Float) {
+        if (volume.isNaN()) return
         try {
             val clamped = volume.coerceIn(0f, 1f)
+            currentVolume = clamped
             mediaPlayer?.setVolume(clamped, clamped)
         } catch (e: Exception) {
             Log.w(TAG, "Error setting volume", e)
         }
     }
+
+    /**
+     * Returns the current volume applied to the player (between 0.0 and 1.0).
+     */
+    fun getVolume(): Float = currentVolume
 
     /**
      * Stops and releases the MediaPlayer cleanly.
@@ -187,6 +200,8 @@ object AlarmSoundPlayer {
                 player.setOnPreparedListener { mp ->
                     preparing = false
                     try {
+                        currentVolume = 1.0f
+                        mp.setVolume(1.0f, 1.0f)
                         mp.start()
                     } catch (e: Exception) {
                         Log.e(TAG, "Error starting fallback alarm on prepared", e)

@@ -5,6 +5,7 @@ import android.app.TimePickerDialog
 import android.content.Context
 import android.os.SystemClock
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -63,6 +64,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.getValue
@@ -88,8 +90,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.morro.alarm.MathEngine
-import com.morro.alarm.MathPrefs
 import com.morro.alarm.MemoPlayer
 import com.morro.alarm.MemoRecorder
 import com.morro.alarm.MemoStorage
@@ -167,6 +167,9 @@ fun AlarmBuilderSheet(
     val scope = rememberCoroutineScope()
     val dismissAt = with(LocalDensity.current) { 120.dp.toPx() }
 
+    BackHandler(enabled = isVisible) {
+        onDismiss()
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         // Scrim at 88% black: the dashboard clock and dock never read through the sheet.
@@ -291,6 +294,7 @@ fun AlarmBuilderSheetContent(
         if (granted) {
             recordingCountdown = 15
             hasSaved.value = false
+            voiceState = VoiceState.RECORDING
             MemoRecorder.startRecording(
                 context,
                 onError = { reason ->
@@ -301,7 +305,6 @@ fun AlarmBuilderSheetContent(
                     finishRecording()
                 }
             )
-            voiceState = VoiceState.RECORDING
         } else {
             Toast.makeText(context, "Microphone permission is required to record your voice promise.", Toast.LENGTH_LONG).show()
         }
@@ -338,7 +341,17 @@ fun AlarmBuilderSheetContent(
 
     val missionTargetName = remember {
         context.getSharedPreferences("morro_prefs", Context.MODE_PRIVATE)
-            .getString("onboarding_target", "mission") ?: "mission"
+            .getString("onboarding_target", null)
+            ?.trim()
+            ?.ifBlank { null }
+            ?: "mission"
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            MemoPlayer.stopPlayback()
+            MemoRecorder.cancelRecording(context)
+        }
     }
 
     val colors = morroColors()
@@ -797,10 +810,6 @@ private fun VoiceExpandedContent(
     val shapes = morroShapes()
     val context = LocalContext.current
 
-    // Saved the moment it is tapped: the difficulty belongs to the alarm, not to this sheet, and
-    // the alarm screen must never be the place it turns out to be missing.
-    var difficulty by remember { mutableStateOf(MathPrefs.getDifficulty(context)) }
-
     Column(
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -1055,74 +1064,102 @@ private fun VoiceExpandedContent(
 
         Spacer(modifier = Modifier.height(20.dp))
 
+        // ── Cognitive Challenge Selector (Voice Commitment Gate) ─────────
+        var cognitiveChallenge by remember { mutableStateOf(com.morro.alarm.ui.puzzle.CognitivePrefs.getChallenge(context)) }
+        var cognitiveDifficulty by remember { mutableStateOf(com.morro.alarm.ui.puzzle.CognitivePrefs.getDifficulty(context)) }
+
         Text(
-            text = "MATH PUZZLE",
-            style = typo.labelSmall,
-            color = colors.textTertiary,
-            letterSpacing = 0.6.sp
+            text = "Cognitive challenge",
+            style = typo.headlineSmall,
+            color = colors.textPrimary
         )
 
-        Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.height(4.dp))
 
         Text(
-            text = "Three quick sums open the alarm before your promise plays. Pick how hard.",
+            text = "Solve a mental challenge to open the alarm before your promise plays.",
             style = typo.bodyMedium,
             color = colors.textSecondary,
             lineHeight = 19.sp
         )
 
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
-        DifficultySelector(
-            selected = difficulty,
-            onSelect = { level ->
-                difficulty = level
-                MathPrefs.setDifficulty(context, level)
-            }
-        )
-    }
-}
-
-/**
- * DifficultySelector — three pills, one selected.
- *
- * Three options on one row, not a menu: the choice is one tap and every level stays visible, so
- * nobody has to remember what the others were called.
- */
-@Composable
-private fun DifficultySelector(
-    selected: MathEngine.Difficulty,
-    onSelect: (MathEngine.Difficulty) -> Unit
-) {
-    val colors = morroColors()
-    val typo = morroTypography()
-
-    Column(modifier = Modifier.fillMaxWidth()) {
+        // Challenge Type: Math / Chess / Sudoku
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            MathEngine.Difficulty.values().forEach { level ->
-                val active = level == selected
+            com.morro.alarm.ui.puzzle.CognitiveChallenge.values().forEach { challenge ->
+                val active = challenge == cognitiveChallenge
+                val interactionSource = remember { MutableInteractionSource() }
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .clip(RoundedCornerShape(50))
-                        .background(if (active) colors.honey.copy(alpha = 0.14f) else Color.Transparent)
+                        .pressScale(interactionSource, pressedScale = 0.96f)
+                        .clip(shapes.Chip)
+                        .background(if (active) colors.honey.copy(alpha = 0.14f) else colors.surfaceElevated)
                         .morroHairline(
-                            radius = 50.dp,
+                            radius = 12.dp,
                             color = if (active) colors.borderActive else colors.borderSubtle
                         )
-                        .clickable { onSelect(level) }
+                        .clickable(
+                            interactionSource = interactionSource,
+                            indication = null
+                        ) {
+                            cognitiveChallenge = challenge
+                            com.morro.alarm.ui.puzzle.CognitivePrefs.setChallenge(context, challenge)
+                        }
                         .heightIn(min = 48.dp)
                         .wrapContentHeight(Alignment.CenterVertically)
                         .padding(horizontal = 8.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = level.label,
+                        text = challenge.label,
                         style = typo.labelLarge,
                         color = if (active) colors.honey else colors.textSecondary
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Difficulty: Standard / Hard
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            com.morro.alarm.ui.puzzle.CognitiveDifficulty.values().forEach { diff ->
+                val active = diff == cognitiveDifficulty
+                val interactionSource = remember { MutableInteractionSource() }
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .pressScale(interactionSource, pressedScale = 0.96f)
+                        .clip(shapes.Chip)
+                        .background(if (active) colors.surfaceHigh else colors.surfaceElevated.copy(alpha = 0.6f))
+                        .morroHairline(
+                            radius = 12.dp,
+                            color = if (active) colors.borderStrong else colors.borderSubtle
+                        )
+                        .clickable(
+                            interactionSource = interactionSource,
+                            indication = null
+                        ) {
+                            cognitiveDifficulty = diff
+                            com.morro.alarm.ui.puzzle.CognitivePrefs.setDifficulty(context, diff)
+                        }
+                        .heightIn(min = 40.dp)
+                        .wrapContentHeight(Alignment.CenterVertically)
+                        .padding(horizontal = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = diff.label,
+                        style = typo.bodyMedium,
+                        color = if (active) colors.textPrimary else colors.textTertiary
                     )
                 }
             }
@@ -1131,7 +1168,14 @@ private fun DifficultySelector(
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            text = selected.detail,
+            text = when (cognitiveChallenge) {
+                com.morro.alarm.ui.puzzle.CognitiveChallenge.MATH ->
+                    if (cognitiveDifficulty == com.morro.alarm.ui.puzzle.CognitiveDifficulty.STANDARD) "Times tables, two-digit sums" else "Two-digit products, three-digit sums"
+                com.morro.alarm.ui.puzzle.CognitiveChallenge.CHESS ->
+                    if (cognitiveDifficulty == com.morro.alarm.ui.puzzle.CognitiveDifficulty.STANDARD) "Mate-in-1 puzzle" else "Mate-in-2 puzzle"
+                com.morro.alarm.ui.puzzle.CognitiveChallenge.SUDOKU ->
+                    if (cognitiveDifficulty == com.morro.alarm.ui.puzzle.CognitiveDifficulty.STANDARD) "4×4 grid, digits 1–4" else "9×9 grid, 5–7 missing numbers"
+            },
             style = typo.bodyMedium,
             fontSize = 12.sp,
             color = colors.textTertiary
@@ -1293,7 +1337,9 @@ private fun PhotoExpandedContent(
                 .clip(RoundedCornerShape(50))
                 .morroHairline(radius = 50.dp, color = colors.borderStrong)
                 .clickable { onPhotoSheetChange(true) }
-                .padding(horizontal = 16.dp, vertical = 11.dp)
+                .heightIn(min = 48.dp)
+                .wrapContentHeight(Alignment.CenterVertically)
+                .padding(horizontal = 16.dp)
         )
     }
 
@@ -1327,6 +1373,8 @@ private fun PhotoTargetSheet(
     val typo = morroTypography()
     val shapes = morroShapes()
     var localSelectedItems by remember { mutableStateOf(selectedPhotoItems) }
+
+    BackHandler(onBack = onDismiss)
 
     Box(modifier = Modifier.fillMaxSize()) {
         Box(
@@ -1419,31 +1467,30 @@ private fun PhotoTargetSheet(
                     )
                 }
                 item {
+                    val bathroomItems = setOf("toothbrush", "sink", "mirror", "towel", "scissors")
                     PoolPreset(
                         label = "Bathroom",
-                        active = false,
-                        onClick = {
-                            localSelectedItems = setOf("toothbrush", "sink", "mirror", "towel", "scissors")
-                        }
+                        active = localSelectedItems == bathroomItems,
+                        onClick = { localSelectedItems = bathroomItems }
                     )
                 }
                 item {
+                    val deskItems = setOf(
+                        "keyboard", "mouse", "monitor", "laptop",
+                        "remote", "headphones", "desk", "pen", "lamp"
+                    )
                     PoolPreset(
                         label = "Desk",
-                        active = false,
-                        onClick = {
-                            localSelectedItems = setOf(
-                                "keyboard", "mouse", "monitor", "laptop",
-                                "remote", "headphones", "desk", "pen", "lamp"
-                            )
-                        }
+                        active = localSelectedItems == deskItems,
+                        onClick = { localSelectedItems = deskItems }
                     )
                 }
                 item {
+                    val kitchenItems = setOf("cup", "bottle", "spoon", "fork")
                     PoolPreset(
                         label = "Kitchen",
-                        active = false,
-                        onClick = { localSelectedItems = setOf("cup", "bottle", "spoon", "fork") }
+                        active = localSelectedItems == kitchenItems,
+                        onClick = { localSelectedItems = kitchenItems }
                     )
                 }
                 item {
@@ -1523,7 +1570,9 @@ private fun PoolPreset(label: String, active: Boolean, onClick: () -> Unit) {
                 color = if (active) colors.borderActive else colors.borderSubtle
             )
             .clickable(onClick = onClick)
-            .padding(horizontal = 13.dp, vertical = 8.dp)
+            .heightIn(min = 48.dp)
+            .wrapContentHeight(Alignment.CenterVertically)
+            .padding(horizontal = 14.dp)
     )
 }
 

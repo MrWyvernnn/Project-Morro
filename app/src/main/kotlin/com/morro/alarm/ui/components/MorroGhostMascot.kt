@@ -29,7 +29,6 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import com.morro.alarm.ui.motion.MorroMotion
@@ -449,17 +448,4 @@ private fun DrawScope.drawGhost(
         color = FaceInk.copy(alpha = 0.90f),
         style = Stroke(width = bodyWidth * 0.024f, cap = StrokeCap.Round)
     )
-}
-
-/** Reads the system animator scale once; zero means the user asked for no animation. */
-@Composable
-private fun rememberReducedMotion(): Boolean {
-    val context = LocalContext.current
-    return remember(context) {
-        android.provider.Settings.Global.getFloat(
-            context.contentResolver,
-            android.provider.Settings.Global.ANIMATOR_DURATION_SCALE,
-            1f
-        ) == 0f
-    }
 }

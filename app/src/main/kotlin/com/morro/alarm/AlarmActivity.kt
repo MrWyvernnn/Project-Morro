@@ -8,15 +8,25 @@ import android.os.PowerManager
 import android.util.Log
 import android.view.WindowManager
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import com.morro.alarm.puzzle.chess.PuzzleRecord
+import com.morro.alarm.puzzle.chess.PuzzleRepository
+import com.morro.alarm.puzzle.sudoku.SudokuMode
+import com.morro.alarm.ui.puzzle.ChessBoardView
+import com.morro.alarm.ui.puzzle.CognitiveChallenge
+import com.morro.alarm.ui.puzzle.CognitiveDifficulty
+import com.morro.alarm.ui.puzzle.CognitivePrefs
+import com.morro.alarm.ui.puzzle.SudokuGateScreen
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -26,8 +36,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -64,6 +77,7 @@ import com.morro.alarm.ui.theme.morroTypography
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -102,6 +116,13 @@ class AlarmActivity : ComponentActivity() {
     // Recording gate state for tomorrow's commitment
     private var isRecording by mutableStateOf(false)
     private var recordingCountdown by mutableIntStateOf(15)
+
+    // Audio silencing while actively solving (with 15s inactivity wake-up watchdog)
+    private var duckJob: Job? = null
+    private var rampJob: Job? = null
+    private val silenceController = GateSilenceController(
+        onTargetVolume = { target, durationMs -> rampPlayerVolume(target = target, durationMs = durationMs) }
+    )
 
     private val TAG = "AlarmActivity"
 
@@ -264,11 +285,74 @@ class AlarmActivity : ComponentActivity() {
         }
     }
 
-    /** Cancels the foreground service notification (ID 1002). */
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        if (gateState == AlarmGateState.PUZZLE) {
+            onGateUserAction()
+        }
+    }
+
+    /**
+     * Silences Morro's player (`0.0f`) on first tap and resets the 15s inactivity watchdog.
+     * Never calls AudioManager.setStreamVolume.
+     */
+    private fun onGateUserAction() {
+        if (gateState != AlarmGateState.PUZZLE) return
+        silenceController.onUserAction()
+        duckJob?.cancel()
+        duckJob = lifecycleScope.launch {
+            while (true) {
+                val waitTime = silenceController.checkWatchdog(gateState == AlarmGateState.PUZZLE) ?: break
+                delay(waitTime)
+            }
+        }
+    }
+
+    /**
+     * Smoothly ramps MediaPlayer volume to target level, cancelling any prior ramp.
+     * If restoring full volume while in the puzzle gate and the player stopped unexpectedly,
+     * restarts playback so the wake-up alarm is guaranteed to ring.
+     */
+    private fun rampPlayerVolume(target: Float, durationMs: Long) {
+        rampJob?.cancel()
+        if (target >= 1.0f && gateState == AlarmGateState.PUZZLE && !AlarmSoundPlayer.isPlaying()) {
+            AlarmSoundPlayer.start(this)
+        }
+        if (durationMs <= 0L) {
+            AlarmSoundPlayer.setVolume(target)
+            return
+        }
+        val startVol = AlarmSoundPlayer.getVolume()
+        val steps = (durationMs / 25).coerceAtLeast(1).toInt()
+        val delta = (target - startVol) / steps
+        rampJob = lifecycleScope.launch {
+            var current = startVol
+            for (i in 1..steps) {
+                current += delta
+                AlarmSoundPlayer.setVolume(current)
+                delay(25L)
+            }
+            AlarmSoundPlayer.setVolume(target)
+        }
+    }
+
+    /** Unconditionally restores full volume and cancels duck/ramp coroutines. */
+    private fun restoreVolumeUnconditional() {
+        duckJob?.cancel()
+        rampJob?.cancel()
+        silenceController.resetImmediate()
+        AlarmSoundPlayer.setVolume(1.0f)
+    }
     private fun cancelForegroundNotification() {
         val nm = getSystemService(android.app.NotificationManager::class.java)
         nm.cancel(AlarmForegroundService.NOTIFICATION_ID)
     }
+
+    private fun resolvedMathDifficulty(): MathEngine.Difficulty =
+        when (CognitivePrefs.getDifficulty(this)) {
+            CognitiveDifficulty.HARD -> MathEngine.Difficulty.HARD
+            CognitiveDifficulty.STANDARD -> MathEngine.Difficulty.MEDIUM
+        }
 
     /**
      * The next puzzle, at the difficulty chosen when the alarm was set.
@@ -278,11 +362,12 @@ class AlarmActivity : ComponentActivity() {
      */
     private fun nextQuestion() {
         wrongChoice = -1
-        currentQuestion = MathEngine.generateQuestion(MathPrefs.getDifficulty(this))
+        currentQuestion = MathEngine.generateQuestion(resolvedMathDifficulty())
     }
 
     /** A tap on one of the four choices. A miss is marked; the alarm keeps ringing. */
     private fun submitAnswer(choice: Int) {
+        onGateUserAction()
         val question = currentQuestion ?: return
         if (!MathEngine.isCorrect(choice, question)) {
             wrongChoice = choice
@@ -297,11 +382,15 @@ class AlarmActivity : ComponentActivity() {
         }
     }
 
-    /** Math/Affirmation solved for Voice Memo gate -> silence alarm, play commitment memo. */
+    /** Math/Chess/Sudoku solved for Voice Memo gate -> silence alarm, play commitment memo. */
     private fun completePuzzle() {
+        restoreVolumeUnconditional()
         gateState = AlarmGateState.PLAYING_MEMO
         AlarmSoundPlayer.stop()
+        startMemoPlaybackOrFallback()
+    }
 
+    private fun startMemoPlaybackOrFallback() {
         val memoPath = MemoStorage.getLatestMemoPath(this)
         Log.d(TAG, "Memo file check: path=${memoPath ?: "null"}")
         if (memoPath == null) {
@@ -497,7 +586,7 @@ class AlarmActivity : ComponentActivity() {
             // re-rolling them keeps the rotation path the same size as a fresh question.
             MathEngine.Question(text, answer, MathEngine.optionsFor(answer))
         } else {
-            MathEngine.generateQuestion()
+            MathEngine.generateQuestion(resolvedMathDifficulty())
         }
         return true
     }
@@ -521,22 +610,16 @@ class AlarmActivity : ComponentActivity() {
                     AlarmSoundPlayer.setVolume(1.0f)
                 }
             }
-            else -> {
-                // PLAYING_MEMO or RECORDING_TOMORROW — audio is handled by MemoPlayer/MemoRecorder
+            AlarmGateState.PLAYING_MEMO -> {
+                // Recover cleanly if activity was recreated during memo playback
+                if (!MemoPlayer.isPlaying() && !alreadyRinging) {
+                    startMemoPlaybackOrFallback()
+                }
+            }
+            AlarmGateState.RECORDING_TOMORROW -> {
+                // Handled by user interaction
             }
         }
-    }
-
-    private fun snoozeAlarm() {
-        graceJob?.cancel()
-        AlarmSoundPlayer.stop()
-        MemoPlayer.stopPlayback()
-        // Snooze takes the single alarm slot for ten minutes; the next daily occurrence is armed
-        // when that trigger ends (same path as a normal dismissal), or by BootReceiver if the phone
-        // restarts first. The saved hour and minute are never touched here.
-        AlarmScheduler.snoozeAlarm(this, 10)
-        cancelForegroundNotification()
-        finish()
     }
 
     private fun cancelAlarm() {
@@ -550,16 +633,22 @@ class AlarmActivity : ComponentActivity() {
         // Must complete gates; back does nothing.
     }
 
+    override fun onPause() {
+        super.onPause()
+        restoreVolumeUnconditional()
+    }
+
     override fun onDestroy() {
         super.onDestroy()
+        restoreVolumeUnconditional()
         graceJob?.cancel()
         AlarmSoundPlayer.stop()
         MemoPlayer.release()
         MemoRecorder.release()
 
-        // Release wake-lock
+        // Release wake-lock safely
         try {
-            wakeLock?.release()
+            wakeLock?.let { if (it.isHeld) it.release() }
             Log.d(TAG, "WakeLock released in onDestroy")
         } catch (e: Exception) {
             Log.w(TAG, "Error releasing wake-lock", e)
@@ -606,6 +695,9 @@ class AlarmActivity : ComponentActivity() {
             // The same sky as the rest of the app: clouds in Midnight, leaves in Autumn. It sits
             // behind every gate, low enough to stay out of the way of the copy.
             MorroSky(modifier = Modifier.fillMaxSize(), intensity = 0.5f)
+
+            // Anti-bypass back handler: back does nothing while alarm gates are active
+            BackHandler(enabled = true) { /* Anti-bypass: must solve gate */ }
 
             when (gateState) {
                 AlarmGateState.MISSION_QR -> {
@@ -673,96 +765,167 @@ class AlarmActivity : ComponentActivity() {
                 }
 
                 AlarmGateState.PUZZLE -> {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Text(
-                            text = currentTime.value,
-                            style = typo.displayLarge,
-                            color = colors.textPrimary,
-                            fontSize = 40.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = "MORRO ALARM",
-                            style = typo.titleMedium,
-                            color = colors.textSecondary,
-                            letterSpacing = 2.sp
-                        )
+                    val cognitiveChallenge = remember { CognitivePrefs.getChallenge(this@AlarmActivity) }
+                    val cognitiveDifficulty = remember { CognitivePrefs.getDifficulty(this@AlarmActivity) }
 
-                        Spacer(modifier = Modifier.height(32.dp))
+                    when (cognitiveChallenge) {
+                        CognitiveChallenge.CHESS -> {
+                            var chessPuzzle by rememberSaveable(stateSaver = androidx.compose.runtime.saveable.Saver(
+                                save = { puzzle: PuzzleRecord? -> puzzle?.let { listOf(it.puzzleId, it.fen, it.moves, it.rating.toString(), it.themes) } },
+                                restore = { list: List<String> ->
+                                    if (list.size >= 5) PuzzleRecord(list[0], list[1], list[2], list[3].toIntOrNull() ?: 1000, list[4])
+                                    else null
+                                }
+                            )) {
+                                mutableStateOf<PuzzleRecord?>(null)
+                            }
+                            var chessLoadFailed by remember { mutableStateOf(false) }
 
-                        currentQuestion?.let { question ->
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(16.dp)
-                            ) {
-                                Text(
-                                    text = question.text,
-                                    style = typo.displayLarge,
-                                    color = colors.textPrimary,
-                                    fontSize = 40.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    textAlign = TextAlign.Center
-                                )
-                                Text(
-                                    text = "Problem ${problemsSolved + 1} of $totalProblems",
-                                    style = typo.labelLarge,
-                                    color = colors.textTertiary,
-                                    letterSpacing = 1.sp
-                                )
-                                Spacer(modifier = Modifier.height(6.dp))
-                                // Two rows of two: four answers big enough to hit without aiming,
-                                // and still one glance rather than a list to read.
-                                question.options.chunked(2).forEach { pair ->
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                    ) {
-                                        pair.forEach { option ->
-                                            val missed = option == wrongChoice
-                                            Button(
-                                                onClick = { onSubmitChoice(option) },
-                                                modifier = Modifier
-                                                    .weight(1f)
-                                                    .height(68.dp),
-                                                shape = RoundedCornerShape(14.dp),
-                                                border = BorderStroke(
-                                                    width = 1.dp,
-                                                    color = if (missed) {
-                                                        colors.error.copy(alpha = 0.65f)
-                                                    } else {
-                                                        colors.borderSubtle
-                                                    }
-                                                ),
-                                                colors = ButtonDefaults.buttonColors(
-                                                    containerColor = if (missed) {
-                                                        colors.error.copy(alpha = 0.20f)
-                                                    } else {
-                                                        colors.surfaceElevated
-                                                    },
-                                                    contentColor = if (missed) colors.error else colors.textPrimary
-                                                )
-                                            ) {
-                                                Text(
-                                                    text = option.toString(),
-                                                    fontSize = 26.sp,
-                                                    fontWeight = FontWeight.Medium
-                                                )
-                                            }
-                                        }
-                                        if (pair.size == 1) {
-                                            Spacer(modifier = Modifier.weight(1f))
-                                        }
+                            LaunchedEffect(Unit) {
+                                if (chessPuzzle == null && !chessLoadFailed) {
+                                    try {
+                                        val picked = PuzzleRepository.pick(
+                                            difficulty = if (cognitiveDifficulty == CognitiveDifficulty.HARD)
+                                                com.morro.alarm.puzzle.chess.CognitiveDifficulty.HARD
+                                            else
+                                                com.morro.alarm.puzzle.chess.CognitiveDifficulty.STANDARD,
+                                            seed = System.currentTimeMillis(),
+                                            context = this@AlarmActivity
+                                        )
+                                        chessPuzzle = picked
+                                    } catch (ce: CancellationException) {
+                                        throw ce
+                                    } catch (e: Exception) {
+                                        Log.e(TAG, "Failed to load chess puzzle, falling back to math", e)
+                                        chessLoadFailed = true
                                     }
                                 }
                             }
+
+                            if (!chessLoadFailed && chessPuzzle != null) {
+                                val puzzle = chessPuzzle!!
+                                val initialBoard = remember(puzzle.fen) {
+                                    com.morro.alarm.puzzle.chess.FenParser.parse(puzzle.fen).getOrNull()
+                                }
+
+                                if (initialBoard != null) {
+                                    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                                        val maxBoardWidth = (maxHeight - 170.dp).coerceAtLeast(240.dp)
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .verticalScroll(rememberScrollState())
+                                                .padding(horizontal = 16.dp, vertical = 16.dp),
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            verticalArrangement = Arrangement.Center
+                                        ) {
+                                            Text(
+                                                text = currentTime.value,
+                                                style = typo.displayLarge,
+                                                color = colors.textPrimary,
+                                                fontSize = 36.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Spacer(modifier = Modifier.height(16.dp))
+                                            ChessBoardView(
+                                                board = initialBoard,
+                                                puzzleRecord = puzzle,
+                                                onUserInteraction = { onGateUserAction() },
+                                                onPuzzleSolved = {
+                                                    completePuzzle()
+                                                },
+                                                modifier = Modifier
+                                                    .widthIn(max = maxBoardWidth)
+                                                    .fillMaxWidth()
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    chessLoadFailed = true
+                                }
+                            } else if (chessLoadFailed) {
+                                MathPuzzleUI(
+                                    currentTime = currentTime.value,
+                                    currentQuestion = currentQuestion,
+                                    problemsSolved = problemsSolved,
+                                    totalProblems = totalProblems,
+                                    wrongChoice = wrongChoice,
+                                    onSubmitChoice = onSubmitChoice
+                                )
+                            } else {
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "Loading challenge...",
+                                        style = typo.bodyLarge,
+                                        color = colors.textSecondary
+                                    )
+                                }
+                            }
+                        }
+
+                        CognitiveChallenge.SUDOKU -> {
+                            var sudokuSeed by rememberSaveable { mutableStateOf(System.currentTimeMillis()) }
+                            var sudokuFailed by remember { mutableStateOf(false) }
+
+                            if (!sudokuFailed) {
+                                BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                                    val isHard = cognitiveDifficulty == CognitiveDifficulty.HARD
+                                    val keypadReserve = if (isHard) 300.dp else 240.dp
+                                    val maxGridWidth = (maxHeight - keypadReserve).coerceAtLeast(220.dp)
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .verticalScroll(rememberScrollState())
+                                            .padding(horizontal = 16.dp, vertical = 16.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center
+                                    ) {
+                                        Text(
+                                            text = currentTime.value,
+                                            style = typo.displayLarge,
+                                            color = colors.textPrimary,
+                                            fontSize = 36.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Spacer(modifier = Modifier.height(16.dp))
+                                        SudokuGateScreen(
+                                            mode = if (isHard) SudokuMode.HARD else SudokuMode.STANDARD,
+                                            seed = sudokuSeed,
+                                            onGateSolved = {
+                                                completePuzzle()
+                                            },
+                                            onUserAction = { onGateUserAction() },
+                                            onGenerationFailed = { sudokuFailed = true },
+                                            modifier = Modifier
+                                                .widthIn(max = maxGridWidth)
+                                                .fillMaxWidth()
+                                        )
+                                    }
+                                }
+                            } else {
+                                MathPuzzleUI(
+                                    currentTime = currentTime.value,
+                                    currentQuestion = currentQuestion,
+                                    problemsSolved = problemsSolved,
+                                    totalProblems = totalProblems,
+                                    wrongChoice = wrongChoice,
+                                    onSubmitChoice = onSubmitChoice
+                                )
+                            }
+                        }
+
+                        CognitiveChallenge.MATH -> {
+                            MathPuzzleUI(
+                                currentTime = currentTime.value,
+                                currentQuestion = currentQuestion,
+                                problemsSolved = problemsSolved,
+                                totalProblems = totalProblems,
+                                wrongChoice = wrongChoice,
+                                onSubmitChoice = onSubmitChoice
+                            )
                         }
                     }
                 }
@@ -820,6 +983,110 @@ class AlarmActivity : ComponentActivity() {
                         verticalArrangement = Arrangement.Center
                     ) {
                         onRecordTomorrowContent()
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun MathPuzzleUI(
+        currentTime: String,
+        currentQuestion: MathEngine.Question?,
+        problemsSolved: Int,
+        totalProblems: Int,
+        wrongChoice: Int,
+        onSubmitChoice: (Int) -> Unit
+    ) {
+        val colors = morroColors()
+        val typo = morroTypography()
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = currentTime,
+                style = typo.displayLarge,
+                color = colors.textPrimary,
+                fontSize = 40.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = "MORRO ALARM",
+                style = typo.titleMedium,
+                color = colors.textSecondary,
+                letterSpacing = 2.sp
+            )
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            currentQuestion?.let { question ->
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Text(
+                        text = question.text,
+                        style = typo.displayLarge,
+                        color = colors.textPrimary,
+                        fontSize = 40.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center
+                    )
+                    Text(
+                        text = "Problem ${problemsSolved + 1} of $totalProblems",
+                        style = typo.labelLarge,
+                        color = colors.textTertiary,
+                        letterSpacing = 1.sp
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    question.options.chunked(2).forEach { pair ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            pair.forEach { option ->
+                                val missed = option == wrongChoice
+                                Button(
+                                    onClick = { onSubmitChoice(option) },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(68.dp),
+                                    shape = RoundedCornerShape(14.dp),
+                                    border = BorderStroke(
+                                        width = 1.dp,
+                                        color = if (missed) {
+                                            colors.error.copy(alpha = 0.65f)
+                                        } else {
+                                            colors.borderSubtle
+                                        }
+                                    ),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = if (missed) {
+                                            colors.error.copy(alpha = 0.20f)
+                                        } else {
+                                            colors.surfaceElevated
+                                        },
+                                        contentColor = if (missed) colors.error else colors.textPrimary
+                                    )
+                                ) {
+                                    Text(
+                                        text = option.toString(),
+                                        fontSize = 26.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                            }
+                            if (pair.size == 1) {
+                                Spacer(modifier = Modifier.weight(1f))
+                            }
+                        }
                     }
                 }
             }

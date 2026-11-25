@@ -99,7 +99,6 @@ import com.morro.alarm.ui.onboarding.PersonalizationStorage
 import com.morro.alarm.ui.onboarding.PersonalizedQuestions
 import com.morro.alarm.ui.onboarding.nextIntroStep
 import com.morro.alarm.ui.splash.MorroGhostSplash
-import com.morro.alarm.ui.motion.MorroMotion
 import com.morro.alarm.ui.motion.pressScale
 import com.morro.alarm.ui.motion.rememberReducedMotion
 import com.morro.alarm.ui.theme.MorroSpring

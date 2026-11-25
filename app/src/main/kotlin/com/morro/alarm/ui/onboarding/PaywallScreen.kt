@@ -1,6 +1,5 @@
 package com.morro.alarm.ui.onboarding
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -17,9 +16,11 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -30,6 +31,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -43,11 +50,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.morro.alarm.ui.components.MorroGhostMascot
@@ -56,16 +67,18 @@ import com.morro.alarm.ui.components.MorroSky
 import com.morro.alarm.ui.components.MorroSkyScrim
 import com.morro.alarm.ui.motion.MorroMotion
 import com.morro.alarm.ui.motion.pressScale
+import com.morro.alarm.ui.motion.rememberReducedMotion
 import com.morro.alarm.ui.motion.staggeredReveal
-import com.morro.alarm.ui.theme.MorroColors
-import com.morro.alarm.ui.theme.MorroShapes
+import com.morro.alarm.ui.theme.morroColors
 import com.morro.alarm.ui.theme.morroHairline
+import com.morro.alarm.ui.theme.morroShapes
+import com.morro.alarm.ui.theme.morroTypography
 
 /**
- * One plan. Names and prices are placeholders: nothing here is priced, stored or charged.
+ * One plan. Names and prices are sample layout copy until Play Billing lands in Slice 4.
  *
- * Internal rather than private so `PaywallPlansTest` can hold the offer to its shape (three plans,
- * one free plan first, at most one highlighted) without starting a device.
+ * Internal rather than private so `PaywallPlansTest` holds the offer to its shape
+ * (three plans, Free first, at most one highlighted) without starting a device.
  */
 internal data class Plan(
     val name: String,
@@ -75,179 +88,452 @@ internal data class Plan(
     val popular: Boolean = false,
 )
 
-/**
- * Three plans, written as sample copy. The prices are deliberately arbitrary — this screen is a
- * layout, not a price list, and it says so in one quiet line at the bottom.
- */
 internal val PaywallPlans: List<Plan> = listOf(
     Plan(
         name = "Free",
         price = "$0",
         period = "forever",
-        blurb = "One alarm, one promise, the math and voice gates."
+        blurb = "One alarm, your voice promise, and Math, Chess & Sudoku gates."
     ),
     Plan(
         name = "Plus",
         price = "$2.99",
         period = "per month",
-        blurb = "Everything in Free, plus photo and QR missions.",
+        blurb = "Adds Photo hunt, QR room scan, and 3-min Wake-up check.",
         popular = true
     ),
     Plan(
         name = "Pro",
         price = "$19.99",
         period = "per year",
-        blurb = "Everything in Plus, paid once a year.",
+        blurb = "Every gate and safety check unlocked · equivalent to $1.67/mo."
+    )
+)
+
+private data class BentoCapability(
+    val title: String,
+    val detail: String,
+    val icon: ImageVector,
+    val paidOnly: Boolean
+)
+
+private val BentoCapabilities = listOf(
+    BentoCapability(
+        title = "Voice promise",
+        detail = "Your own voice plays before the alarm ends.",
+        icon = Icons.Filled.Mic,
+        paidOnly = false
+    ),
+    BentoCapability(
+        title = "Mind gates",
+        detail = "Math, Chess mates, and Sudoku grids.",
+        icon = Icons.Filled.GridView,
+        paidOnly = false
+    ),
+    BentoCapability(
+        title = "Room missions",
+        detail = "Photo object hunt and QR code scan.",
+        icon = Icons.Filled.PhotoCamera,
+        paidOnly = true
+    ),
+    BentoCapability(
+        title = "Wake-up check",
+        detail = "Quiet follow-up so you never drift back.",
+        icon = Icons.Filled.NotificationsActive,
+        paidOnly = true
     )
 )
 
 /**
- * Paywall — a visual placeholder between the questions and the permissions screen.
+ * Paywall — hero value showcase, interactive 2×2 Bento capability matrix,
+ * anchored tier cards with annual value framing, and sticky bottom CTA dock.
  *
- * There is no billing in this build and no network access, so the plan list only selects and the
- * Continue button moves the flow on. The structure is the real one a paywall would need: a default
- * selection (Free, so nothing is pre-chosen against the person), one highlighted plan, and one
- * filled action. Adding Play Billing later swaps the selection callback and the CTA.
- *
- * This screen is quiet on purpose: no clouds, no mascot, no badge colour. The plans are the content
- * and the selected card is the only thing that brightens.
+ * Follows Morro's design tokens strictly: pure AMOLED black canvas, warm neutral
+ * surfaces, 1px concentric hairlines, sentence case everywhere, and Honey restricted
+ * to at most two elements (the featured badge and the active selection check).
  */
 @Composable
 fun PaywallScreen(
     onContinue: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val colors = morroColors()
+    val typo = morroTypography()
+    val reducedMotion = rememberReducedMotion()
     var selected by rememberSaveable { mutableIntStateOf(0) }
+    val isPaidSelected = selected > 0
 
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(MorroColors.Canvas)
+            .background(colors.canvas)
     ) {
-        MorroSky(intensity = 0.5f)
+        MorroSky(intensity = 0.45f)
         MorroSkyScrim(alpha = 0.90f)
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .windowInsetsPadding(WindowInsets.systemBars)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .windowInsetsPadding(WindowInsets.statusBars)
         ) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            TextButton(onClick = onContinue) {
-                Text(
-                    text = "Skip",
-                    color = MorroColors.TextSecondary,
-                    fontFamily = FontFamily.SansSerif,
-                    fontSize = 13.sp
-                )
-            }
-        }
-
-        Column(
-            modifier = Modifier
-                // Cap before filling: the other order pins the block to the tablet width.
-                .widthIn(max = 520.dp)
-                .fillMaxWidth()
-                .staggeredReveal(0)
-        ) {
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // The same smiling ghost that opens the app, small enough not to compete with the
-            // prices: the character carries the screen, the plans carry the decision.
-            MorroGhostMascot(
+            // Top bar: quiet Skip with >= 48dp touch target
+            Row(
                 modifier = Modifier
-                    .size(width = 76.dp, height = 88.dp)
-                    .align(Alignment.CenterHorizontally),
-                happy = true
-            )
-
-            Spacer(modifier = Modifier.height(18.dp))
-
-            Text(
-                text = "Choose your plan",
-                color = MorroColors.TextPrimary,
-                fontFamily = FontFamily.SansSerif,
-                fontSize = 30.sp,
-                lineHeight = 37.sp,
-                letterSpacing = (-0.4).sp,
-                fontWeight = FontWeight.Medium
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-                text = "Every plan keeps the alarm, the mission and your own voice. Paid plans add more ways to prove you are up.",
-                color = MorroColors.TextSecondary,
-                fontFamily = FontFamily.SansSerif,
-                fontSize = 14.sp,
-                lineHeight = 21.sp
-            )
-
-            Spacer(modifier = Modifier.height(26.dp))
-
-            Column(
-                modifier = Modifier.selectableGroup(),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.End
             ) {
-                PaywallPlans.forEachIndexed { index, plan ->
-                    PlanCard(
-                        plan = plan,
-                        selected = index == selected,
-                        index = index + 1,
-                        onSelect = { selected = index }
+                TextButton(
+                    onClick = onContinue,
+                    modifier = Modifier.heightIn(min = 48.dp)
+                ) {
+                    Text(
+                        text = "Skip",
+                        style = typo.labelLarge,
+                        color = colors.textSecondary
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(26.dp))
+            // Scrollable editorial + bento + plan tier body
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Column(
+                    modifier = Modifier
+                        .widthIn(max = 520.dp)
+                        .fillMaxWidth()
+                ) {
+                    // Hero mascot stage with single-neutral warm tone vignette (no hue gradient)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .staggeredReveal(0),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        val haloInner = colors.surfaceHigh.copy(alpha = 0.72f)
+                        val haloOuter = colors.canvas.copy(alpha = 0f)
+                        Box(
+                            modifier = Modifier
+                                .size(132.dp)
+                                .drawWithCache {
+                                    val haloBrush = Brush.radialGradient(colors = listOf(haloInner, haloOuter))
+                                    onDrawBehind {
+                                        drawCircle(brush = haloBrush)
+                                    }
+                                }
+                        )
+                        MorroGhostMascot(
+                            modifier = Modifier.size(width = 76.dp, height = 90.dp),
+                            happy = true
+                        )
+                    }
 
-            MorroPrimaryButton(
-                text = if (selected == 0) "Continue with Free" else "Continue",
-                onClick = onContinue,
-                modifier = Modifier.fillMaxWidth()
-            )
+                    Spacer(modifier = Modifier.height(10.dp))
 
-            Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Own your mornings",
+                        style = typo.displayLarge,
+                        color = colors.textPrimary,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .staggeredReveal(1)
+                    )
 
-            Text(
-                text = "Billing is not connected in this build. These plans are sample copy and nothing is charged.",
-                color = MorroColors.TextTertiary,
-                fontFamily = FontFamily.SansSerif,
-                fontSize = 11.sp,
-                lineHeight = 16.sp,
-                modifier = Modifier.fillMaxWidth()
-            )
+                    Spacer(modifier = Modifier.height(8.dp))
 
-            Spacer(modifier = Modifier.height(32.dp))
+                    Text(
+                        text = "No snooze loops. One promise in your voice, backed by gates built to wake your mind.",
+                        style = typo.bodyMedium.copy(fontSize = 14.sp, lineHeight = 20.sp),
+                        color = colors.textSecondary,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .staggeredReveal(1)
+                    )
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Factual on-device capability spec bar (tabular figures, zero fake stats)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .staggeredReveal(2)
+                            .clip(morroShapes().Chip)
+                            .background(colors.surfaceCard)
+                            .morroHairline(radius = 12.dp, color = colors.borderSubtle)
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        SpecMetric(value = "320", label = "Chess mates")
+                        SpecDivider()
+                        SpecMetric(value = "4×4 · 9×9", label = "Sudoku")
+                        SpecDivider()
+                        SpecMetric(value = "100%", label = "On-device")
+                    }
+
+                    Spacer(modifier = Modifier.height(18.dp))
+
+                    // Interactive 2x2 Bento capability showcase (lights up paid gates dynamically)
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .staggeredReveal(2),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        BentoCapabilities.chunked(2).forEach { pair ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                pair.forEach { cap ->
+                                    BentoCapabilityCard(
+                                        capability = cap,
+                                        unlocked = !cap.paidOnly || isPaidSelected,
+                                        reducedMotion = reducedMotion,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(22.dp))
+
+                    Text(
+                        text = "Choose your plan",
+                        style = typo.headlineSmall,
+                        color = colors.textPrimary,
+                        modifier = Modifier.staggeredReveal(3)
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Column(
+                        modifier = Modifier.selectableGroup(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        PaywallPlans.forEachIndexed { index, plan ->
+                            PlanCard(
+                                plan = plan,
+                                selected = index == selected,
+                                index = index + 3,
+                                reducedMotion = reducedMotion,
+                                onSelect = { selected = index }
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+                }
+            }
+
+            // Sticky bottom conversion dock (always visible, thumb-reachable)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(colors.surface)
+            ) {
+                HorizontalDivider(thickness = 1.dp, color = colors.borderSubtle)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .windowInsetsPadding(WindowInsets.navigationBars)
+                        .padding(horizontal = 24.dp, vertical = 14.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .widthIn(max = 520.dp)
+                            .fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        val ctaLabel = when (selected) {
+                            0 -> "Continue with Free"
+                            1 -> "Unlock Plus · ${PaywallPlans[1].price}/mo"
+                            else -> "Unlock Pro · ${PaywallPlans[2].price}/yr"
+                        }
+
+                        MorroPrimaryButton(
+                            text = ctaLabel,
+                            onClick = onContinue,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Lock,
+                                contentDescription = null,
+                                tint = colors.textTertiary,
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Local-first privacy · Tied to your Google Play account",
+                                style = typo.labelSmall,
+                                color = colors.textSecondary
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        Text(
+                            text = "Billing is not connected in this build. Sample layout only — nothing is charged.",
+                            style = typo.labelSmall,
+                            color = colors.textTertiary,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
         }
     }
 }
+
+@Composable
+private fun SpecMetric(value: String, label: String) {
+    val colors = morroColors()
+    val typo = morroTypography()
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = value,
+            style = typo.titleMedium.copy(
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Medium
+            ),
+            color = colors.textPrimary
+        )
+        Text(
+            text = label,
+            style = typo.labelSmall,
+            color = colors.textTertiary
+        )
+    }
+}
+
+@Composable
+private fun SpecDivider() {
+    val colors = morroColors()
+    Box(
+        modifier = Modifier
+            .width(1.dp)
+            .height(22.dp)
+            .background(colors.borderSubtle)
+    )
+}
+
+@Composable
+private fun BentoCapabilityCard(
+    capability: BentoCapability,
+    unlocked: Boolean,
+    reducedMotion: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val colors = morroColors()
+    val typo = morroTypography()
+    val shapes = morroShapes()
+    val animDuration = if (reducedMotion) 0 else MorroMotion.EnterMillis
+
+    val surfaceColor by animateColorAsState(
+        targetValue = if (unlocked) colors.surfaceElevated else colors.surfaceCard,
+        animationSpec = tween(durationMillis = animDuration),
+        label = "bentoFill"
+    )
+    val borderColor by animateColorAsState(
+        targetValue = if (unlocked && capability.paidOnly) colors.borderStrong else colors.borderSubtle,
+        animationSpec = tween(durationMillis = animDuration),
+        label = "bentoBorder"
+    )
+    val titleColor by animateColorAsState(
+        targetValue = if (unlocked) colors.textPrimary else colors.textTertiary,
+        animationSpec = tween(durationMillis = animDuration),
+        label = "bentoTitle"
+    )
+
+    Column(
+        modifier = modifier
+            .heightIn(min = 104.dp)
+            .clip(shapes.Card)
+            .background(surfaceColor)
+            .morroHairline(radius = 16.dp, color = borderColor)
+            .padding(14.dp),
+        verticalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = capability.icon,
+                contentDescription = null,
+                tint = if (unlocked) colors.textPrimary else colors.textTertiary,
+                modifier = Modifier.size(18.dp)
+            )
+            Text(
+                text = if (!capability.paidOnly) "Included" else if (unlocked) "Unlocked" else "Plus / Pro",
+                style = typo.labelSmall,
+                color = if (unlocked) colors.textSecondary else colors.textTertiary
+            )
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Column {
+            Text(
+                text = capability.title,
+                style = typo.titleMedium,
+                color = titleColor
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = capability.detail,
+                style = typo.bodyMedium.copy(fontSize = 12.sp, lineHeight = 16.sp),
+                color = if (unlocked) colors.textSecondary else colors.textDisabled
+            )
+        }
+    }
 }
 
 /**
- * A plan row: name and price at reading scale, the one-line difference underneath, and a check when
- * chosen. Three signals — border, fill and check — so selection is never colour alone.
+ * A plan row: name, badge / savings cue, concise difference, price and selection check.
+ * Three signals — border, fill and check — so selection is never colour alone.
  */
 @Composable
 private fun PlanCard(
     plan: Plan,
     selected: Boolean,
     index: Int,
+    reducedMotion: Boolean,
     onSelect: () -> Unit,
 ) {
+    val colors = morroColors()
+    val typo = morroTypography()
+    val shapes = morroShapes()
     val interactionSource = remember { MutableInteractionSource() }
     val haptics = LocalHapticFeedback.current
+    val animDuration = if (reducedMotion) 0 else MorroMotion.EnterMillis
+
     val container by animateColorAsState(
-        targetValue = if (selected) MorroColors.SurfaceElevated else MorroColors.SurfaceCard,
-        animationSpec = tween(durationMillis = MorroMotion.EnterMillis),
+        targetValue = if (selected) colors.surfaceElevated else colors.surfaceCard,
+        animationSpec = tween(durationMillis = animDuration),
         label = "planFill"
     )
     val border by animateColorAsState(
-        targetValue = if (selected) MorroColors.BorderActive else MorroColors.BorderSubtle,
-        animationSpec = tween(durationMillis = MorroMotion.EnterMillis),
+        targetValue = if (selected) colors.borderActive else colors.borderSubtle,
+        animationSpec = tween(durationMillis = animDuration),
         label = "planBorder"
     )
 
@@ -256,16 +542,15 @@ private fun PlanCard(
             .fillMaxWidth()
             .staggeredReveal(index)
             .pressScale(interactionSource, pressedScale = MorroMotion.RowPressedScale)
-            .clip(MorroShapes.Card)
+            .clip(shapes.Card)
             .background(container)
             .morroHairline(radius = 16.dp, color = border)
             .selectable(
                 selected = selected,
                 interactionSource = interactionSource,
-                indication = ripple(color = MorroColors.TextPrimary),
+                indication = ripple(color = colors.textPrimary),
                 role = Role.RadioButton,
                 onClick = {
-                    // Same confirmation the question cards give: the choice registers in the hand.
                     haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     onSelect()
                 }
@@ -277,21 +562,30 @@ private fun PlanCard(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = plan.name,
-                        color = MorroColors.TextPrimary,
-                        fontFamily = FontFamily.SansSerif,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Medium
+                        style = typo.headlineSmall,
+                        color = colors.textPrimary
                     )
                     if (plan.popular) {
                         Spacer(modifier = Modifier.width(8.dp))
+                        // Honey mark #1: highlighted plan badge
                         Text(
                             text = "Most chosen",
-                            color = MorroColors.Honey,
-                            fontFamily = FontFamily.SansSerif,
-                            fontSize = 11.sp,
+                            style = typo.labelSmall.copy(fontWeight = FontWeight.Medium),
+                            color = colors.honey,
                             modifier = Modifier
-                                .clip(CircleShape)
-                                .background(MorroColors.Honey.copy(alpha = 0.10f))
+                                .clip(shapes.Chip)
+                                .background(colors.honey.copy(alpha = 0.12f))
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
+                    } else if (plan.name == "Pro") {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Save 44%",
+                            style = typo.labelSmall.copy(fontFamily = FontFamily.Monospace),
+                            color = colors.textSecondary,
+                            modifier = Modifier
+                                .clip(shapes.Chip)
+                                .background(colors.surfaceHigh)
                                 .padding(horizontal = 8.dp, vertical = 3.dp)
                         )
                     }
@@ -301,10 +595,8 @@ private fun PlanCard(
 
                 Text(
                     text = plan.blurb,
-                    color = MorroColors.TextSecondary,
-                    fontFamily = FontFamily.SansSerif,
-                    fontSize = 12.sp,
-                    lineHeight = 17.sp
+                    style = typo.bodyMedium.copy(fontSize = 12.sp, lineHeight = 17.sp),
+                    color = colors.textSecondary
                 )
             }
 
@@ -313,42 +605,40 @@ private fun PlanCard(
             Column(horizontalAlignment = Alignment.End) {
                 Text(
                     text = plan.price,
-                    color = MorroColors.TextPrimary,
-                    fontFamily = FontFamily.SansSerif,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Medium
+                    style = typo.headlineSmall.copy(fontFamily = FontFamily.Monospace),
+                    color = colors.textPrimary
                 )
                 Text(
                     text = plan.period,
-                    color = MorroColors.TextTertiary,
-                    fontFamily = FontFamily.SansSerif,
-                    fontSize = 11.sp
+                    style = typo.labelSmall,
+                    color = colors.textTertiary
                 )
             }
 
             Spacer(modifier = Modifier.width(12.dp))
 
+            // Honey mark #2: active selection check indicator
             Box(
                 modifier = Modifier
                     .size(22.dp)
                     .background(
-                        if (selected) MorroColors.Honey.copy(alpha = 0.14f) else MorroColors.SurfaceHigh,
+                        if (selected) colors.honey.copy(alpha = 0.14f) else colors.surfaceHigh,
                         CircleShape
                     ),
                 contentAlignment = Alignment.Center
             ) {
                 androidx.compose.animation.AnimatedVisibility(
                     visible = selected,
-                    enter = fadeIn(tween(140)) + scaleIn(
-                        initialScale = 0.5f,
-                        animationSpec = tween(140, easing = MorroMotion.EnterEasing)
+                    enter = fadeIn(tween(if (reducedMotion) 0 else 140)) + scaleIn(
+                        initialScale = if (reducedMotion) 1f else 0.5f,
+                        animationSpec = tween(if (reducedMotion) 0 else 140, easing = MorroMotion.EnterEasing)
                     ),
-                    exit = fadeOut(tween(100))
+                    exit = fadeOut(tween(if (reducedMotion) 0 else 100))
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Check,
                         contentDescription = null,
-                        tint = MorroColors.Honey,
+                        tint = colors.honey,
                         modifier = Modifier.size(15.dp)
                     )
                 }

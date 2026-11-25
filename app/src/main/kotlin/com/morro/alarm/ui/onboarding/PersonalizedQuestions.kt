@@ -186,8 +186,6 @@ object PersonalizationStorage {
     const val KEY_IDENTITY = "onboarding_identity"
     const val KEY_ENERGY = "onboarding_energy"
     const val KEY_STRUGGLE = "onboarding_struggle"
-    const val KEY_TONE = "onboarding_tone"
-    const val KEY_SLEEP = "onboarding_sleep_goal"
     const val KEY_EXTRA = "onboarding_extra_time"
     const val KEY_TARGET = "onboarding_target"
 
@@ -504,7 +502,6 @@ private fun AnswerCard(
 ) {
     val selected = variant == CardVariant.Selected
     val interactionSource = remember { MutableInteractionSource() }
-    val pressed by interactionSource.collectIsPressedAsState()
     val shape = MorroShapes.Card
     val container by animateColorAsState(
         targetValue = if (selected) MorroColors.SurfaceElevated else MorroColors.SurfaceCard,
@@ -594,7 +591,6 @@ private fun AnswerCard(
 @Composable
 private fun ContinueButton(active: Boolean, onClick: () -> Unit) {
     val interactionSource = remember { MutableInteractionSource() }
-    val pressed by interactionSource.collectIsPressedAsState()
     val fill by animateColorAsState(
         targetValue = if (active) MorroColors.TextPrimary else MorroColors.SurfaceElevated,
         animationSpec = tween(durationMillis = 200),

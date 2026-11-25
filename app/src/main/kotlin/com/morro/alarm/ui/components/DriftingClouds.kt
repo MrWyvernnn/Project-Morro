@@ -9,7 +9,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -114,7 +113,6 @@ private fun DrawScope.drawPuffyCloud(
     flip: Boolean,
 ) {
     val left = center.x - width / 2f
-    val right = center.x + width / 2f
     val baseY = center.y + height * 0.26f
 
     fun px(fraction: Float): Float = left + width * if (flip) (1f - fraction) else fraction

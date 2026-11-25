@@ -1,0 +1,3 @@
+Lichess Puzzle Database
+Source: https://database.lichess.org/#puzzles
+License: Creative Commons CC0 (Public Domain)

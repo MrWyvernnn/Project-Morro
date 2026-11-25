@@ -24,8 +24,12 @@ object MorroMotion {
     const val MoveMillis = 260
     const val ExpanderMillis = 180
     const val PressMillis = 90
+    const val ShakeStepMillis = 40
     const val SuccessPulseMillis = 320
     const val ShimmerMillis = 1_200
+
+    /** Horizontal shake pattern (in dp) for wrong cognitive gate attempts. */
+    val WrongShakeOffsetsDp = floatArrayOf(4f, -4f, 2.5f, -2.5f, 0f)
 
     const val StaggerMillis = 30L
     const val MaxStaggerSteps = 6
