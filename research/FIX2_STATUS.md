@@ -1,0 +1,40 @@
+# FIX2_STATUS — gate audio, theme recolour, contrast, stale APIs
+
+One row per phase. A phase is only "done" when its tests pass; device items are listed in §Device
+and are unverified until the founder runs them.
+
+| Phase | Finding | State | Files touched | Tests | Gaps |
+|---|---|---|---|---|---|
+| 0 | Recon | **done** | `research/FIX2_RECON.md` | — | F3 has no call-site list to fix; it is refuted as described |
+| 1 | F1 restore on exit | pending | — | — | needs the phone |
+| 2 | F2 duck + hard deadline | pending | — | — | needs the phone |
+| 3 | F5 contrast + test | pending | — | — | computed, not seen at 11sp |
+| 4 | F3 recolour pass | pending | — | — | live switch needs the phone |
+| 5 | F4 guarded palette write | pending | — | — | — |
+| 6 | F6 stale APIs | pending | — | — | — |
+| 7 | Scope audit | **done (in recon)** | `research/FIX2_RECON.md` §8 | — | — |
+| 8 | Build + device pass | pending | — | — | needs the phone |
+
+## Decisions
+
+- **F1** is fixed in the controller (`resetImmediate` and `checkWatchdog(false)` emit full volume
+  before clearing, guarded so a never-silenced controller emits nothing), plus a
+  `DisposableEffect(Unit) { onDispose { restoreVolumeUnconditional() } }` in `AlarmScreen` so a
+  gate that exits by exception still restores. The existing `onPause`/`onDestroy` restores stay.
+- **F2** persists `hardRestoreAtMs` and the spent flag in `onSaveInstanceState`, next to the puzzle
+  seed/question, because that is the state that survives rotation and process death. The controller
+  takes them as constructor input plus a `restoreBudget(...)` call, and `startSession()` computes
+  the deadline once (guarded on `0`).
+- **F4** keeps the composition-body publish — moving it to `SideEffect` reintroduces the
+  first-frame Midnight flash — and guards it with
+  `if (MorroColors.currentChoice != choice) MorroColors.use(choice)`. No `Application` subclass was
+  added because none exists and a manifest entry plus a class is a poor trade for a cold-start
+  nicety that the composition-body write already solves.
+- **F3** was refuted by recon: no `remember`-cached, `Animatable`-seeded, or top-level palette
+  values exist. Nothing was changed speculatively.
+- **F5** does not change a hex: Autumn tertiary already measures 5.59:1 on the canvas and 5.02:1 on
+  a card. The stale TODO is replaced with the measured numbers and a named test.
+
+## Device
+
+See §8 of this file once written. Nothing there is claimed as passing.
