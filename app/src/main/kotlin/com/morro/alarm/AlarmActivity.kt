@@ -145,6 +145,15 @@ class AlarmActivity : ComponentActivity() {
     private var wakeLock: PowerManager.WakeLock? = null
 
     /**
+     * True once the activity is on its way out.
+     *
+     * The composition's `onDispose` restore runs after `onDestroy` has already stopped the player.
+     * Without this flag, restoring full volume there would take the "player stopped unexpectedly"
+     * branch in [rampPlayerVolume] and restart the alarm with no screen left to dismiss it.
+     */
+    private var isTearingDown = false
+
+    /**
      * True when this ring is the wake-up check's one re-ring.
      *
      * Read from the intent *and* from prefs: the foreground service's full-screen intent can launch
@@ -338,7 +347,9 @@ class AlarmActivity : ComponentActivity() {
      */
     private fun rampPlayerVolume(target: Float, durationMs: Long) {
         rampJob?.cancel()
-        if (target >= 1.0f && gateState == AlarmGateState.PUZZLE && !AlarmSoundPlayer.isPlaying()) {
+        if (target >= 1.0f && gateState == AlarmGateState.PUZZLE && !isTearingDown &&
+            !AlarmSoundPlayer.isPlaying()
+        ) {
             AlarmSoundPlayer.start(this)
         }
         if (durationMs <= 0L) {
@@ -665,6 +676,7 @@ class AlarmActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        isTearingDown = true
         restoreVolumeUnconditional()
         graceJob?.cancel()
         AlarmSoundPlayer.stop()

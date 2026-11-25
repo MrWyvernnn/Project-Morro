@@ -13,7 +13,7 @@ and are unverified until the founder runs them.
 | 5 | F4 guarded palette write | **done** | `Theme.kt`, `MorroPaletteTest.kt` (+1) | 9 palette tests green | first-frame timing needs the phone |
 | 6 | F6 stale APIs | **done** | `Theme.kt`, `MorroCard.kt`, `design/MORRO_VISUAL_SYSTEM.md`, `design/design.md` | `testDebugUnitTest` green | no behaviour change expected; build only |
 | 7 | Scope audit | **done (in recon)** | `research/FIX2_RECON.md` §8 | — | — |
-| 8 | Build + device pass | pending | — | — | needs the phone |
+| 8 | Build + device pass | **build done, device pending** | — | `assembleDebug` + `testDebugUnitTest` (225 tests) + `lintDebug` (0 errors, 66 warnings) all green | the checklist below is unrun |
 
 ## Decisions
 
@@ -21,6 +21,8 @@ and are unverified until the founder runs them.
   before clearing, guarded so a never-silenced controller emits nothing), plus a
   `DisposableEffect(Unit) { onDispose { restoreVolumeUnconditional() } }` in `AlarmScreen` so a
   gate that exits by exception still restores. The existing `onPause`/`onDestroy` restores stay.
+  `isTearingDown` stops that dispose-time restore from taking the "player stopped unexpectedly"
+  branch in `rampPlayerVolume` and restarting the alarm after `onDestroy` has stopped it.
 - **F2** persists `hardRestoreAtMs` and the spent flag in `onSaveInstanceState`, next to the puzzle
   seed/question, because that is the state that survives rotation and process death. The controller
   takes them as constructor input plus a `restoreBudget(...)` call, and `startSession()` computes
@@ -37,4 +39,94 @@ and are unverified until the founder runs them.
 
 ## Device
 
-See §8 of this file once written. Nothing there is claimed as passing.
+See §8 below. Nothing there is claimed as passing. `adb devices` was empty here.
+
+---
+
+## 7 · Scope audit — result
+
+Reported in `FIX2_RECON.md` §8. Short version:
+
+- No Gradle dependency was added by `e0d1d07` (the commit does not touch `app/build.gradle.kts`).
+- No Room, SQLite, OkHttp, Retrofit or kotlinx.serialization in `puzzle/`.
+- Puzzles are two gzipped CSVs (`mate_in_1.csv.gz` 3,229 B, `mate_in_2.csv.gz` 3,261 B), with a
+  Lichess CC0 `LICENSE.txt` already beside them.
+- `CognitivePrefs.getChallenge()` defaults to **MATH**, so existing users' gates did not change
+  behaviour.
+- `MissionType` still has exactly six values in three alias pairs; `mission/` was untouched.
+
+## 8 · device checklist (nothing here is claimed as passing)
+
+Run on the Nothing Phone. Install with `./gradlew installDebug`.
+
+### A. F2 — the duck is audible and the exploit fails
+
+1. Ring the alarm on the MATH gate (`TEST 5S` in a debug build, or set an alarm 1 min out).
+2. Tap one answer. The alarm must become **noticeably quieter but still audible** — a duck, not
+   silence. Before this pass it went fully silent.
+3. Stop touching the screen. At **15 s** the alarm ramps back to full.
+4. The exploit test: ring again, tap once, then tap one answer roughly every 14 s for 3 minutes.
+   At the **60 s** mark the alarm must jump to full volume and **stay there** while you keep
+   tapping. If it gets quiet again, the deadline is broken.
+5. Rotate the phone once during step 4 (around 30 s). After rotation the alarm may be loud (the
+   pause path restores it), but the 60 s deadline must still be the original one — it must go loud
+   by 60 s from the gate opening, not 60 s after the rotation.
+6. `adb shell dumpsys audio` before and after the whole sequence. `STREAM_ALARM`'s index must be
+   identical. Nothing in this pass may change the system stream.
+
+### B. F1 — every exit is audible
+
+1. Ring, tap so the alarm ducks, then pull the notification shade (or press Home) and come back.
+   On return the alarm must be at full volume.
+2. Ring with the CHESS gate, tap a piece so it ducks, then answer wrongly. The alarm keeps
+   ringing at the ducked level (by design) and still ramps to full after 15 s idle.
+3. Ring, duck, then solve the gate. The commitment memo must play normally and the next
+   `TEST 5S` ring must start at full volume — no residual mute.
+4. Ring, duck, and force-stop the app (`adb shell am force-stop com.morro.alarm`). Reopen and
+   trigger `TEST 5S`: it must ring at full volume. (A new process resets the player volume; this
+   checks there is no persisted mute.)
+
+### C. F3 / F4 — live theme switch and cold start
+
+1. On the dashboard, open Settings and switch **Midnight → Autumn**. The dial arc, the mascot's
+   accent, the sky decoration (clouds → leaves), the dock and any animation caught mid-flight
+   must all recolour **without** leaving the screen. If any surface keeps the old honey colour,
+   note which one — recon found no cached colour site, so that would be new information.
+2. Switch back to Midnight. Same checks.
+3. Force-stop, then cold-start the app while Autumn is stored. The first frame must be Autumn —
+   no one-frame Midnight flash on the splash or dashboard.
+4. Repeat the live switch with the settings sheet open and with the alarm builder open.
+
+### D. F5 — Autumn small text
+
+1. On Autumn, read the 11–12sp metadata: the dashboard's "Problem 1 of 3"-style labels, the
+   settings sheet's helper lines, the alarm builder's captions.
+2. Measured ratios: tertiary 5.59:1 on black, 5.02:1 on a card. Confirm it is comfortably legible
+   at arm's length in a dim room.
+
+### E. F6 — no visible change
+
+1. Tap a card: the focus/press ring still animates in and out. The parameter removed in F6 was
+   never applied, so nothing should look different.
+
+### F. Still outstanding from the previous pass (`0b11e40`)
+
+The locked-boot catch-up ring cannot be verified any other way:
+
+1. Set the alarm ~3 min out. `adb shell dumpsys alarm | findstr /i morro` → one `alarmClock=`.
+2. `adb reboot`. **Do not unlock.** Wait past the trigger +2 min.
+3. Unlock. It must ring **exactly once**, full screen. Then `dumpsys alarm` shows tomorrow armed.
+4. Unlock before the trigger instead: exactly one ring at the set time, no second ring 2 s later.
+
+## 9 · drift found, not fixed
+
+- `AlarmActivity.startGraceCountdown()` counts the 30 s QR/photo grace window with a
+  `delay(1000L)` loop. The project rule prefers `SystemClock.elapsedRealtime()`. It predates this
+  pass, is not one of the six findings, and works; reported, not touched.
+- `textDisabled` is used for active 11sp copy in `AlarmActivity` ("Alarm is sounding at full
+  volume", "Skip (Use yesterday's memo)"). Measured 3.59:1 (Midnight) / 3.73:1 (Autumn) on black.
+  WCAG exempts disabled text, but these two strings are not disabled. F5 scoped the change to
+  `TextTertiary`, so this is reported only.
+- Lint still warns `Wakelock` (released in `onDestroy` rather than `onPause`) and `ObsoleteSdkInt`
+  in `AlarmActivity`. Both predate this pass.
+
