@@ -7,7 +7,7 @@ and are unverified until the founder runs them.
 |---|---|---|---|---|---|
 | 0 | Recon | **done** | `research/FIX2_RECON.md` | — | F3 has no call-site list to fix; it is refuted as described |
 | 1 | F1 restore on exit | **done (build + unit only)** | `GateSilenceController.kt`, `AlarmActivity.kt`, `GateSilenceControllerTest.kt` (+5, 1 rewritten) | 11 gate tests green | the throwing-callback exit needs the phone; no JVM Android runtime |
-| 2 | F2 duck + hard deadline | pending | — | — | needs the phone |
+| 2 | F2 duck + hard deadline | **done (build + unit only)** | `GateSilenceController.kt`, `AlarmActivity.kt`, `GateSilenceControllerTest.kt` (+8) | 19 gate tests green | rotation/process-death persistence is wired through the activity bundle but only the pure restore path is tested |
 | 3 | F5 contrast + test | pending | — | — | computed, not seen at 11sp |
 | 4 | F3 recolour pass | pending | — | — | live switch needs the phone |
 | 5 | F4 guarded palette write | pending | — | — | — |

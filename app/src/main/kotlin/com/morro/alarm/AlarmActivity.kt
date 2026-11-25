@@ -118,7 +118,7 @@ class AlarmActivity : ComponentActivity() {
     private var isRecording by mutableStateOf(false)
     private var recordingCountdown by mutableIntStateOf(15)
 
-    // Audio silencing while actively solving (with 15s inactivity wake-up watchdog)
+    // Audio ducking while actively solving (15s inactivity wake-up watchdog + one hard budget)
     private var duckJob: Job? = null
     private var rampJob: Job? = null
     private val silenceController = GateSilenceController(
@@ -132,6 +132,15 @@ class AlarmActivity : ComponentActivity() {
         const val KEY_PROBLEMS_SOLVED = "problems_solved"
         const val KEY_QUESTION_TEXT = "question_text"
         const val KEY_QUESTION_ANSWER = "question_answer"
+
+        /**
+         * The gate's silence budget travels with the puzzle state.
+         *
+         * A rotation or a process restart must not hand out a fresh 60 seconds; the deadline is an
+         * absolute `elapsedRealtime` value, so restoring it is exact.
+         */
+        const val KEY_GATE_HARD_RESTORE_AT = "gate_hard_restore_at"
+        const val KEY_GATE_BUDGET_SPENT = "gate_budget_spent"
     }
     private var wakeLock: PowerManager.WakeLock? = null
 
@@ -207,6 +216,12 @@ class AlarmActivity : ComponentActivity() {
         // gate, the solved count and the typed answer, sending a half-awake person back to problem
         // 1 of 3. Restore that state and only fall back to a fresh start when there is none.
         val restored = savedInstanceState != null && restoreGateState(savedInstanceState)
+        if (restored) {
+            silenceController.restoreBudget(
+                hardRestoreAt = savedInstanceState!!.getLong(KEY_GATE_HARD_RESTORE_AT, 0L),
+                spent = savedInstanceState!!.getBoolean(KEY_GATE_BUDGET_SPENT, false)
+            )
+        }
         if (!restored) {
             // Pre-generate math problem if in puzzle mode
             nextQuestion()
@@ -229,6 +244,12 @@ class AlarmActivity : ComponentActivity() {
                     AlarmSoundPlayer.setVolume(1.0f)
                 }
             }
+        }
+
+        // One silence budget per gate, started when the puzzle gate opens. On a restore the
+        // deadline came back from the bundle and startSession() leaves it untouched.
+        if (gateState == AlarmGateState.PUZZLE) {
+            silenceController.startSession()
         }
 
         setContent {
@@ -294,7 +315,8 @@ class AlarmActivity : ComponentActivity() {
     }
 
     /**
-     * Silences Morro's player (`0.0f`) on first tap and resets the 15s inactivity watchdog.
+     * Ducks Morro's player to [GateSilenceController.DUCKED_VOLUME] on the first tap and resets
+     * the 15s inactivity watchdog, up to the gate's hard silence budget.
      * Never calls AudioManager.setStreamVolume.
      */
     private fun onGateUserAction() {
@@ -568,6 +590,8 @@ class AlarmActivity : ComponentActivity() {
         super.onSaveInstanceState(outState)
         outState.putString(KEY_GATE_STATE, gateState.name)
         outState.putInt(KEY_PROBLEMS_SOLVED, problemsSolved)
+        outState.putLong(KEY_GATE_HARD_RESTORE_AT, silenceController.hardRestoreAtMs)
+        outState.putBoolean(KEY_GATE_BUDGET_SPENT, silenceController.budgetSpent)
         currentQuestion?.let { question ->
             outState.putString(KEY_QUESTION_TEXT, question.text)
             outState.putInt(KEY_QUESTION_ANSWER, question.answer)

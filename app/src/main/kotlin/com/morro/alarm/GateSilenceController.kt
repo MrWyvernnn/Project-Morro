@@ -10,11 +10,16 @@ package com.morro.alarm
  * [checkWatchdog] therefore restore before they clear, and a controller that was never silenced
  * emits nothing.
  *
+ *  - The duck is a duck, not a mute ([DUCKED_VOLUME]), and the gate has one hard silence budget
+ *    ([MAX_SILENCE_WINDOW_MS]) that input cannot extend.
+ *  - Once that budget is spent the alarm is loud until the gate is solved.
+ *
  * Never touches system audio streams — only drives Morro's own MediaPlayer volume.
  */
 internal class GateSilenceController(
     val inactivityTimeoutMs: Long = 15_000L,
-    val silencedVolume: Float = 0.0f,
+    val maxSilenceWindowMs: Long = MAX_SILENCE_WINDOW_MS,
+    val silencedVolume: Float = DUCKED_VOLUME,
     val fullVolume: Float = 1.0f,
     private val silenceRampMs: Long = 200L,
     private val restoreRampMs: Long = 600L,
@@ -27,7 +32,46 @@ internal class GateSilenceController(
     var lastInputAtMs: Long = 0L
         private set
 
+    /**
+     * Absolute `elapsedRealtime` at which the ducking budget ends, or 0 before [startSession].
+     *
+     * Computed once when the gate opens — not accumulated and not renewed by input — so the alarm
+     * gets loud at this instant no matter how steadily the person taps.
+     */
+    var hardRestoreAtMs: Long = 0L
+        private set
+
+    /** True once the hard deadline has fired. Input cannot duck the alarm again this gate. */
+    var budgetSpent: Boolean = false
+        private set
+
+    /**
+     * Starts the gate's one silence budget.
+     *
+     * Idempotent: a rotation that restores an existing deadline must not refill the window, so the
+     * guard is on the value already being set, not on how many times this is called.
+     */
+    fun startSession() {
+        if (hardRestoreAtMs <= 0L) hardRestoreAtMs = clock() + maxSilenceWindowMs
+    }
+
+    /**
+     * Restores a deadline saved with the gate's state.
+     *
+     * `elapsedRealtime` keeps counting across a process restart (it is time since boot), so an
+     * absolute deadline saved in the activity's bundle is still comparable after process death.
+     */
+    fun restoreBudget(hardRestoreAt: Long, spent: Boolean) {
+        hardRestoreAtMs = hardRestoreAt
+        budgetSpent = spent
+    }
+
     fun onUserAction() {
+        if (budgetSpent) return
+        if (deadlineReached()) {
+            spendBudget()
+            return
+        }
         lastInputAtMs = clock()
         if (!isSilenced) {
             isSilenced = true
@@ -39,6 +83,9 @@ internal class GateSilenceController(
      * Evaluates elapsed idle time while in the puzzle gate.
      * Returns the remaining milliseconds to wait if still silenced, or `null` when
      * the watchdog has restored full volume or the gate is no longer active.
+     *
+     * The wait is capped by the hard deadline as well as by the idle timeout, so the watchdog
+     * wakes at the deadline instead of sleeping past it.
      */
     fun checkWatchdog(isPuzzleActive: Boolean): Long? {
         if (!isPuzzleActive) {
@@ -47,18 +94,37 @@ internal class GateSilenceController(
             restoreVolume(restoreRampMs)
             return null
         }
+        if (deadlineReached()) {
+            spendBudget()
+            return null
+        }
         if (!isSilenced) return null
         val idleMs = (clock() - lastInputAtMs).coerceAtLeast(0L)
         if (idleMs >= inactivityTimeoutMs) {
             restoreVolume(restoreRampMs)
             return null
         }
-        return (inactivityTimeoutMs - idleMs).coerceIn(50L, inactivityTimeoutMs)
+        val idleWait = inactivityTimeoutMs - idleMs
+        val deadlineWait = if (hardRestoreAtMs > 0L) {
+            (hardRestoreAtMs - clock()).coerceAtLeast(0L)
+        } else {
+            idleWait
+        }
+        return minOf(idleWait, deadlineWait).coerceIn(50L, inactivityTimeoutMs)
     }
 
     fun resetImmediate() {
         restoreVolume(0L)
     }
+
+    /** The alarm stops being quiet here, permanently for this gate. */
+    private fun spendBudget() {
+        budgetSpent = true
+        restoreVolume(restoreRampMs)
+    }
+
+    private fun deadlineReached(): Boolean =
+        hardRestoreAtMs > 0L && clock() >= hardRestoreAtMs
 
     /**
      * The one place the flag comes down. Emits first, clears second, and does nothing at all when
@@ -67,5 +133,13 @@ internal class GateSilenceController(
     private fun restoreVolume(durationMs: Long) {
         if (isSilenced) onTargetVolume(fullVolume, durationMs)
         isSilenced = false
+    }
+
+    companion object {
+        /** A duck, not a mute: the user still hears the alarm while solving. */
+        const val DUCKED_VOLUME = 0.30f
+
+        /** Total silence time one gate may spend, however the input arrives. */
+        const val MAX_SILENCE_WINDOW_MS = 60_000L
     }
 }
