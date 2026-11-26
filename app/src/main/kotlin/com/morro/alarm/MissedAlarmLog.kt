@@ -42,6 +42,7 @@ data class AlarmEvent(
     val observedAtMillis: Long,
     val manufacturer: String,
     val model: String,
+    val volumeRatio: Float? = null,
 )
 
 /** A ring later than this counts as late. Under a minute is ordinary scheduling jitter. */
@@ -158,6 +159,7 @@ object MissedAlarmLog {
     private const val KEY_COUNT_V1 = "alarm_log_count"
 
     private const val KEY_LAST_FIRED = "alarm_last_fired_at"
+    private const val KEY_LAST_FIRED_VOLUME_RATIO = "alarm_last_fired_volume_ratio"
     private const val KEY_LAST_COMPLETED = "alarm_last_completed_at"
     private const val KEY_DISMISSED_EXPECTED = "alarm_log_dismissed_expected"
 
@@ -177,6 +179,7 @@ object MissedAlarmLog {
     private const val FIELD_OBSERVED = ".observed"
     private const val FIELD_MANUFACTURER = ".manufacturer"
     private const val FIELD_MODEL = ".model"
+    private const val FIELD_VOLUME_RATIO = ".volume_ratio"
 
     private fun prefs(context: Context): SharedPreferences =
         context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -185,19 +188,31 @@ object MissedAlarmLog {
      * Records that the ring for [expectedAtMillis] started.
      *
      * Called from the broadcast, before anything re-arms. It stores both facts in one write: when
-     * it rang, and which occurrence it was. The occurrence is what makes the catch-up path
-     * idempotent — a second delivery for the same instant can see that this instant already rang.
+     * it rang, which occurrence it was, and the alarm stream volume ratio at fire time.
      */
     fun recordFired(
         context: Context,
         expectedAtMillis: Long?,
         atMillis: Long = System.currentTimeMillis(),
+        volumeRatio: Float? = null,
     ) {
         val editor = prefs(context).edit().putLong(KEY_LAST_FIRED, atMillis)
         if (expectedAtMillis != null) {
             editor.putLong(KEY_HANDLED_OCCURRENCE, expectedAtMillis)
         }
+        if (volumeRatio != null) {
+            editor.putFloat(KEY_LAST_FIRED_VOLUME_RATIO, volumeRatio.coerceIn(0f, 1f))
+        } else {
+            editor.remove(KEY_LAST_FIRED_VOLUME_RATIO)
+        }
         editor.apply()
+    }
+
+    /** Alarm stream volume ratio (0.0..1.0) at the most recent ring, or null if unknown. */
+    fun lastFiredVolumeRatio(context: Context): Float? {
+        val prefs = prefs(context)
+        if (!prefs.contains(KEY_LAST_FIRED_VOLUME_RATIO)) return null
+        return prefs.getFloat(KEY_LAST_FIRED_VOLUME_RATIO, -1f).takeIf { it >= 0f }
     }
 
     /** When something last rang, or 0 when nothing ever has. */
@@ -246,6 +261,7 @@ object MissedAlarmLog {
         context: Context,
         expectedAtMillis: Long,
         observedAtMillis: Long = System.currentTimeMillis(),
+        volumeRatio: Float? = null,
     ) {
         record(
             context,
@@ -255,6 +271,7 @@ object MissedAlarmLog {
                 observedAtMillis = observedAtMillis,
                 manufacturer = Build.MANUFACTURER.orEmpty(),
                 model = Build.MODEL.orEmpty(),
+                volumeRatio = volumeRatio?.coerceIn(0f, 1f),
             )
         )
     }
@@ -359,6 +376,11 @@ object MissedAlarmLog {
         editor.putLong(slot + FIELD_OBSERVED, entry.observedAtMillis)
         editor.putString(slot + FIELD_MANUFACTURER, entry.manufacturer)
         editor.putString(slot + FIELD_MODEL, entry.model)
+        if (entry.volumeRatio != null) {
+            editor.putFloat(slot + FIELD_VOLUME_RATIO, entry.volumeRatio.coerceIn(0f, 1f))
+        } else {
+            editor.remove(slot + FIELD_VOLUME_RATIO)
+        }
     }
 
     /**
@@ -413,6 +435,11 @@ object MissedAlarmLog {
             observedAtMillis = prefs.getLong(slot + FIELD_OBSERVED, 0L),
             manufacturer = prefs.getString(slot + FIELD_MANUFACTURER, "").orEmpty(),
             model = prefs.getString(slot + FIELD_MODEL, "").orEmpty(),
+            volumeRatio = if (prefs.contains(slot + FIELD_VOLUME_RATIO)) {
+                prefs.getFloat(slot + FIELD_VOLUME_RATIO, -1f).takeIf { it >= 0f }
+            } else {
+                null
+            },
         )
     }
 
@@ -427,6 +454,7 @@ object MissedAlarmLog {
                 editor.remove(slot + FIELD_OBSERVED)
                 editor.remove(slot + FIELD_MANUFACTURER)
                 editor.remove(slot + FIELD_MODEL)
+                editor.remove(slot + FIELD_VOLUME_RATIO)
             }
         }
         editor.remove(KEY_HEAD_V2)
@@ -434,6 +462,7 @@ object MissedAlarmLog {
         editor.remove(KEY_COUNT_V1)
         editor.remove(KEY_DISMISSED_EXPECTED)
         editor.remove(KEY_HANDLED_OCCURRENCE)
+        editor.remove(KEY_LAST_FIRED_VOLUME_RATIO)
         editor.apply()
     }
 }

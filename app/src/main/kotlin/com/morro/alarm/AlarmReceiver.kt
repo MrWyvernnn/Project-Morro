@@ -60,9 +60,10 @@ class AlarmReceiver : BroadcastReceiver() {
                 return
             }
 
-            MissedAlarmLog.recordFired(context, expected, now)
+            val volumeRatio = AlarmVolumeGuard.readAlarmVolume(context).ratio
+            MissedAlarmLog.recordFired(context, expected, now, volumeRatio)
             if (expected != null && lateFireFor(expected, now) != null) {
-                MissedAlarmLog.recordLateFire(context, expected, now)
+                MissedAlarmLog.recordLateFire(context, expected, now, volumeRatio)
             }
         }
 

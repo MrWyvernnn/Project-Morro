@@ -1,5 +1,6 @@
 package com.morro.alarm.ui.components
 
+import com.morro.alarm.AlarmVolumeGuard
 import android.Manifest
 import android.app.TimePickerDialog
 import android.content.Context
@@ -8,27 +9,41 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.StartOffset
 import androidx.compose.animation.core.animate
-import androidx.compose.animation.expandVertically
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.core.StartOffset
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -36,13 +51,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -52,11 +70,13 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
@@ -65,29 +85,36 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.morro.alarm.MemoPlayer
@@ -98,16 +125,25 @@ import com.morro.alarm.mission.MissionType
 import com.morro.alarm.mission.PhotoTargetPool
 import com.morro.alarm.ui.motion.MorroMotion
 import com.morro.alarm.ui.motion.pressScale
-import com.morro.alarm.ui.motion.staggeredReveal
 import com.morro.alarm.ui.motion.rememberReducedMotion
+import com.morro.alarm.ui.motion.staggeredReveal
+import com.morro.alarm.ui.puzzle.CognitiveChallenge
+import com.morro.alarm.ui.puzzle.CognitiveDifficulty
+import com.morro.alarm.ui.puzzle.CognitivePrefs
 import com.morro.alarm.ui.theme.MorroSpring
 import com.morro.alarm.ui.theme.morroColors
+import com.morro.alarm.ui.theme.morroGlassBorder
 import com.morro.alarm.ui.theme.morroHairline
 import com.morro.alarm.ui.theme.morroShapes
 import com.morro.alarm.ui.theme.morroTypography
+import java.util.Calendar
 import java.util.Locale
+import kotlin.math.abs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.launch
 
 // ─── Voice Commitment States ─────────────────────────────────────────────────
@@ -117,21 +153,18 @@ enum class VoiceState {
     RECORDED_READY
 }
 
+private enum class MissionGroup {
+    VOICE, QR, PHOTO
+}
+
+private fun MissionType.toGroup(): MissionGroup = when (this) {
+    MissionType.VOICE_COMMITMENT, MissionType.VOICE_MEMO -> MissionGroup.VOICE
+    MissionType.QR_CODE, MissionType.QR_BARCODE -> MissionGroup.QR
+    MissionType.PHOTO_MISSION, MissionType.PHOTO_OBJECT -> MissionGroup.PHOTO
+}
+
 /**
- * AlarmBuilderSheet — the full-width sheet that holds alarm setup.
- *
- * What it actually does, so this comment stops describing a design that no longer exists:
- * - Full width, anchored to the bottom edge, 92% of screen height. It is not a FAB-anchored card.
- * - Opaque `surface` background with a hairline border and the 24dp top-sheet radius. No alpha,
- *   no blur: the dashboard behind it is covered, not seen through.
- * - Enter is a 240ms tween from 0.95 scale and 40dp below its final position, easing out; exit is
- *   the same motion at 80% of that duration, easing in. No spring, no overshoot.
- * - The drag handle is the only drag target, so pulling it cannot fight the sheet's inner scroll.
- *   Pulling down past half the dismiss distance closes the sheet; pulling up is rubber-banded.
- *
- * @param isVisible controls sheet visibility
- * @param onDismiss called when user taps backdrop or dismisses
- * @param content sheet content slot
+ * AlarmBuilderSheet — bottom sheet housing wake-up time and mission setup.
  */
 @Composable
 fun AlarmBuilderSheet(
@@ -142,8 +175,6 @@ fun AlarmBuilderSheet(
     val colors = morroColors()
     val shapes = morroShapes()
 
-    // Enter eases out from a 0.95 scale, exit runs at 80% of that duration back to 0.95. The sheet
-    // stays composed until its exit finishes, so dismissing does not cut the animation off.
     val appear = remember { Animatable(0f) }
     val reduced = rememberReducedMotion()
     LaunchedEffect(isVisible) {
@@ -162,7 +193,6 @@ fun AlarmBuilderSheet(
     val progress = appear.value
     if (!isVisible && progress == 0f) return
 
-    // The handle is the only drag target, so it cannot fight the sheet's inner scroll.
     var dragOffset by remember { mutableFloatStateOf(0f) }
     val scope = rememberCoroutineScope()
     val dismissAt = with(LocalDensity.current) { 120.dp.toPx() }
@@ -172,12 +202,15 @@ fun AlarmBuilderSheet(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // Scrim at 88% black: the dashboard clock and dock never read through the sheet.
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.88f * progress))
-                .clickable(onClick = onDismiss)
+                .background(Color.Black.copy(alpha = 0.62f * progress))
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onDismiss
+                )
         )
 
         Column(
@@ -194,20 +227,18 @@ fun AlarmBuilderSheet(
                     translationY = (1f - progress) * 40f * density + dragOffset
                 }
                 .clip(shapes.Sheet)
-                .background(colors.surface)
-                .border(1.dp, colors.borderSubtle, shapes.Sheet)
+                .background(colors.surface.copy(alpha = 0.90f))
+                .morroGlassBorder(radius = 24.dp, topAlpha = 0.24f, bottomAlpha = 0.04f)
                 .navigationBarsPadding()
                 .imePadding()
         ) {
-            // Drag handle: a single 40dp line that stretches to 112% while pulled, the way a
-            // physical knob deforms under a finger. It is the sheet's only drag target.
+            // Drag handle
             Box(
                 modifier = Modifier
-                    .padding(top = 10.dp, bottom = 14.dp)
+                    .padding(top = 10.dp, bottom = 10.dp)
                     .align(Alignment.CenterHorizontally)
                     .width(40.dp)
                     .height(4.dp)
-                    // Stretch is applied in the draw phase so a drag does not recompose the sheet.
                     .graphicsLayer {
                         scaleX = 1f + 0.12f * (dragOffset / dismissAt).coerceIn(0f, 1f)
                     }
@@ -222,7 +253,6 @@ fun AlarmBuilderSheet(
                             onDragCancel = { scope.settleDrag(dragOffset) { dragOffset = it } }
                         ) { _, delta ->
                             val raw = dragOffset + delta
-                            // Pulling past the top is resisted, never blocked.
                             dragOffset = if (raw < 0f) {
                                 MorroMotion.rubberBand(raw, dismissAt * 4f)
                             } else {
@@ -238,12 +268,13 @@ fun AlarmBuilderSheet(
         }
     }
 }
+
 /**
- * AlarmBuilderSheetContent — the alarm setup, in one scroll.
- *
- * Order is the order you think in: title, the time at display size (the whole card opens the system
- * picker), then the mission list, then one filled action. Selected mission rows take a 35% border
- * and a honey check; nothing glows.
+ * AlarmBuilderSheetContent — streamlined, bento-grouped alarm & mission setup:
+ *  1. Header with animated live countdown ("Rings in 7h 15m")
+ *  2. Inline snapping dual-wheel time picker + quick time presets (no jarring system popup required)
+ *  3. 3-tile bento mission bar + morphing detail card
+ *  4. Pinned bottom Save & arm button
  */
 @Composable
 fun AlarmBuilderSheetContent(
@@ -253,6 +284,8 @@ fun AlarmBuilderSheetContent(
     initialMinute: Int = 0
 ) {
     val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current
+    val reducedMotion = rememberReducedMotion()
 
     // ── Time state ────────────────────────────────────────────────────────────
     var selectedHour by rememberSaveable { mutableStateOf(initialHour) }
@@ -260,6 +293,7 @@ fun AlarmBuilderSheetContent(
 
     // ── Mission selection ─────────────────────────────────────────────────────
     var selectedMission by remember { mutableStateOf(MissionPrefs.getMissionType(context)) }
+    val activeGroup = selectedMission.toGroup()
 
     // ── QR code ───────────────────────────────────────────────────────────────
     var qrCodeValue by remember { mutableStateOf(MissionPrefs.getQrCode(context)) }
@@ -275,10 +309,6 @@ fun AlarmBuilderSheetContent(
     var isPlayingPreview by remember { mutableStateOf(false) }
     val hasSaved = remember { mutableStateOf(MemoStorage.hasSavedMemo(context)) }
 
-    // The native 15 s cap callback, the countdown ticker and the Stop button can all end the same
-    // clip. voiceState is the guard: only the first caller reaches RECORDED_READY and promotes the
-    // file, so a late caller cannot re-save, find nothing to move, and flip "promise ready" back
-    // to unsaved. Whether the clip is real comes from the file on disk, via saveMemo().
     val finishRecording = {
         if (voiceState == VoiceState.RECORDING) {
             voiceState = VoiceState.RECORDED_READY
@@ -287,7 +317,6 @@ fun AlarmBuilderSheetContent(
         }
     }
 
-    // ── Permission launcher ───────────────────────────────────────────────────
     val audioPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
@@ -310,7 +339,6 @@ fun AlarmBuilderSheetContent(
         }
     }
 
-    // ── Recording countdown tick (Drift-Free Monotonic Countdown) ───────────
     LaunchedEffect(voiceState) {
         if (voiceState == VoiceState.RECORDING) {
             recordingCountdown = 15
@@ -328,7 +356,6 @@ fun AlarmBuilderSheetContent(
         }
     }
 
-    // ── Build time string for voice prompt ───────────────────────────────────
     val wakeTimeStr = remember(selectedHour, selectedMinute) {
         val ampm = if (selectedHour >= 12) "PM" else "AM"
         val displayHour = when {
@@ -347,6 +374,10 @@ fun AlarmBuilderSheetContent(
             ?: "mission"
     }
 
+    val countdownText = remember(selectedHour, selectedMinute) {
+        formatTimeUntil(selectedHour, selectedMinute)
+    }
+
     DisposableEffect(Unit) {
         onDispose {
             MemoPlayer.stopPlayback()
@@ -358,32 +389,50 @@ fun AlarmBuilderSheetContent(
     val typo = morroTypography()
     val shapes = morroShapes()
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 24.dp)
-            .verticalScroll(rememberScrollState())
-    ) {
-        // ── Header: what this sheet does, and the way out ──
+    Column(modifier = Modifier.fillMaxSize()) {
+        // ── Top Header (pinned above scroll) ─────────────────────────────────
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 24.dp, end = 14.dp, bottom = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "Wake-up",
                     style = typo.headlineLarge,
                     color = colors.textPrimary
                 )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Set the time and how you want to wake.",
-                    style = typo.bodyMedium,
-                    color = colors.textSecondary
-                )
+                Spacer(modifier = Modifier.height(2.dp))
+                AnimatedContent(
+                    targetState = countdownText,
+                    transitionSpec = {
+                        if (reducedMotion) {
+                            fadeIn(tween(0)) togetherWith fadeOut(tween(0))
+                        } else {
+                            (fadeIn(tween(180, easing = MorroMotion.EnterEasing)) +
+                                slideInVertically(tween(180, easing = MorroMotion.EnterEasing)) { it / 3 })
+                                .togetherWith(
+                                    fadeOut(tween(120, easing = MorroMotion.ExitEasing)) +
+                                        slideOutVertically(tween(120, easing = MorroMotion.ExitEasing)) { -it / 3 }
+                                )
+                        }
+                    },
+                    label = "countdown"
+                ) { text ->
+                    Text(
+                        text = text,
+                        style = typo.bodyMedium,
+                        color = colors.honey
+                    )
+                }
             }
-            IconButton(onClick = onDismiss) {
+
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier.size(48.dp)
+            ) {
                 Icon(
                     imageVector = Icons.Filled.Close,
                     contentDescription = "Close",
@@ -393,244 +442,514 @@ fun AlarmBuilderSheetContent(
             }
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
-
-        // ── Section 1: Wake-Up Time Card ──
-        Text(
-            text = "Time",
-            style = typo.labelLarge,
-            color = colors.textTertiary,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 10.dp)
-        )
-
-        // Huge digital time display, tap to adjust
-        TimePickerCard(
-            selectedHour = selectedHour,
-            selectedMinute = selectedMinute,
-            onTimeChange = { hour, minute ->
-                selectedHour = hour
-                selectedMinute = minute
-            }
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // ── Section 2: Mission Selector ──
-        Text(
-            text = "Mission",
-            style = typo.labelLarge,
-            color = colors.textTertiary,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 10.dp)
-        )
-
-        // One row per mission, stacked with a single gap so the list reads as one block.
+        // ── Scrollable Body ──────────────────────────────────────────────────
         Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp, vertical = 8.dp)
         ) {
-            // 1. Voice Commitment (with record button and yellow checkmark active state)
-            MorroOptionChip(
-                title = "Voice Commitment",
-                // The mission is the promise, but three sums open the ring first. Saying so here is
-                // the one place a person learns that before the alarm ever goes off.
-                subtitle = "A math puzzle, then your voice promise",
-                staggerIndex = 0,
-                icon = Icons.Filled.Mic,
-                isSelected = selectedMission == MissionType.VOICE_COMMITMENT || selectedMission == MissionType.VOICE_MEMO,
-                onSelect = { selectedMission = MissionType.VOICE_COMMITMENT },
-                showExpanded = selectedMission == MissionType.VOICE_COMMITMENT || selectedMission == MissionType.VOICE_MEMO,
-                expandedContent = {
-                    VoiceExpandedContent(
-                        voiceState = voiceState,
-                        recordingCountdown = recordingCountdown,
-                        isPlayingPreview = isPlayingPreview,
-                        hasSaved = hasSaved,
-                        wakeTimeStr = wakeTimeStr,
-                        missionTargetName = missionTargetName,
-                        onRecord = { audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO) },
-                        onStop = finishRecording,
-                        // Preview and re-record are owned here: the playing flag and the voice
-                        // state machine live in this composable, so a caller-supplied no-op left
-                        // both buttons dead.
-                        onPreview = {
-                            val memoPath = MemoStorage.getLatestMemoPath(context)
-                            if (memoPath == null) {
-                                Toast.makeText(context, "No saved voice promise yet.", Toast.LENGTH_SHORT).show()
-                            } else {
-                                isPlayingPreview = true
-                                MemoPlayer.startPlayback(
-                                    context = context,
-                                    filePath = memoPath,
-                                    onCompletion = { isPlayingPreview = false },
-                                    onError = { isPlayingPreview = false }
-                                )
-                            }
-                        },
-                        onRerecord = {
-                            MemoPlayer.stopPlayback()
-                            isPlayingPreview = false
-                            // Recording again overwrites temp_memo.m4a and re-promotes it on stop.
-                            hasSaved.value = false
-                            voiceState = VoiceState.IDLE
+            // 1. Tactile Inline Time Wheel Bento Card
+            TimeWheelCard(
+                selectedHour = selectedHour,
+                selectedMinute = selectedMinute,
+                onTimeChange = { hour, minute ->
+                    selectedHour = hour
+                    selectedMinute = minute
+                }
+            )
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // 2. Mission Bento Header
+            Text(
+                text = "Mission",
+                style = typo.labelLarge,
+                color = colors.textTertiary,
+                modifier = Modifier.padding(bottom = 10.dp)
+            )
+
+            // 3. 3-Tile Compact Bento Mission Bar
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .staggeredReveal(0),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                MissionBentoTile(
+                    label = "Voice",
+                    icon = Icons.Filled.Mic,
+                    selected = activeGroup == MissionGroup.VOICE,
+                    onClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        selectedMission = MissionType.VOICE_COMMITMENT
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+                MissionBentoTile(
+                    label = "QR scan",
+                    icon = Icons.Filled.QrCodeScanner,
+                    selected = activeGroup == MissionGroup.QR,
+                    onClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        selectedMission = MissionType.QR_CODE
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+                MissionBentoTile(
+                    label = "Photo",
+                    icon = Icons.Filled.PhotoCamera,
+                    selected = activeGroup == MissionGroup.PHOTO,
+                    onClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        selectedMission = MissionType.PHOTO_MISSION
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // 4. Unified Morphing Glass Detail Card
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .staggeredReveal(1)
+                    .clip(shapes.Card)
+                    .background(colors.surfaceCard.copy(alpha = 0.80f))
+                    .morroGlassBorder(radius = 16.dp, topAlpha = 0.18f, bottomAlpha = 0.04f)
+                    .animateContentSize(
+                        animationSpec = if (reducedMotion) {
+                            tween(0)
+                        } else {
+                            spring(dampingRatio = 1f, stiffness = 322f)
                         }
                     )
-                }
-            )
+                    .padding(18.dp)
+            ) {
+                AnimatedContent(
+                    targetState = activeGroup,
+                    transitionSpec = {
+                        if (reducedMotion) {
+                            fadeIn(tween(0)) togetherWith fadeOut(tween(0))
+                        } else {
+                            (fadeIn(tween(MorroMotion.EnterMillis, easing = MorroMotion.EnterEasing)) +
+                                slideInVertically(tween(MorroMotion.EnterMillis, easing = MorroMotion.EnterEasing)) { 18 })
+                                .togetherWith(
+                                    fadeOut(tween(MorroMotion.exitMillis(MorroMotion.EnterMillis), easing = MorroMotion.ExitEasing))
+                                )
+                        }
+                    },
+                    label = "missionDetail"
+                ) { group ->
+                    when (group) {
+                        MissionGroup.VOICE -> VoiceExpandedContent(
+                            voiceState = voiceState,
+                            recordingCountdown = recordingCountdown,
+                            isPlayingPreview = isPlayingPreview,
+                            hasSaved = hasSaved,
+                            wakeTimeStr = wakeTimeStr,
+                            missionTargetName = missionTargetName,
+                            onRecord = { audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO) },
+                            onStop = finishRecording,
+                            onPreview = {
+                                val memoPath = MemoStorage.getLatestMemoPath(context)
+                                if (memoPath == null) {
+                                    Toast.makeText(context, "No saved voice promise yet.", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    isPlayingPreview = true
+                                    MemoPlayer.startPlayback(
+                                        context = context,
+                                        filePath = memoPath,
+                                        onCompletion = { isPlayingPreview = false },
+                                        onError = { isPlayingPreview = false }
+                                    )
+                                }
+                            },
+                            onRerecord = {
+                                MemoPlayer.stopPlayback()
+                                isPlayingPreview = false
+                                hasSaved.value = false
+                                voiceState = VoiceState.IDLE
+                            }
+                        )
 
-            // 2. QR / Barcode Scan
-            MorroOptionChip(
-                title = "QR / Barcode Scan",
-                subtitle = "Scan a code you keep by the bed",
-                staggerIndex = 1,
-                icon = Icons.Filled.QrCodeScanner,
-                isSelected = selectedMission == MissionType.QR_CODE || selectedMission == MissionType.QR_BARCODE,
-                onSelect = { selectedMission = MissionType.QR_CODE },
-                showExpanded = selectedMission == MissionType.QR_CODE || selectedMission == MissionType.QR_BARCODE,
-                expandedContent = {
-                    QrExpandedContent(
-                        qrCodeValue = qrCodeValue,
-                        showQrDialog = showQrDialog,
-                        onQrDialogChange = { showQrDialog = it },
-                        onQrCodeChange = { qrCodeValue = it }
-                    )
-                }
-            )
+                        MissionGroup.QR -> QrExpandedContent(
+                            qrCodeValue = qrCodeValue,
+                            showQrDialog = showQrDialog,
+                            onQrDialogChange = { showQrDialog = it },
+                            onQrCodeChange = { qrCodeValue = it }
+                        )
 
-            // 3. Object Photo Hunt
-            MorroOptionChip(
-                title = "Object Photo Hunt",
-                subtitle = "Morro picks one object from your pool",
-                staggerIndex = 2,
-                icon = Icons.Filled.PhotoCamera,
-                isSelected = selectedMission == MissionType.PHOTO_MISSION || selectedMission == MissionType.PHOTO_OBJECT,
-                onSelect = { selectedMission = MissionType.PHOTO_MISSION },
-                showExpanded = selectedMission == MissionType.PHOTO_MISSION || selectedMission == MissionType.PHOTO_OBJECT,
-                expandedContent = {
-                    PhotoExpandedContent(
-                        selectedPhotoItems = selectedPhotoItems,
-                        showPhotoSheet = showPhotoSheet,
-                        onPhotoSheetChange = { showPhotoSheet = it },
-                        onPhotoItemsChange = { selectedPhotoItems = it }
-                    )
+                        MissionGroup.PHOTO -> PhotoExpandedContent(
+                            selectedPhotoItems = selectedPhotoItems,
+                            showPhotoSheet = showPhotoSheet,
+                            onPhotoSheetChange = { showPhotoSheet = it },
+                            onPhotoItemsChange = { selectedPhotoItems = it }
+                        )
+                    }
                 }
-            )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // ── Bottom CTA: Save & Arm Alarm ──
-        MorroPrimaryButton(
-            text = "Save and arm",
-            onClick = {
-                val needsVoiceRecording = selectedMission == MissionType.VOICE_COMMITMENT ||
+        // ── Pinned Bottom Action Bar ─────────────────────────────────────────
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(colors.surface)
+        ) {
+            HorizontalDivider(thickness = 1.dp, color = colors.borderSubtle)
+            val formattedTime = remember(selectedHour, selectedMinute) {
+                String.format(Locale.getDefault(), "%02d:%02d", selectedHour, selectedMinute)
+            }
+            MorroPrimaryButton(
+                text = "Save and arm • $formattedTime",
+                onClick = {
+                    val needsVoiceRecording = selectedMission == MissionType.VOICE_COMMITMENT ||
                         selectedMission == MissionType.VOICE_MEMO
 
-                if (needsVoiceRecording && !MemoStorage.hasSavedMemo(context)) {
-                    Toast
-                        .makeText(
+                    if (needsVoiceRecording && !MemoStorage.hasSavedMemo(context)) {
+                        Toast.makeText(
                             context,
                             "Please record your 15-second voice promise first",
                             Toast.LENGTH_LONG
-                        )
-                        .show()
-                    selectedMission = MissionType.VOICE_COMMITMENT
-                    voiceState = VoiceState.IDLE
-                    return@MorroPrimaryButton
-                }
+                        ).show()
+                        selectedMission = MissionType.VOICE_COMMITMENT
+                        voiceState = VoiceState.IDLE
+                        return@MorroPrimaryButton
+                    }
 
-                // Persisting happens here, on "Save and arm", not in the QR/photo sub-dialogs:
-                // those used to write a mission and a pool the person could still cancel.
-                onSave(selectedHour, selectedMinute, selectedMission, qrCodeValue.trim(), selectedPhotoItems)
-            },
-            modifier = Modifier.fillMaxWidth()
-        )
+                    val volumeSnapshot = AlarmVolumeGuard.readAlarmVolume(context)
+                    if (volumeSnapshot.tooQuiet) {
+                        Toast.makeText(
+                            context,
+                            "Alarm volume is low (${volumeSnapshot.volume}/${volumeSnapshot.max}). Turn it up so you don't sleep through it.",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
 
-        Spacer(modifier = Modifier.height(24.dp))
+                    onSave(selectedHour, selectedMinute, selectedMission, qrCodeValue.trim(), selectedPhotoItems)
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 16.dp)
+            )
+        }
     }
 }
 
 /**
- * TimePickerCard — one bento card: the wake-up time at display scale and a pill that says what to
- * do with it. Tapping anywhere on the card opens the system time picker.
+ * TimeWheelCard — inline dual snapping drum picker + quick time presets.
+ *
+ * Keeps time selection inside Morro's own dark monochrome aesthetic with haptic ticks per step,
+ * draw-phase depth scaling, and smooth wheel glides when tapping a quick preset.
+ * Tapping the center time readout also opens the system picker as an optional shortcut.
  */
 @Composable
-private fun TimePickerCard(
+private fun TimeWheelCard(
     selectedHour: Int,
     selectedMinute: Int,
     onTimeChange: (Int, Int) -> Unit
 ) {
     val colors = morroColors()
-    val typo = morroTypography()
     val shapes = morroShapes()
     val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current
+    val scope = rememberCoroutineScope()
+    val reducedMotion = rememberReducedMotion()
 
-    // Every change of time lands with a small spring, so the numbers feel set rather than typed.
-    val pop = remember { Animatable(1f) }
-    LaunchedEffect(selectedHour, selectedMinute) {
-        pop.snapTo(0.97f)
-        pop.animateTo(1f, MorroSpring.FloatSpringPlayful)
+    // Gentle breathing opacity on the center separator colon
+    val colonTransition = rememberInfiniteTransition(label = "colonPulse")
+    val colonAlpha by colonTransition.animateFloat(
+        initialValue = 0.45f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1_200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "colonAlpha"
+    )
+
+    // Use a large centered virtual range so 23->00 and 59->00 wrap infinitely without hitting stops
+    val hourBase = 12_000
+    val minuteBase = 30_000
+    val hourState = rememberLazyListState(initialFirstVisibleItemIndex = hourBase + selectedHour)
+    val minuteState = rememberLazyListState(initialFirstVisibleItemIndex = minuteBase + selectedMinute)
+
+    // Track wheel snaps and emit haptic ticks when user scrubs
+    var syncingFromPreset by remember { mutableStateOf(false) }
+
+    LaunchedEffect(hourState) {
+        snapshotFlow {
+            val layout = hourState.layoutInfo
+            val center = (layout.viewportStartOffset + layout.viewportEndOffset) / 2
+            layout.visibleItemsInfo.minByOrNull { abs((it.offset + it.size / 2) - center) }?.index
+        }
+            .mapNotNull { it }
+            .distinctUntilChanged()
+            .drop(1)
+            .collect { centeredIdx ->
+                val newHour = ((centeredIdx % 24) + 24) % 24
+                if (newHour != selectedHour && !syncingFromPreset) {
+                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onTimeChange(newHour, selectedMinute)
+                }
+            }
+    }
+
+    LaunchedEffect(minuteState) {
+        snapshotFlow {
+            val layout = minuteState.layoutInfo
+            val center = (layout.viewportStartOffset + layout.viewportEndOffset) / 2
+            layout.visibleItemsInfo.minByOrNull { abs((it.offset + it.size / 2) - center) }?.index
+        }
+            .mapNotNull { it }
+            .distinctUntilChanged()
+            .drop(1)
+            .collect { centeredIdx ->
+                val newMinute = ((centeredIdx % 60) + 60) % 60
+                if (newMinute != selectedMinute && !syncingFromPreset) {
+                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onTimeChange(selectedHour, newMinute)
+                }
+            }
+    }
+
+    fun glideWheelsTo(targetHour: Int, targetMinute: Int) {
+        onTimeChange(targetHour, targetMinute)
+        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        scope.launch {
+            syncingFromPreset = true
+            try {
+                // Find nearest matching wrap index so the wheel takes the shortest path
+                val currHIdx = hourState.firstVisibleItemIndex
+                val currHMod = ((currHIdx % 24) + 24) % 24
+                var diffH = targetHour - currHMod
+                if (diffH > 12) diffH -= 24 else if (diffH < -12) diffH += 24
+                val destH = currHIdx + diffH
+
+                val currMIdx = minuteState.firstVisibleItemIndex
+                val currMMod = ((currMIdx % 60) + 60) % 60
+                var diffM = targetMinute - currMMod
+                if (diffM > 30) diffM -= 60 else if (diffM < -30) diffM += 60
+                val destM = currMIdx + diffM
+
+                launch {
+                    if (reducedMotion) hourState.scrollToItem(destH)
+                    else hourState.animateScrollToItem(destH)
+                }
+                launch {
+                    if (reducedMotion) minuteState.scrollToItem(destM)
+                    else minuteState.animateScrollToItem(destM)
+                }
+            } finally {
+                delay(280L)
+                syncingFromPreset = false
+            }
+        }
     }
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(shapes.Card)
-            .background(colors.surfaceCard)
-            .morroHairline(radius = 16.dp)
-            .clickable {
-                TimePickerDialog(
-                    context,
-                    { _, hourOfDay, minute -> onTimeChange(hourOfDay, minute) },
-                    selectedHour,
-                    selectedMinute,
-                    true
-                ).show()
-            }
-            .padding(vertical = 26.dp, horizontal = 20.dp),
+            .background(colors.surfaceCard.copy(alpha = 0.80f))
+            .morroGlassBorder(radius = 16.dp, topAlpha = 0.22f, bottomAlpha = 0.04f)
+            .padding(horizontal = 16.dp, vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(
-            text = String.format(Locale.getDefault(), "%02d:%02d", selectedHour, selectedMinute),
-            style = typo.displayHero.copy(fontSize = 60.sp, lineHeight = 64.sp),
-            color = colors.textPrimary,
-            modifier = Modifier.graphicsLayer {
-                scaleX = pop.value
-                scaleY = pop.value
-            }
-        )
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                imageVector = Icons.Filled.Schedule,
-                contentDescription = null,
-                tint = colors.textTertiary,
-                modifier = Modifier.size(13.dp)
+        // Dual Drum Wheel Area
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(144.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            // Centered Smoked Glass Selection Lens
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(0.76f)
+                    .height(50.dp)
+                    .clip(shapes.Button)
+                    .background(colors.surfaceElevated.copy(alpha = 0.86f))
+                    .morroGlassBorder(radius = 12.dp, topAlpha = 0.30f, bottomAlpha = 0.08f, tint = colors.honey)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) {
+                        TimePickerDialog(
+                            context,
+                            { _, h, m -> glideWheelsTo(h, m) },
+                            selectedHour,
+                            selectedMinute,
+                            true
+                        ).show()
+                    }
             )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = "Tap to change",
-                color = colors.textTertiary,
-                fontSize = 12.sp
+
+            Row(
+                modifier = Modifier.fillMaxSize(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                WheelDrum(
+                    state = hourState,
+                    modulo = 24,
+                    totalItems = 24_000,
+                    onTapItem = { idx ->
+                        val targetH = ((idx % 24) + 24) % 24
+                        onTimeChange(targetH, selectedMinute)
+                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        scope.launch {
+                            syncingFromPreset = true
+                            if (reducedMotion) hourState.scrollToItem(idx)
+                            else hourState.animateScrollToItem(idx)
+                            delay(220L)
+                            syncingFromPreset = false
+                        }
+                    },
+                    modifier = Modifier.width(88.dp)
+                )
+
+                Text(
+                    text = ":",
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 36.sp,
+                    color = colors.honey,
+                    modifier = Modifier
+                        .padding(horizontal = 6.dp)
+                        .graphicsLayer {
+                            alpha = if (reducedMotion) 0.9f else colonAlpha
+                        }
+                )
+
+                WheelDrum(
+                    state = minuteState,
+                    modulo = 60,
+                    totalItems = 60_000,
+                    onTapItem = { idx ->
+                        val targetM = ((idx % 60) + 60) % 60
+                        onTimeChange(selectedHour, targetM)
+                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        scope.launch {
+                            syncingFromPreset = true
+                            if (reducedMotion) minuteState.scrollToItem(idx)
+                            else minuteState.animateScrollToItem(idx)
+                            delay(220L)
+                            syncingFromPreset = false
+                        }
+                    },
+                    modifier = Modifier.width(88.dp)
+                )
+            }
+
+            // Soft top & bottom fade masks (single neutral surfaceCard fade, matching Morro rules)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(42.dp)
+                    .align(Alignment.TopCenter)
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(colors.surfaceCard, colors.surfaceCard.copy(alpha = 0f))
+                        )
+                    )
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(42.dp)
+                    .align(Alignment.BottomCenter)
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(colors.surfaceCard.copy(alpha = 0f), colors.surfaceCard)
+                        )
+                    )
             )
         }
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        // Three common times. A default beats an open question (Parkinson), and three choices are
-        // cheaper than a full picker when one of them fits (Hick).
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf(6 to 0, 7 to 0, 8 to 0).forEach { (hour, minute) ->
-                val active = selectedHour == hour && selectedMinute == minute
+        // Quick Preset Chips (1-tap glide to popular wake-up times)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            listOf(6 to 0, 6 to 30, 7 to 0, 8 to 0).forEach { (h, m) ->
+                val active = selectedHour == h && selectedMinute == m
                 QuickTimeChip(
-                    label = String.format(Locale.getDefault(), "%02d:00", hour),
+                    label = String.format(Locale.getDefault(), "%02d:%02d", h, m),
                     active = active,
-                    onClick = { onTimeChange(hour, minute) }
+                    onClick = { glideWheelsTo(h, m) },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun WheelDrum(
+    state: androidx.compose.foundation.lazy.LazyListState,
+    modulo: Int,
+    totalItems: Int,
+    onTapItem: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = morroColors()
+    val snapBehavior = rememberSnapFlingBehavior(lazyListState = state)
+
+    LazyColumn(
+        state = state,
+        flingBehavior = snapBehavior,
+        contentPadding = PaddingValues(vertical = 48.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier.height(144.dp)
+    ) {
+        items(
+            count = totalItems,
+            key = { it }
+        ) { index ->
+            val displayValue = ((index % modulo) + modulo) % modulo
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .graphicsLayer {
+                        val layout = state.layoutInfo
+                        val viewportCenter = (layout.viewportStartOffset + layout.viewportEndOffset) / 2f
+                        val itemInfo = layout.visibleItemsInfo.firstOrNull { it.index == index }
+                        if (itemInfo != null) {
+                            val itemCenter = itemInfo.offset + itemInfo.size / 2f
+                            val signedDist = itemCenter - viewportCenter
+                            val maxDist = itemInfo.size * 1.15f
+                            val signedFraction = (signedDist / maxDist).coerceIn(-1f, 1f)
+                            val fraction = abs(signedFraction)
+                            val s = 1f - 0.22f * fraction
+                            scaleX = s
+                            scaleY = s
+                            alpha = 1f - 0.72f * fraction
+                            rotationX = -signedFraction * 26f
+                            cameraDistance = 12f * density
+                        }
+                    }
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { onTapItem(index) },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = String.format(Locale.getDefault(), "%02d", displayValue),
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 38.sp,
+                    color = colors.textPrimary,
+                    textAlign = TextAlign.Center
                 )
             }
         }
@@ -641,9 +960,11 @@ private fun TimePickerCard(
 private fun QuickTimeChip(
     label: String,
     active: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val colors = morroColors()
+    val shapes = morroShapes()
     val interactionSource = remember { MutableInteractionSource() }
     val textColor by animateColorAsState(
         targetValue = if (active) colors.honey else colors.textSecondary,
@@ -651,153 +972,141 @@ private fun QuickTimeChip(
         label = "chipTextColor"
     )
     val borderColor by animateColorAsState(
-        targetValue = if (active) colors.borderStrong else colors.borderSubtle,
+        targetValue = if (active) colors.borderActive else colors.borderSubtle,
         animationSpec = tween(180),
         label = "chipBorderColor"
     )
+    val bgColor by animateColorAsState(
+        targetValue = if (active) colors.surfaceElevated else Color.Transparent,
+        animationSpec = tween(180),
+        label = "chipBgColor"
+    )
 
-    Text(
-        text = label,
-        fontSize = 12.sp,
-        color = textColor,
-        modifier = Modifier
+    Box(
+        modifier = modifier
             .pressScale(interactionSource, pressedScale = 0.96f)
-            .clip(RoundedCornerShape(50))
-            .morroHairline(
-                radius = 50.dp,
-                color = borderColor
+            .clip(shapes.Chip)
+            .background(bgColor)
+            .morroHairline(radius = 12.dp, color = borderColor)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                role = Role.Button,
+                onClick = onClick
+            )
+            .heightIn(min = 48.dp)
+            .padding(horizontal = 4.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = label,
+            fontFamily = FontFamily.Monospace,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
+            color = textColor,
+            maxLines = 1
+        )
+    }
+}
+
+/**
+ * MissionBentoTile — compact tile inside the 3-column bento bar.
+ */
+@Composable
+private fun MissionBentoTile(
+    label: String,
+    icon: ImageVector,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = morroColors()
+    val shapes = morroShapes()
+    val typo = morroTypography()
+    val interactionSource = remember { MutableInteractionSource() }
+
+    val bgColor by animateColorAsState(
+        targetValue = if (selected) colors.surfaceElevated else colors.surfaceCard,
+        animationSpec = tween(180),
+        label = "tileBg"
+    )
+    val borderColor by animateColorAsState(
+        targetValue = if (selected) colors.borderActive else colors.borderSubtle,
+        animationSpec = tween(180),
+        label = "tileBorder"
+    )
+    val iconTint by animateColorAsState(
+        targetValue = if (selected) colors.honey else colors.textSecondary,
+        animationSpec = tween(180),
+        label = "tileIcon"
+    )
+
+    Box(
+        modifier = modifier
+            .pressScale(interactionSource, pressedScale = 0.96f, releaseSpec = MorroSpring.FloatSpringPlayful)
+            .clip(shapes.Card)
+            .background(bgColor.copy(alpha = if (selected) 0.88f else 0.72f))
+            .morroGlassBorder(
+                radius = 16.dp,
+                topAlpha = if (selected) 0.34f else 0.16f,
+                bottomAlpha = if (selected) 0.12f else 0.04f,
+                tint = if (selected) colors.honey else colors.textPrimary
             )
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
+                role = Role.RadioButton,
                 onClick = onClick
             )
-            .heightIn(min = 48.dp)
-            .wrapContentHeight(Alignment.CenterVertically)
-            .padding(horizontal = 16.dp)
-    )
-}
-
-/**
- * MorroOptionChip — one mission. Selected takes a 35% border, a honey icon and a check.
- */
-@Composable
-private fun MorroOptionChip(
-    title: String,
-    subtitle: String,
-    icon: ImageVector,
-    isSelected: Boolean,
-    onSelect: () -> Unit,
-    staggerIndex: Int = 0,
-    showExpanded: Boolean = false,
-    expandedContent: @Composable (() -> Unit)? = null
-) {
-    val colors = morroColors()
-    val typo = morroTypography()
-    val shapes = morroShapes()
-
-    val interactionSource = remember { MutableInteractionSource() }
-
-    Column(modifier = Modifier.fillMaxWidth().staggeredReveal(staggerIndex)) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .pressScale(interactionSource, true, MorroMotion.RowPressedScale)
-                .clip(shapes.Card)
-                .background(if (isSelected) colors.surfaceElevated else colors.surfaceCard)
-                .morroHairline(
-                    radius = 16.dp,
-                    color = if (isSelected) colors.borderActive else colors.borderSubtle
-                )
-                .clickable(
-                    interactionSource = interactionSource,
-                    indication = null,
-                    onClick = onSelect
-                )
-                .padding(16.dp)
+            .heightIn(min = 76.dp)
+            .padding(horizontal = 10.dp, vertical = 12.dp)
+    ) {
+        // Selected corner indicator
+        androidx.compose.animation.AnimatedVisibility(
+            visible = selected,
+            enter = fadeIn(tween(140)) + scaleIn(initialScale = 0.5f, animationSpec = tween(160, easing = MorroMotion.EnterEasing)),
+            exit = fadeOut(tween(100)) + scaleOut(targetScale = 0.5f),
+            modifier = Modifier.align(Alignment.TopEnd)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = if (isSelected) colors.honey else colors.textSecondary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(3.dp)
-                    ) {
-                        Text(
-                            text = title,
-                            style = typo.titleMedium,
-                            color = colors.textPrimary
-                        )
-                        Text(
-                            text = subtitle,
-                            style = typo.bodyMedium,
-                            color = colors.textSecondary
-                        )
-                    }
-                }
-
-                if (isSelected) {
-                    Icon(
-                        imageVector = Icons.Filled.Check,
-                        contentDescription = "Selected",
-                        tint = colors.honey,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-            }
+            Icon(
+                imageVector = Icons.Filled.Check,
+                contentDescription = "Selected",
+                tint = colors.honey,
+                modifier = Modifier.size(14.dp)
+            )
         }
 
-        if (expandedContent != null) {
-            AnimatedVisibility(
-                visible = showExpanded,
-                enter = fadeIn(tween(MorroMotion.ExpanderMillis, easing = MorroMotion.EnterEasing)) +
-                    expandVertically(
-                        animationSpec = tween(MorroMotion.ExpanderMillis, easing = MorroMotion.EnterEasing),
-                        expandFrom = Alignment.Top
-                    ),
-                exit = fadeOut(tween(MorroMotion.exitMillis(MorroMotion.ExpanderMillis), easing = MorroMotion.ExitEasing)) +
-                    shrinkVertically(
-                        animationSpec = tween(MorroMotion.exitMillis(MorroMotion.ExpanderMillis), easing = MorroMotion.ExitEasing),
-                        shrinkTowards = Alignment.Top
-                    )
-            ) {
-                Column {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    MorroCard(modifier = Modifier.fillMaxWidth()) { cardModifier ->
-                        // MorroCard hands its inner modifier back so the card's own padding is applied.
-                        // Dropping it put the panel's text flush against the card border.
-                        Box(modifier = cardModifier.fillMaxWidth()) {
-                            expandedContent()
-                        }
-                    }
-                }
-            }
+        Column(
+            modifier = Modifier.align(Alignment.Center),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = iconTint,
+                modifier = Modifier.size(20.dp)
+            )
+            Text(
+                text = label,
+                style = typo.labelLarge,
+                color = if (selected) colors.textPrimary else colors.textSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
 
 /**
- * VoiceExpandedContent — Recording/Preview/Re-record UI for Voice mission.
+ * VoiceExpandedContent — simplified recording/preview & cognitive puzzle configuration.
  */
 @Composable
 private fun VoiceExpandedContent(
     voiceState: VoiceState,
     recordingCountdown: Int,
     isPlayingPreview: Boolean,
-    hasSaved: androidx.compose.runtime.MutableState<Boolean>,
+    hasSaved: MutableState<Boolean>,
     wakeTimeStr: String,
     missionTargetName: String,
     onRecord: () -> Unit,
@@ -809,132 +1118,98 @@ private fun VoiceExpandedContent(
     val typo = morroTypography()
     val shapes = morroShapes()
     val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current
 
-    Column(
-        modifier = Modifier.fillMaxWidth()
-    ) {
+    Column(modifier = Modifier.fillMaxWidth()) {
         when (voiceState) {
             VoiceState.IDLE -> {
                 if (!hasSaved.value) {
                     Text(
-                        text = "SAY THIS CLEARLY",
-                        style = typo.labelSmall,
-                        color = colors.textTertiary,
-                        letterSpacing = 0.6.sp,
-                        modifier = Modifier.fillMaxWidth()
+                        text = "Voice promise",
+                        style = typo.titleMedium,
+                        color = colors.textPrimary
                     )
-
-                    Spacer(modifier = Modifier.height(6.dp))
-
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = "\u201CI am waking up at $wakeTimeStr tomorrow to protect my $missionTargetName.\u201D",
                         style = typo.bodyMedium,
-                        color = colors.textPrimary,
-                        lineHeight = 21.sp,
-                        modifier = Modifier.fillMaxWidth()
+                        color = colors.textSecondary,
+                        lineHeight = 19.sp
                     )
+                    Spacer(modifier = Modifier.height(14.dp))
 
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    MorroPrimaryButton(
-                        text = "Record your promise",
-                        onClick = onRecord,
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = true
-                    )
-                } else {
-                    // Show locked state with yellow checkmark
+                    // Outlined elevated record button so bottom "Save and arm" remains the sole filled CTA
+                    val recordInteraction = remember { MutableInteractionSource() }
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .pressScale(recordInteraction, pressedScale = 0.97f)
+                            .clip(shapes.Button)
+                            .background(colors.surfaceElevated)
+                            .morroHairline(radius = 12.dp, color = colors.borderStrong)
+                            .clickable(
+                                interactionSource = recordInteraction,
+                                indication = null,
+                                role = Role.Button,
+                                onClick = onRecord
+                            ),
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Filled.Check,
-                                contentDescription = null,
-                                tint = colors.honey,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Voice promise ready",
-                                style = typo.bodyMedium,
-                                color = colors.textSecondary
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.Filled.Mic,
+                            contentDescription = null,
+                            tint = colors.honey,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Record 15s promise",
+                            style = typo.titleMedium,
+                            color = colors.textPrimary
+                        )
                     }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = onPreview,
-                            enabled = !isPlayingPreview,
-                            modifier = Modifier.weight(1f).height(48.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, colors.borderStrong),
-                            colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
-                                contentColor = colors.textPrimary
-                            )
-                        ) {
-                            Text(
-                                text = if (isPlayingPreview) "Playing" else "Play back",
-                                style = typo.labelLarge.copy(fontWeight = FontWeight.Medium),
-                                color = colors.textPrimary
-                            )
-                        }
-                        OutlinedButton(
-                            onClick = onRerecord,
-                            modifier = Modifier.weight(1f).height(48.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, colors.borderStrong),
-                            colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
-                                contentColor = colors.textSecondary
-                            )
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Refresh,
-                                    contentDescription = null,
-                                    tint = colors.textSecondary,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "Re-record",
-                                    style = typo.labelLarge.copy(fontWeight = FontWeight.Medium),
-                                    color = colors.textSecondary
-                                )
-                            }
-                        }
-                    }
+                } else {
+                    VoiceReadyRow(
+                        isPlayingPreview = isPlayingPreview,
+                        onPreview = onPreview,
+                        onRerecord = onRerecord
+                    )
                 }
             }
 
             VoiceState.RECORDING -> {
-                // Animated Waveform
+                val smoothProgress by animateFloatAsState(
+                    targetValue = (recordingCountdown / 15f).coerceIn(0f, 1f),
+                    animationSpec = tween(180, easing = FastOutSlowInEasing),
+                    label = "recProgress"
+                )
                 AnimatedWaveform(
                     isRecording = true,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(60.dp)
-                        .padding(horizontal = 8.dp)
+                        .height(52.dp)
                 )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Countdown timer
+                Spacer(modifier = Modifier.height(8.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(3.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(colors.surfaceHigh)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .fillMaxWidth(smoothProgress)
+                            .background(colors.honey)
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = String.format(Locale.getDefault(), "00:%02d", recordingCountdown),
-                    style = typo.displayLarge.copy(
+                    style = typo.headlineMedium.copy(
                         fontWeight = FontWeight.Medium,
                         fontFamily = FontFamily.Monospace
                     ),
@@ -942,249 +1217,310 @@ private fun VoiceExpandedContent(
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth()
                 )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Stop & Lock button
-                Box(
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(52.dp)
-                        .clip(RoundedCornerShape(12.dp))
+                        .height(48.dp)
+                        .clip(shapes.Button)
                         .background(colors.surfaceElevated)
                         .morroHairline(radius = 12.dp, color = colors.borderStrong)
                         .clickable(onClick = onStop),
-                    contentAlignment = Alignment.Center
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Stop,
-                            contentDescription = null,
-                            tint = colors.textPrimary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = "Stop and lock",
-                            style = typo.titleMedium,
-                            color = colors.textPrimary
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Filled.Stop,
+                        contentDescription = null,
+                        tint = colors.honey,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Stop and lock",
+                        style = typo.titleMedium,
+                        color = colors.textPrimary
+                    )
                 }
             }
 
             VoiceState.RECORDED_READY -> {
-                // Safety net for a clip left behind by an earlier build or a killed process. Same
-                // rule as finishRecording: a non-empty temp clip is a real recording, and an empty
-                // one is not. No hasSavedMemo() fallback here — that would call yesterday's memo a
-                // success for a clip that was never written.
                 if (!hasSaved.value && MemoStorage.hasTempMemo(context)) {
                     LaunchedEffect(Unit) {
                         hasSaved.value = MemoStorage.saveMemo(context)
                     }
                 }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Filled.Check,
-                            contentDescription = null,
-                            tint = colors.honey,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Voice promise ready",
-                            style = typo.bodyMedium,
-                            color = colors.textSecondary
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = onPreview,
-                        enabled = !isPlayingPreview,
-                        modifier = Modifier.weight(1f).height(48.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, colors.borderStrong),
-                        colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
-                            contentColor = colors.textPrimary
-                        )
-                    ) {
-                        Text(
-                            text = if (isPlayingPreview) "Playing" else "Play back",
-                            style = typo.labelLarge.copy(fontWeight = FontWeight.Medium),
-                            color = colors.textPrimary
-                        )
-                    }
-                    OutlinedButton(
-                        onClick = onRerecord,
-                        modifier = Modifier.weight(1f).height(48.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, colors.borderStrong),
-                        colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
-                            contentColor = colors.textSecondary
-                        )
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Refresh,
-                                contentDescription = null,
-                                tint = colors.textSecondary,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "Re-record",
-                                style = typo.labelLarge.copy(fontWeight = FontWeight.Medium),
-                                color = colors.textSecondary
-                            )
-                        }
-                    }
-                }
+                VoiceReadyRow(
+                    isPlayingPreview = isPlayingPreview,
+                    onPreview = onPreview,
+                    onRerecord = onRerecord
+                )
             }
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(16.dp))
+        HorizontalDivider(thickness = 1.dp, color = colors.borderSubtle)
+        Spacer(modifier = Modifier.height(14.dp))
 
-        // ── Cognitive Challenge Selector (Voice Commitment Gate) ─────────
-        var cognitiveChallenge by remember { mutableStateOf(com.morro.alarm.ui.puzzle.CognitivePrefs.getChallenge(context)) }
-        var cognitiveDifficulty by remember { mutableStateOf(com.morro.alarm.ui.puzzle.CognitivePrefs.getDifficulty(context)) }
+        // ── Animated Cognitive Challenge & Difficulty Selector ────────────────
+        var cognitiveChallenge by remember { mutableStateOf(CognitivePrefs.getChallenge(context)) }
+        var cognitiveDifficulty by remember { mutableStateOf(CognitivePrefs.getDifficulty(context)) }
+        val reducedMotion = rememberReducedMotion()
 
-        Text(
-            text = "Cognitive challenge",
-            style = typo.headlineSmall,
-            color = colors.textPrimary
-        )
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        Text(
-            text = "Solve a mental challenge to open the alarm before your promise plays.",
-            style = typo.bodyMedium,
-            color = colors.textSecondary,
-            lineHeight = 19.sp
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // Challenge Type: Math / Chess / Sudoku
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            com.morro.alarm.ui.puzzle.CognitiveChallenge.values().forEach { challenge ->
-                val active = challenge == cognitiveChallenge
-                val interactionSource = remember { MutableInteractionSource() }
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .pressScale(interactionSource, pressedScale = 0.96f)
-                        .clip(shapes.Chip)
-                        .background(if (active) colors.honey.copy(alpha = 0.14f) else colors.surfaceElevated)
-                        .morroHairline(
-                            radius = 12.dp,
-                            color = if (active) colors.borderActive else colors.borderSubtle
-                        )
-                        .clickable(
-                            interactionSource = interactionSource,
-                            indication = null
-                        ) {
-                            cognitiveChallenge = challenge
-                            com.morro.alarm.ui.puzzle.CognitivePrefs.setChallenge(context, challenge)
-                        }
-                        .heightIn(min = 48.dp)
-                        .wrapContentHeight(Alignment.CenterVertically)
-                        .padding(horizontal = 8.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = challenge.label,
-                        style = typo.labelLarge,
-                        color = if (active) colors.honey else colors.textSecondary
-                    )
-                }
+            Text(
+                text = "Opening puzzle",
+                style = typo.titleMedium,
+                color = colors.textPrimary
+            )
+            AnimatedContent(
+                targetState = cognitiveChallenge to cognitiveDifficulty,
+                transitionSpec = {
+                    if (reducedMotion) {
+                        fadeIn(tween(0)) togetherWith fadeOut(tween(0))
+                    } else {
+                        (fadeIn(tween(180)) + slideInVertically { it / 2 })
+                            .togetherWith(fadeOut(tween(120)))
+                    }
+                },
+                label = "puzzleSummary"
+            ) { (chal, diff) ->
+                Text(
+                    text = when (chal) {
+                        CognitiveChallenge.MATH ->
+                            if (diff == CognitiveDifficulty.STANDARD) "Quick sums & tables" else "2-digit × & 3-digit sums"
+                        CognitiveChallenge.CHESS ->
+                            if (diff == CognitiveDifficulty.STANDARD) "Mate in 1" else "Mate in 2"
+                        CognitiveChallenge.SUDOKU ->
+                            if (diff == CognitiveDifficulty.STANDARD) "4×4 grid" else "9×9 grid"
+                    },
+                    style = typo.bodyMedium,
+                    fontSize = 12.sp,
+                    color = colors.honey
+                )
             }
         }
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // Difficulty: Standard / Hard
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            com.morro.alarm.ui.puzzle.CognitiveDifficulty.values().forEach { diff ->
-                val active = diff == cognitiveDifficulty
-                val interactionSource = remember { MutableInteractionSource() }
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .pressScale(interactionSource, pressedScale = 0.96f)
-                        .clip(shapes.Chip)
-                        .background(if (active) colors.surfaceHigh else colors.surfaceElevated.copy(alpha = 0.6f))
-                        .morroHairline(
-                            radius = 12.dp,
-                            color = if (active) colors.borderStrong else colors.borderSubtle
-                        )
-                        .clickable(
-                            interactionSource = interactionSource,
-                            indication = null
-                        ) {
-                            cognitiveDifficulty = diff
-                            com.morro.alarm.ui.puzzle.CognitivePrefs.setDifficulty(context, diff)
-                        }
-                        .heightIn(min = 40.dp)
-                        .wrapContentHeight(Alignment.CenterVertically)
-                        .padding(horizontal = 8.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = diff.label,
-                        style = typo.bodyMedium,
-                        color = if (active) colors.textPrimary else colors.textTertiary
-                    )
-                }
+        // Sliding Segmented Bar: Math | Chess | Sudoku
+        SlidingSegmentedBar(
+            items = CognitiveChallenge.values().toList(),
+            selectedIndex = CognitiveChallenge.values().indexOf(cognitiveChallenge),
+            labelOf = { it.label },
+            accentActive = true,
+            reducedMotion = reducedMotion,
+            onSelect = { _, challenge ->
+                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                cognitiveChallenge = challenge
+                CognitivePrefs.setChallenge(context, challenge)
             }
-        }
+        )
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
-        Text(
-            text = when (cognitiveChallenge) {
-                com.morro.alarm.ui.puzzle.CognitiveChallenge.MATH ->
-                    if (cognitiveDifficulty == com.morro.alarm.ui.puzzle.CognitiveDifficulty.STANDARD) "Times tables, two-digit sums" else "Two-digit products, three-digit sums"
-                com.morro.alarm.ui.puzzle.CognitiveChallenge.CHESS ->
-                    if (cognitiveDifficulty == com.morro.alarm.ui.puzzle.CognitiveDifficulty.STANDARD) "Mate-in-1 puzzle" else "Mate-in-2 puzzle"
-                com.morro.alarm.ui.puzzle.CognitiveChallenge.SUDOKU ->
-                    if (cognitiveDifficulty == com.morro.alarm.ui.puzzle.CognitiveDifficulty.STANDARD) "4×4 grid, digits 1–4" else "9×9 grid, 5–7 missing numbers"
+        // Sliding Segmented Bar: Easy | Hard (explicit for Math, Chess, and Sudoku)
+        SlidingSegmentedBar(
+            items = CognitiveDifficulty.values().toList(),
+            selectedIndex = CognitiveDifficulty.values().indexOf(cognitiveDifficulty),
+            labelOf = { diff ->
+                if (diff == CognitiveDifficulty.STANDARD) "Easy" else "Hard"
             },
-            style = typo.bodyMedium,
-            fontSize = 12.sp,
-            color = colors.textTertiary
+            accentActive = false,
+            reducedMotion = reducedMotion,
+            onSelect = { _, diff ->
+                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                cognitiveDifficulty = diff
+                CognitivePrefs.setDifficulty(context, diff)
+            }
         )
     }
 }
 
 /**
- * QrExpandedContent — Optional barcode registration for QR mission.
+ * Apple-style sliding segmented control with spring-driven elevated glass pill.
+ */
+@Composable
+private fun <T> SlidingSegmentedBar(
+    items: List<T>,
+    selectedIndex: Int,
+    labelOf: (T) -> String,
+    accentActive: Boolean,
+    reducedMotion: Boolean,
+    onSelect: (Int, T) -> Unit
+) {
+    val colors = morroColors()
+    val typo = morroTypography()
+    val shapes = morroShapes()
+    val safeIndex = selectedIndex.coerceIn(0, (items.size - 1).coerceAtLeast(0))
+
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(48.dp)
+            .clip(shapes.Chip)
+            .background(colors.canvas.copy(alpha = 0.50f))
+            .morroHairline(radius = 12.dp, color = colors.borderSubtle)
+            .padding(4.dp)
+    ) {
+        val segmentWidth = maxWidth / items.size.coerceAtLeast(1)
+        val targetOffset = segmentWidth * safeIndex
+        val indicatorOffset by animateDpAsState(
+            targetValue = targetOffset,
+            animationSpec = if (reducedMotion) {
+                tween(0)
+            } else {
+                spring(dampingRatio = 0.78f, stiffness = 420f)
+            },
+            label = "segmentSlide"
+        )
+
+        // Sliding elevated glass pill
+        Box(
+            modifier = Modifier
+                .offset(x = indicatorOffset)
+                .width(segmentWidth)
+                .fillMaxHeight()
+                .clip(RoundedCornerShape(9.dp))
+                .background(if (accentActive) colors.surfaceElevated else colors.surfaceHigh)
+                .morroGlassBorder(
+                    radius = 9.dp,
+                    topAlpha = if (accentActive) 0.34f else 0.24f,
+                    bottomAlpha = 0.06f,
+                    tint = if (accentActive) colors.honey else colors.textPrimary
+                )
+        )
+
+        Row(modifier = Modifier.fillMaxSize()) {
+            items.forEachIndexed { idx, item ->
+                val active = idx == safeIndex
+                val interactionSource = remember { MutableInteractionSource() }
+                val textColor by animateColorAsState(
+                    targetValue = when {
+                        active && accentActive -> colors.honey
+                        active -> colors.textPrimary
+                        else -> colors.textSecondary
+                    },
+                    animationSpec = tween(160),
+                    label = "segText"
+                )
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .pressScale(interactionSource, pressedScale = 0.96f)
+                        .clickable(
+                            interactionSource = interactionSource,
+                            indication = null,
+                            role = Role.RadioButton
+                        ) { onSelect(idx, item) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = labelOf(item),
+                        style = if (accentActive) typo.labelLarge else typo.bodyMedium.copy(fontWeight = if (active) FontWeight.Medium else FontWeight.Normal),
+                        color = textColor,
+                        maxLines = 1
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun VoiceReadyRow(
+    isPlayingPreview: Boolean,
+    onPreview: () -> Unit,
+    onRerecord: () -> Unit
+) {
+    val colors = morroColors()
+    val typo = morroTypography()
+    val shapes = morroShapes()
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Filled.Check,
+                    contentDescription = null,
+                    tint = colors.honey,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Voice promise ready",
+                    style = typo.titleMedium,
+                    color = colors.textPrimary
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            OutlinedButton(
+                onClick = onPreview,
+                enabled = !isPlayingPreview,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(48.dp),
+                shape = shapes.Button,
+                border = BorderStroke(1.dp, colors.borderStrong),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.textPrimary)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.PlayArrow,
+                    contentDescription = null,
+                    tint = colors.honey,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = if (isPlayingPreview) "Playing" else "Play back",
+                    style = typo.labelLarge,
+                    color = colors.textPrimary
+                )
+            }
+            OutlinedButton(
+                onClick = onRerecord,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(48.dp),
+                shape = shapes.Button,
+                border = BorderStroke(1.dp, colors.borderSubtle),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.textSecondary)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Refresh,
+                    contentDescription = null,
+                    tint = colors.textSecondary,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "Re-record",
+                    style = typo.labelLarge,
+                    color = colors.textSecondary
+                )
+            }
+        }
+    }
+}
+
+/**
+ * QrExpandedContent — Barcode registration for QR mission.
  */
 @Composable
 private fun QrExpandedContent(
@@ -1195,38 +1531,52 @@ private fun QrExpandedContent(
 ) {
     val colors = morroColors()
     val typo = morroTypography()
+    val shapes = morroShapes()
+    val interactionSource = remember { MutableInteractionSource() }
 
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            text = if (qrCodeValue.isNotBlank()) {
-                "Locked to $qrCodeValue"
-            } else {
-                "Any QR code or barcode will do."
-            },
-            style = typo.bodyMedium,
-            color = colors.textSecondary
-        )
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "Scan to silence",
+                style = typo.titleMedium,
+                color = colors.textPrimary
+            )
+            Spacer(modifier = Modifier.height(3.dp))
+            Text(
+                text = if (qrCodeValue.isNotBlank()) "Locked to $qrCodeValue" else "Any QR code or barcode will do.",
+                style = typo.bodyMedium,
+                color = colors.textSecondary
+            )
+        }
 
-        Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.width(12.dp))
 
-        Text(
-            text = if (qrCodeValue.isNotBlank()) "Change the code" else "Lock it to one code",
-            style = typo.titleMedium,
-            color = colors.textPrimary,
-            textAlign = TextAlign.Center,
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
+                .pressScale(interactionSource, pressedScale = 0.96f)
+                .clip(shapes.Chip)
+                .background(colors.surfaceElevated)
                 .morroHairline(radius = 12.dp, color = colors.borderStrong)
-                .clickable { onQrDialogChange(true) }
-                // 48dp tall, so the row is a proper target rather than a 47dp near miss.
+                .clickable(
+                    interactionSource = interactionSource,
+                    indication = null
+                ) { onQrDialogChange(true) }
                 .heightIn(min = 48.dp)
-                .wrapContentHeight(Alignment.CenterVertically)
-                .padding(horizontal = 12.dp)
-        )
+                .padding(horizontal = 14.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = if (qrCodeValue.isNotBlank()) "Change" else "Set code",
+                style = typo.labelLarge,
+                color = colors.textPrimary
+            )
+        }
     }
 
-    // QR Code Dialog
     if (showQrDialog) {
         QrCodeDialog(
             qrCodeValue = qrCodeValue,
@@ -1239,9 +1589,6 @@ private fun QrExpandedContent(
     }
 }
 
-/**
- * QrCodeDialog — Register specific barcode/QR payload.
- */
 @Composable
 private fun QrCodeDialog(
     qrCodeValue: String,
@@ -1256,12 +1603,12 @@ private fun QrCodeDialog(
         onDismissRequest = onDismiss,
         containerColor = colors.surface,
         title = {
-            Text("Register Specific Code", style = typo.headlineMedium, color = colors.textPrimary)
+            Text("Specific code", style = typo.headlineMedium, color = colors.textPrimary)
         },
         text = {
             Column {
                 Text(
-                    "Set custom barcode/QR payload to require at alarm time, or clear to allow any code.",
+                    "Set a custom barcode or QR payload to require at alarm time, or leave blank to allow any code.",
                     style = typo.bodyMedium,
                     color = colors.textSecondary
                 )
@@ -1271,16 +1618,14 @@ private fun QrCodeDialog(
                     onValueChange = { tempCode = it },
                     singleLine = true,
                     placeholder = { Text("e.g. 012345678905", style = typo.bodyMedium, color = colors.textDisabled) },
-                    label = { Text("Barcode/QR Payload", style = typo.bodyMedium, color = colors.textSecondary) },
+                    label = { Text("Barcode or QR payload", style = typo.bodyMedium, color = colors.textSecondary) },
                     modifier = Modifier.fillMaxWidth()
                 )
             }
         },
         confirmButton = {
-            TextButton(onClick = {
-                onSave(tempCode)
-            }) {
-                Text("Save", style = typo.labelLarge.copy(fontWeight = FontWeight.Bold), color = colors.honey)
+            TextButton(onClick = { onSave(tempCode) }) {
+                Text("Save", style = typo.labelLarge.copy(fontWeight = FontWeight.Medium), color = colors.honey)
             }
         },
         dismissButton = {
@@ -1292,7 +1637,7 @@ private fun QrCodeDialog(
 }
 
 /**
- * PhotoExpandedContent — Configure object pool for Photo mission.
+ * PhotoExpandedContent — Object pool summary + picker trigger.
  */
 @Composable
 private fun PhotoExpandedContent(
@@ -1303,6 +1648,8 @@ private fun PhotoExpandedContent(
 ) {
     val colors = morroColors()
     val typo = morroTypography()
+    val shapes = morroShapes()
+    val interactionSource = remember { MutableInteractionSource() }
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -1312,38 +1659,45 @@ private fun PhotoExpandedContent(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = "Object pool",
-                style = typo.bodyMedium,
-                color = colors.textSecondary
+                style = typo.titleMedium,
+                color = colors.textPrimary
             )
             Spacer(modifier = Modifier.height(3.dp))
             Text(
                 text = if (selectedPhotoItems.isEmpty()) {
                     "Nothing chosen yet"
                 } else {
-                    "${selectedPhotoItems.size} of 30 objects chosen"
+                    "${selectedPhotoItems.size} of ${PhotoTargetPool.ITEMS.size} objects chosen"
                 },
-                style = typo.titleMedium,
-                color = colors.textPrimary
+                style = typo.bodyMedium,
+                color = colors.textSecondary
             )
         }
 
         Spacer(modifier = Modifier.width(12.dp))
 
-        Text(
-            text = "Choose",
-            style = typo.labelLarge,
-            color = colors.textPrimary,
+        Box(
             modifier = Modifier
-                .clip(RoundedCornerShape(50))
-                .morroHairline(radius = 50.dp, color = colors.borderStrong)
-                .clickable { onPhotoSheetChange(true) }
+                .pressScale(interactionSource, pressedScale = 0.96f)
+                .clip(shapes.Chip)
+                .background(colors.surfaceElevated)
+                .morroHairline(radius = 12.dp, color = colors.borderStrong)
+                .clickable(
+                    interactionSource = interactionSource,
+                    indication = null
+                ) { onPhotoSheetChange(true) }
                 .heightIn(min = 48.dp)
-                .wrapContentHeight(Alignment.CenterVertically)
-                .padding(horizontal = 16.dp)
-        )
+                .padding(horizontal = 16.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "Choose",
+                style = typo.labelLarge,
+                color = colors.textPrimary
+            )
+        }
     }
 
-    // Photo Target Sheet (2-Column Bento Grid Modal)
     if (showPhotoSheet) {
         PhotoTargetSheet(
             selectedPhotoItems = selectedPhotoItems,
@@ -1356,13 +1710,6 @@ private fun PhotoExpandedContent(
     }
 }
 
-/**
- * PhotoTargetSheet — the object pool, as a plain list of choices.
- *
- * Two columns of text tiles, each with a check; presets as quiet outlined chips; one save action.
- * The list is a normal Column inside one scroll container, not a lazy grid nested in a scrolling
- * parent, so the sheet measures and scrolls as one surface.
- */
 @Composable
 private fun PhotoTargetSheet(
     selectedPhotoItems: Set<String>,
@@ -1389,13 +1736,11 @@ private fun PhotoTargetSheet(
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .fillMaxHeight(0.94f)
-                // Same top radius as every other sheet: the token, not a second number.
                 .clip(shapes.Sheet)
                 .background(colors.surface)
                 .navigationBarsPadding()
                 .imePadding()
         ) {
-            // Drag handle: the line sits inside its own padding, not inside a 4dp box.
             Box(
                 modifier = Modifier
                     .padding(top = 10.dp, bottom = 14.dp)
@@ -1554,19 +1899,19 @@ private fun PhotoTargetSheet(
     }
 }
 
-/** One pool chip. Selected is a filled surface plus a stronger hairline, nothing louder. */
 @Composable
 private fun PoolPreset(label: String, active: Boolean, onClick: () -> Unit) {
     val colors = morroColors()
+    val shapes = morroShapes()
     Text(
         text = label,
         fontSize = 12.sp,
         color = if (active) colors.textPrimary else colors.textSecondary,
         modifier = Modifier
-            .clip(RoundedCornerShape(50))
+            .clip(shapes.Chip)
             .background(if (active) colors.surfaceElevated else Color.Transparent)
             .morroHairline(
-                radius = 50.dp,
+                radius = 12.dp,
                 color = if (active) colors.borderActive else colors.borderSubtle
             )
             .clickable(onClick = onClick)
@@ -1576,7 +1921,6 @@ private fun PoolPreset(label: String, active: Boolean, onClick: () -> Unit) {
     )
 }
 
-/** One object in the pool: its name on the left, a check on the right. No icon, no badge. */
 @Composable
 private fun PoolTile(
     label: String,
@@ -1585,10 +1929,11 @@ private fun PoolTile(
     onToggle: () -> Unit
 ) {
     val colors = morroColors()
+    val shapes = morroShapes()
     Row(
         modifier = modifier
             .height(54.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(shapes.Chip)
             .background(if (selected) colors.surfaceElevated else colors.surfaceCard)
             .morroHairline(
                 radius = 12.dp,
@@ -1632,33 +1977,21 @@ private fun PoolTile(
     }
 }
 
-/**
- * AnimatedWaveform — Concentric amplitude rings for voice recording.
- */
 @Composable
 private fun AnimatedWaveform(
     isRecording: Boolean,
     modifier: Modifier = Modifier
 ) {
     val colors = morroColors()
-
-    // 12 bars, each with its own phase offset
-    val phases = remember {
-        List(12) { it * 0.15f }
-    }
-
-    // Use infinite transition for smooth animation
-    val infiniteTransition = androidx.compose.animation.core.rememberInfiniteTransition(label = "waveform")
+    val phases = remember { List(12) { it * 0.15f } }
+    val infiniteTransition = rememberInfiniteTransition(label = "waveform")
 
     val heights = phases.map { phase ->
         infiniteTransition.animateFloat(
             initialValue = 0.15f,
             targetValue = 1f,
             animationSpec = infiniteRepeatable(
-                animation = tween(
-                    durationMillis = 600,
-                    easing = androidx.compose.animation.core.FastOutSlowInEasing
-                ),
+                animation = tween(durationMillis = 600, easing = FastOutSlowInEasing),
                 repeatMode = RepeatMode.Reverse,
                 initialStartOffset = StartOffset(offsetMillis = (phase * 1000).toInt())
             ),
@@ -1668,18 +2001,17 @@ private fun AnimatedWaveform(
 
     Row(
         modifier = modifier
-            .height(60.dp)
+            .height(52.dp)
             .fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        heights.forEachIndexed { _, animState: androidx.compose.runtime.State<Float> ->
+        heights.forEach { animState ->
             val heightFraction by animState
-
             Box(
                 modifier = Modifier
                     .width(6.dp)
-                    .height((50 * heightFraction).dp)
+                    .height((44 * heightFraction).dp)
                     .background(
                         color = if (isRecording) colors.honey else colors.borderSubtle,
                         shape = RoundedCornerShape(3.dp)
@@ -1689,7 +2021,26 @@ private fun AnimatedWaveform(
     }
 }
 
-/** One place that returns the drag offset to rest, however the gesture ended. */
+/** Formats duration until the next ring of [hour]:[minute] cleanly. */
+private fun formatTimeUntil(hour: Int, minute: Int): String {
+    val now = Calendar.getInstance()
+    val target = (now.clone() as Calendar).apply {
+        set(Calendar.HOUR_OF_DAY, hour)
+        set(Calendar.MINUTE, minute)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+        if (!after(now)) add(Calendar.DAY_OF_YEAR, 1)
+    }
+    val diffMins = ((target.timeInMillis - now.timeInMillis) / 60_000L).toInt().coerceAtLeast(1)
+    val h = diffMins / 60
+    val m = diffMins % 60
+    return when {
+        h == 0 -> "Rings in $m min"
+        m == 0 -> "Rings in $h hr"
+        else -> "Rings in ${h}h ${m}m"
+    }
+}
+
 private fun CoroutineScope.settleDrag(from: Float, onValue: (Float) -> Unit) {
     launch {
         animate(

@@ -23,11 +23,11 @@ import kotlin.math.sin
 /**
  * The dashboard clock.
  *
- * A precision timepiece: warm near-black dial, crisp hairline rim, and richly detailed
- * hour markers with distinct cardinal indices (12, 3, 6, 9) and fine minute pips.
+ * A precision timepiece: warm near-black dial, single crisp outer rim hairline, and cleanly
+ * detailed hour markers with cardinal indices (12, 3, 6, 9) and fine minute pips.
  *
  * Warm accents:
- *  - The sweeping elapsed-hour progress arc that tracks the fraction of the current hour passed.
+ *  - The sweeping elapsed-hour progress arc traced directly along the single outer rim.
  *  - The hairline honey needle second hand with a counterweight tail.
  *  - The jewel-like center cap nut with honey collar and ink core pin.
  */
@@ -50,38 +50,28 @@ fun MorroAnalogClock(
         Canvas(modifier = Modifier.fillMaxSize()) {
             val radius = this.size.minDimension / 2f
             val center = Offset(this.size.width / 2f, this.size.height / 2f)
+            val rimRadius = radius - 1.2.dp.toPx()
 
             // Face: a warm near-black disc
             drawCircle(color = Color(0xFF070605), radius = radius, center = center)
 
-            // Outer rim hairline
+            // Single outer rim hairline (no second inner border ring)
             drawCircle(
                 color = MorroColors.TextPrimary.copy(alpha = 0.14f),
-                radius = radius - 1.dp.toPx(),
+                radius = rimRadius,
                 center = center,
                 style = Stroke(width = 1.2.dp.toPx())
             )
 
-            // Inner chapter ring connecting the hour markers
-            drawCircle(
-                color = MorroColors.TextPrimary.copy(alpha = 0.08f),
-                radius = radius - 16.dp.toPx(),
-                center = center,
-                style = Stroke(width = 0.8.dp.toPx())
-            )
-
-            // Hour-progress arc: sweeps from twelve (top) clockwise with minute/60
+            // Hour-progress arc: sweeps clockwise directly on the single rim with minute/60
             drawArc(
                 color = MorroColors.Honey.copy(alpha = 0.65f),
                 startAngle = -90f,
                 sweepAngle = ((minuteFloat / 60f) * 360f),
                 useCenter = false,
-                topLeft = Offset(center.x - (radius - 2.5.dp.toPx()), center.y - (radius - 2.5.dp.toPx())),
-                size = Size(
-                    (radius - 2.5.dp.toPx()) * 2f,
-                    (radius - 2.5.dp.toPx()) * 2f
-                ),
-                style = Stroke(width = 2.4.dp.toPx(), cap = StrokeCap.Round)
+                topLeft = Offset(center.x - rimRadius, center.y - rimRadius),
+                size = Size(rimRadius * 2f, rimRadius * 2f),
+                style = Stroke(width = 2.2.dp.toPx(), cap = StrokeCap.Round)
             )
 
             // ── Crisp Clock Markings ─────────────────────────────────────────
@@ -97,8 +87,8 @@ fun MorroAnalogClock(
                 val isTwelve = i == 0
 
                 if (isTwelve) {
-                    // Double baton at 12 o'clock for immediate tactile orientation
-                    val outerR = radius - 5.dp.toPx()
+                    // Double baton at 12 o'clock for immediate orientation
+                    val outerR = radius - 6.dp.toPx()
                     val innerR = radius - 17.dp.toPx()
                     val offsetPerp = 2.2.dp.toPx()
                     val perpX = -sinA
@@ -120,7 +110,7 @@ fun MorroAnalogClock(
                     }
                 } else if (isCardinal) {
                     // 3, 6, 9 cardinal markers: bold, confident length
-                    val outerR = radius - 5.dp.toPx()
+                    val outerR = radius - 6.dp.toPx()
                     val innerR = radius - 17.dp.toPx()
                     drawLine(
                         color = MorroColors.TextPrimary.copy(alpha = 0.80f),
@@ -131,7 +121,7 @@ fun MorroAnalogClock(
                     )
                 } else if (isHour) {
                     // Standard hour markers (1, 2, 4, 5, 7, 8, 10, 11)
-                    val outerR = radius - 6.dp.toPx()
+                    val outerR = radius - 7.dp.toPx()
                     val innerR = radius - 14.dp.toPx()
                     drawLine(
                         color = MorroColors.TextPrimary.copy(alpha = 0.55f),
@@ -142,7 +132,7 @@ fun MorroAnalogClock(
                     )
                 } else {
                     // Minute pips
-                    val dotR = radius - 7.5.dp.toPx()
+                    val dotR = radius - 8.5.dp.toPx()
                     drawCircle(
                         color = MorroColors.TextPrimary.copy(alpha = 0.22f),
                         radius = 0.9.dp.toPx(),

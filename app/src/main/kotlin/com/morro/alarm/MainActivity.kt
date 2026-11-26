@@ -6,7 +6,6 @@ import android.graphics.Color as AndroidColor
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
-import android.media.AudioManager
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -36,13 +35,22 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
@@ -62,8 +70,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
@@ -99,6 +109,7 @@ import com.morro.alarm.ui.onboarding.PersonalizationStorage
 import com.morro.alarm.ui.onboarding.PersonalizedQuestions
 import com.morro.alarm.ui.onboarding.nextIntroStep
 import com.morro.alarm.ui.splash.MorroGhostSplash
+import com.morro.alarm.ui.motion.MorroMotion
 import com.morro.alarm.ui.motion.pressScale
 import com.morro.alarm.ui.motion.rememberReducedMotion
 import com.morro.alarm.ui.theme.MorroSpring
@@ -106,6 +117,7 @@ import com.morro.alarm.ui.theme.MorroTheme
 import com.morro.alarm.ui.theme.MorroThemeChoice
 import com.morro.alarm.ui.theme.ThemePrefs
 import com.morro.alarm.ui.theme.morroColors
+import com.morro.alarm.ui.theme.morroGlassBorder
 import com.morro.alarm.ui.theme.morroHairline
 import com.morro.alarm.ui.theme.morroShapes
 import java.text.SimpleDateFormat
@@ -113,6 +125,7 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -232,12 +245,9 @@ fun MainAlarmScreen(context: Context) {
     val prefs = remember { context.getSharedPreferences("morro_prefs", Context.MODE_PRIVATE) }
     var prefsUpdateTrigger by remember { mutableIntStateOf(0) }
 
-    val audioManager = remember {
-        context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
-    }
     val haptics = LocalHapticFeedback.current
-    var alarmVolume by remember {
-        mutableIntStateOf(audioManager?.getStreamVolume(AudioManager.STREAM_ALARM) ?: 1)
+    var alarmVolumeSnapshot by remember {
+        mutableStateOf(AlarmVolumeGuard.readAlarmVolume(context))
     }
 
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -245,7 +255,7 @@ fun MainAlarmScreen(context: Context) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 prefsUpdateTrigger++
-                alarmVolume = audioManager?.getStreamVolume(AudioManager.STREAM_ALARM) ?: 1
+                alarmVolumeSnapshot = AlarmVolumeGuard.readAlarmVolume(context)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -346,25 +356,60 @@ fun MainAlarmScreen(context: Context) {
         }
     }
 
+    val anySheetOpen = showAlarmBuilder || showSettings || showPrivacyPolicy
+    val backdropScale by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (anySheetOpen && !reducedMotion) 0.94f else 1f,
+        animationSpec = MorroSpring.FloatSpringDefault,
+        label = "backdropScale"
+    )
+    val backdropAlpha by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (anySheetOpen) 0.65f else 1f,
+        animationSpec = tween(220, easing = MorroMotion.EnterEasing),
+        label = "backdropAlpha"
+    )
+    val backdropBlur by animateDpAsState(
+        targetValue = if (anySheetOpen && !reducedMotion) 10.dp else 0.dp,
+        animationSpec = tween(220, easing = MorroMotion.EnterEasing),
+        label = "backdropBlur"
+    )
+    val scope = rememberCoroutineScope()
+    val clockTapScale = remember { Animatable(1f) }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(colors.canvas)
     ) {
-        MorroSky(intensity = 0.85f)
-        MorroSkyScrim(alpha = 0.60f)
-
-        Column(
+        Box(
             modifier = Modifier
-                // A phone column on a tablet: the clock and dock stay one reading width instead of
-                // stretching to the bezels.
-                .fillMaxHeight()
-                .widthIn(max = 520.dp)
-                .align(Alignment.Center)
-                .windowInsetsPadding(WindowInsets.systemBars)
-                .padding(horizontal = 24.dp, vertical = 16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .fillMaxSize()
+                .graphicsLayer {
+                    scaleX = backdropScale
+                    scaleY = backdropScale
+                    alpha = backdropAlpha
+                }
+                .then(
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && backdropBlur > 0.5.dp) {
+                        Modifier.blur(backdropBlur)
+                    } else {
+                        Modifier
+                    }
+                )
         ) {
+            MorroSky(intensity = 0.85f)
+            MorroSkyScrim(alpha = 0.60f)
+
+            Column(
+                modifier = Modifier
+                    // A phone column on a tablet: the clock and dock stay one reading width instead of
+                    // stretching to the bezels.
+                    .fillMaxHeight()
+                    .widthIn(max = 520.dp)
+                    .align(Alignment.Center)
+                    .windowInsetsPadding(WindowInsets.systemBars)
+                    .padding(horizontal = 24.dp, vertical = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
             // ── Top bar: wordmark, one quiet action ───────────────────────────
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -397,7 +442,7 @@ fun MainAlarmScreen(context: Context) {
             }
 
             // ── Volume warning (warn, never auto-change the stream) ───────────
-            if (alarmVolume == 0) {
+            if (alarmVolumeSnapshot.tooQuiet) {
                 Spacer(modifier = Modifier.height(10.dp))
                 Row(
                     modifier = Modifier
@@ -413,7 +458,11 @@ fun MainAlarmScreen(context: Context) {
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        text = "Alarm volume is off. Your promise will play silently.",
+                        text = if (alarmVolumeSnapshot.volume == 0) {
+                            "Alarm volume is off. Your promise will play silently."
+                        } else {
+                            "Alarm volume is low (${alarmVolumeSnapshot.volume}/${alarmVolumeSnapshot.max}). Turn it up so you don't sleep through it."
+                        },
                         fontSize = 12.sp,
                         lineHeight = 17.sp,
                         color = colors.textTertiary
@@ -426,10 +475,25 @@ fun MainAlarmScreen(context: Context) {
             // ── Hero clock ────────────────────────────────────────────────────
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.graphicsLayer {
-                    alpha = clockReveal.value
-                    translationY = (1f - clockReveal.value) * 16f
-                }
+                modifier = Modifier
+                    .graphicsLayer {
+                        alpha = clockReveal.value
+                        translationY = (1f - clockReveal.value) * 16f
+                        scaleX = clockTapScale.value
+                        scaleY = clockTapScale.value
+                    }
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) {
+                        if (!reducedMotion) {
+                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            scope.launch {
+                                clockTapScale.snapTo(0.955f)
+                                clockTapScale.animateTo(1f, MorroSpring.FloatSpringPlayful)
+                            }
+                        }
+                    }
             ) {
                 MorroAnalogClock(size = 244.dp, calendar = clockCal)
                 Spacer(modifier = Modifier.height(18.dp))
@@ -462,38 +526,37 @@ fun MainAlarmScreen(context: Context) {
             }
 
             // ── Alarm dock ────────────────────────────────────────────────────
-            if (!showAlarmBuilder) {
-                AlarmDock(
-                    dockTime = dockTime,
-                    missionLabel = missionLabel,
-                    hasActiveAlarm = hasActiveAlarm,
-                    modifier = Modifier.graphicsLayer {
-                        alpha = dockReveal.value
-                        translationY = (1f - dockReveal.value) * 26f
-                    },
-                    onSetAlarm = { showAlarmBuilder = true },
-                    onArmToggle = { armed ->
-                        // Confirm the state change on the same frame the switch moves.
-                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        val saved = savedAlarm
-                        if (armed && saved != null) {
-                            val scheduled = AlarmScheduler.scheduleDailyAlarm(context, saved.first, saved.second)
-                            if (!scheduled) {
-                                // The switch springs back to Idle; say why instead of doing it silently.
-                                Toast.makeText(
-                                    context,
-                                    "Exact alarm access is off. Allow it in Settings to arm the alarm.",
-                                    Toast.LENGTH_LONG
-                                ).show()
-                            }
-                        } else {
-                            AlarmScheduler.cancelAlarm(context)
+            AlarmDock(
+                dockTime = dockTime,
+                missionLabel = missionLabel,
+                hasActiveAlarm = hasActiveAlarm,
+                modifier = Modifier.graphicsLayer {
+                    alpha = dockReveal.value
+                    translationY = (1f - dockReveal.value) * 26f
+                },
+                onSetAlarm = { showAlarmBuilder = true },
+                onArmToggle = { armed ->
+                    // Confirm the state change on the same frame the switch moves.
+                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    val saved = savedAlarm
+                    if (armed && saved != null) {
+                        val scheduled = AlarmScheduler.scheduleDailyAlarm(context, saved.first, saved.second)
+                        if (!scheduled) {
+                            // The switch springs back to Idle; say why instead of doing it silently.
+                            Toast.makeText(
+                                context,
+                                "Exact alarm access is off. Allow it in Settings to arm the alarm.",
+                                Toast.LENGTH_LONG
+                            ).show()
                         }
-                        prefsUpdateTrigger++
-                    },
-                    onTestAlarm = { scheduleTestAlarmIn5Seconds(context) },
-                    onOpenSettings = { showSettings = true }
-                )
+                    } else {
+                        AlarmScheduler.cancelAlarm(context)
+                    }
+                    prefsUpdateTrigger++
+                },
+                onTestAlarm = { scheduleTestAlarmIn5Seconds(context) },
+                onOpenSettings = { showSettings = true }
+            )
             }
         }
 
@@ -620,19 +683,30 @@ private fun AlarmDock(
         label = "timeBreathScale"
     )
 
+    val dockTimeColor by animateColorAsState(
+        targetValue = if (armed) colors.textPrimary else colors.textTertiary,
+        animationSpec = tween(220, easing = MorroMotion.EnterEasing),
+        label = "dockTimeColor"
+    )
+
     Column(
         modifier = modifier
             .fillMaxWidth()
             // The whole dock opens setup (Fitts); the arm switch consumes its own taps.
-            .pressScale(dockInteraction, pressedScale = 0.985f)
+            .pressScale(dockInteraction, pressedScale = 0.985f, releaseSpec = MorroSpring.FloatSpringPlayful)
             .clickable(
                 interactionSource = dockInteraction,
                 indication = null,
                 onClick = onSetAlarm
             )
             .clip(shape)
-            .background(colors.surfaceCard)
-            .morroHairline(radius = 16.dp)
+            .background(colors.surfaceCard.copy(alpha = 0.78f))
+            .morroGlassBorder(
+                radius = 16.dp,
+                topAlpha = if (armed) 0.28f else 0.18f,
+                bottomAlpha = 0.05f,
+                tint = if (armed) colors.honey else colors.textPrimary
+            )
             .padding(horizontal = 20.dp, vertical = 18.dp)
     ) {
         Row(
@@ -646,15 +720,24 @@ private fun AlarmDock(
                 letterSpacing = 0.2.sp,
                 color = colors.textTertiary
             )
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 // One pulse when the alarm arms, then still: the app's only celebratory motion.
                 MorroStatusDot(armed = armed)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = if (armed) "Armed" else "Idle",
-                    fontSize = 12.sp,
-                    color = if (armed) colors.textPrimary else colors.textTertiary
-                )
+                AnimatedContent(
+                    targetState = armed,
+                    transitionSpec = {
+                        (fadeIn(tween(180)) + slideInVertically { if (targetState) -it / 2 else it / 2 })
+                            .togetherWith(fadeOut(tween(140)))
+                    },
+                    label = "armedStatus"
+                ) { isArmed ->
+                    Text(
+                        text = if (isArmed) "Armed" else "Idle",
+                        fontSize = 12.sp,
+                        color = if (isArmed) colors.textPrimary else colors.textTertiary
+                    )
+                }
                 Spacer(modifier = Modifier.width(4.dp))
                 // Settings lives on the card, not in a corner of the screen: this card is the one
                 // place a person looks when nothing is set, so the way out belongs here.
@@ -684,7 +767,7 @@ private fun AlarmDock(
                     lineHeight = 50.sp,
                     fontWeight = FontWeight.Medium,
                     letterSpacing = (-1.6).sp,
-                    color = colors.textPrimary,
+                    color = dockTimeColor,
                     maxLines = 1,
                     // Takes the remaining width so a large system font size cannot push the switch
                     // off the card.

@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.TextStyle
@@ -159,6 +160,31 @@ fun Modifier.morroHairline(
     val r = radius.toPx()
     drawRoundRect(
         color = color,
+        cornerRadius = CornerRadius(r, r),
+        style = Stroke(width = width.toPx())
+    )
+}
+
+/**
+ * Smoked dark glass border: a subtle vertical specular highlight catching light on the top edge
+ * and fading gently toward the bottom, staying strictly within Morro's monochrome neutral ramp.
+ */
+fun Modifier.morroGlassBorder(
+    radius: Dp = 16.dp,
+    width: Dp = 1.dp,
+    topAlpha: Float = 0.22f,
+    bottomAlpha: Float = 0.05f,
+    tint: Color = MorroColors.TextPrimary,
+): Modifier = this.drawBehind {
+    val r = radius.toPx()
+    drawRoundRect(
+        brush = Brush.verticalGradient(
+            colors = listOf(
+                tint.copy(alpha = topAlpha),
+                tint.copy(alpha = (topAlpha + bottomAlpha) * 0.4f),
+                tint.copy(alpha = bottomAlpha),
+            )
+        ),
         cornerRadius = CornerRadius(r, r),
         style = Stroke(width = width.toPx())
     )
