@@ -123,6 +123,7 @@ import com.morro.alarm.MemoStorage
 import com.morro.alarm.mission.MissionPrefs
 import com.morro.alarm.mission.MissionType
 import com.morro.alarm.mission.PhotoTargetPool
+import com.morro.alarm.puzzle.sudoku.SudokuMode
 import com.morro.alarm.ui.motion.MorroMotion
 import com.morro.alarm.ui.motion.pressScale
 import com.morro.alarm.ui.motion.rememberReducedMotion
@@ -1265,6 +1266,7 @@ private fun VoiceExpandedContent(
         // ── Animated Cognitive Challenge & Difficulty Selector ────────────────
         var cognitiveChallenge by remember { mutableStateOf(CognitivePrefs.getChallenge(context)) }
         var cognitiveDifficulty by remember { mutableStateOf(CognitivePrefs.getDifficulty(context)) }
+        var sudokuMode by remember { mutableStateOf(CognitivePrefs.getSudokuMode(context)) }
         val reducedMotion = rememberReducedMotion()
 
         Row(
@@ -1278,7 +1280,7 @@ private fun VoiceExpandedContent(
                 color = colors.textPrimary
             )
             AnimatedContent(
-                targetState = cognitiveChallenge to cognitiveDifficulty,
+                targetState = Triple(cognitiveChallenge, cognitiveDifficulty, sudokuMode),
                 transitionSpec = {
                     if (reducedMotion) {
                         fadeIn(tween(0)) togetherWith fadeOut(tween(0))
@@ -1288,15 +1290,14 @@ private fun VoiceExpandedContent(
                     }
                 },
                 label = "puzzleSummary"
-            ) { (chal, diff) ->
+            ) { (chal, diff, sMode) ->
                 Text(
                     text = when (chal) {
                         CognitiveChallenge.MATH ->
                             if (diff == CognitiveDifficulty.STANDARD) "Quick sums & tables" else "2-digit × & 3-digit sums"
                         CognitiveChallenge.CHESS ->
                             if (diff == CognitiveDifficulty.STANDARD) "Mate in 1" else "Mate in 2"
-                        CognitiveChallenge.SUDOKU ->
-                            if (diff == CognitiveDifficulty.STANDARD) "4×4 grid" else "9×9 grid"
+                        CognitiveChallenge.SUDOKU -> sMode.detail
                     },
                     style = typo.bodyMedium,
                     fontSize = 12.sp,
@@ -1323,21 +1324,36 @@ private fun VoiceExpandedContent(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // Sliding Segmented Bar: Easy | Hard (explicit for Math, Chess, and Sudoku)
-        SlidingSegmentedBar(
-            items = CognitiveDifficulty.values().toList(),
-            selectedIndex = CognitiveDifficulty.values().indexOf(cognitiveDifficulty),
-            labelOf = { diff ->
-                if (diff == CognitiveDifficulty.STANDARD) "Easy" else "Hard"
-            },
-            accentActive = false,
-            reducedMotion = reducedMotion,
-            onSelect = { _, diff ->
-                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                cognitiveDifficulty = diff
-                CognitivePrefs.setDifficulty(context, diff)
-            }
-        )
+        // Sliding Segmented Bar: Easy | Medium | Hard (for Sudoku) or Easy | Hard (for Math & Chess)
+        if (cognitiveChallenge == CognitiveChallenge.SUDOKU) {
+            SlidingSegmentedBar(
+                items = SudokuMode.values().toList(),
+                selectedIndex = SudokuMode.values().indexOf(sudokuMode),
+                labelOf = { it.label },
+                accentActive = false,
+                reducedMotion = reducedMotion,
+                onSelect = { _, mode ->
+                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    sudokuMode = mode
+                    CognitivePrefs.setSudokuMode(context, mode)
+                }
+            )
+        } else {
+            SlidingSegmentedBar(
+                items = CognitiveDifficulty.values().toList(),
+                selectedIndex = CognitiveDifficulty.values().indexOf(cognitiveDifficulty),
+                labelOf = { diff ->
+                    if (diff == CognitiveDifficulty.STANDARD) "Easy" else "Hard"
+                },
+                accentActive = false,
+                reducedMotion = reducedMotion,
+                onSelect = { _, diff ->
+                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    cognitiveDifficulty = diff
+                    CognitivePrefs.setDifficulty(context, diff)
+                }
+            )
+        }
     }
 }
 

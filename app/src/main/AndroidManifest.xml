@@ -80,6 +80,7 @@
             android:showForAllUsers="true"
             android:turnScreenOn="true"
             android:launchMode="singleTask"
+            android:taskAffinity="com.morro.alarm.ring"
             android:excludeFromRecents="true" />
 
         <activity-alias
@@ -94,6 +95,7 @@
             <intent-filter>
                 <action android:name="com.morro.alarm.ACTION_TRIGGER_ALARM" />
                 <action android:name="com.morro.alarm.ACTION_TEST_ALARM" />
+                <action android:name="com.morro.alarm.ACTION_RECOVER_RING" />
             </intent-filter>
         </receiver>
 
@@ -130,6 +132,7 @@
         <service
             android:name=".AlarmForegroundService"
             android:exported="false"
+            android:stopWithTask="false"
             android:foregroundServiceType="mediaPlayback" />
 
     </application>

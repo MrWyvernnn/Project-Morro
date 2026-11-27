@@ -1,5 +1,6 @@
 package com.morro.alarm
 
+import android.annotation.SuppressLint
 import android.app.KeyguardManager
 import android.graphics.Color as AndroidColor
 import android.os.Build
@@ -7,6 +8,7 @@ import android.os.Bundle
 import android.os.PowerManager
 import android.os.SystemClock
 import android.util.Log
+import android.view.KeyEvent
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
@@ -132,7 +134,11 @@ class AlarmActivity : ComponentActivity() {
 
     private val TAG = "AlarmActivity"
 
-    private companion object {
+    internal companion object {
+        @Volatile
+        var isForegroundActive: Boolean = false
+            private set
+
         const val KEY_GATE_STATE = "gate_state"
         const val KEY_PROBLEMS_SOLVED = "problems_solved"
         const val KEY_QUESTION_TEXT = "question_text"
@@ -443,6 +449,7 @@ class AlarmActivity : ComponentActivity() {
 
     /** Math/Chess/Sudoku solved for Voice Memo gate -> silence alarm, play commitment memo. */
     private fun completePuzzle() {
+        AlarmForegroundService.stopFloorWatchdog(this)
         restoreVolumeUnconditional()
         gateState = AlarmGateState.PLAYING_MEMO
         AlarmSoundPlayer.stop()
@@ -479,6 +486,7 @@ class AlarmActivity : ComponentActivity() {
 
     /** QR or Photo mission solved -> silence ring, proceed to tomorrow's memo. */
     private fun onMissionComplete() {
+        AlarmForegroundService.stopFloorWatchdog(this)
         graceJob?.cancel()
         AlarmSoundPlayer.stop()
         promptForTomorrowMemo()
@@ -516,10 +524,12 @@ class AlarmActivity : ComponentActivity() {
             // this morning's single re-ring is already spent, so neither is touched here: calling
             // cancelAlarm() would delete the pending alarm and leave the person with nothing.
             cancelForegroundNotification()
+            AlarmForegroundService.markRingDismissedOrSnoozed(this)
             WakeUpCheck.resolve(this)
             Log.i(TAG, "Wake-up re-ring completed; left the daily alarm and the check untouched")
         } else {
             cancelAlarm()
+            AlarmForegroundService.markRingDismissedOrSnoozed(this)
 
             // The gates are solved, so this occurrence is finished rather than missed. Recorded
             // before the re-arm below, which moves the expected trigger to tomorrow.
@@ -655,6 +665,7 @@ class AlarmActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        isForegroundActive = true
         // A permission dialog or a pulled-down shade pauses and resumes this activity. Restarting
         // the player from the top made the ringtone jump back to its first note every time, so the
         // tone is only (re)started when nothing is playing.
@@ -689,6 +700,28 @@ class AlarmActivity : ComponentActivity() {
         cancelForegroundNotification()
     }
 
+    /** True while the alarm tone is ringing and the wake-up gate has not yet been solved. */
+    private fun isGateUnsolvedAndRinging(): Boolean =
+        !isTearingDown && (
+            gateState == AlarmGateState.PUZZLE ||
+                gateState == AlarmGateState.MISSION_QR ||
+                gateState == AlarmGateState.MISSION_PHOTO
+            )
+
+    @SuppressLint("RestrictedApi")
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val code = event.keyCode
+        val isVolumeKey = code == KeyEvent.KEYCODE_VOLUME_DOWN ||
+            code == KeyEvent.KEYCODE_VOLUME_UP ||
+            code == KeyEvent.KEYCODE_VOLUME_MUTE
+        if (isVolumeKey && isGateUnsolvedAndRinging()) {
+            if (event.action == KeyEvent.ACTION_DOWN || event.action == KeyEvent.ACTION_UP) {
+                return true
+            }
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
     @Deprecated("Deprecated in Java")
     @Suppress("DEPRECATION", "MissingSuperCall")
     override fun onBackPressed() {
@@ -696,6 +729,7 @@ class AlarmActivity : ComponentActivity() {
     }
 
     override fun onPause() {
+        isForegroundActive = false
         super.onPause()
         restoreVolumeUnconditional()
     }
@@ -704,6 +738,7 @@ class AlarmActivity : ComponentActivity() {
         // Set before super.onDestroy(): Compose disposes the composition during lifecycle
         // teardown, and its onDispose restore must already see this flag.
         isTearingDown = true
+        AlarmForegroundService.stopFloorWatchdog(this)
         super.onDestroy()
         restoreVolumeUnconditional()
         graceJob?.cancel()
@@ -942,18 +977,18 @@ class AlarmActivity : ComponentActivity() {
 
                         CognitiveChallenge.SUDOKU -> {
                             var sudokuSeed by rememberSaveable { mutableStateOf(System.currentTimeMillis()) }
+                            val sudokuMode = remember { CognitivePrefs.getSudokuMode(this@AlarmActivity) }
                             var sudokuFailed by remember { mutableStateOf(false) }
 
                             if (!sudokuFailed) {
                                 BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                                    val isHard = cognitiveDifficulty == CognitiveDifficulty.HARD
-                                    val keypadReserve = if (isHard) 300.dp else 240.dp
+                                    val isNineByNine = sudokuMode != SudokuMode.EASY
+                                    val keypadReserve = if (isNineByNine) 268.dp else 210.dp
                                     val maxGridWidth = (maxHeight - keypadReserve).coerceAtLeast(220.dp)
                                     Column(
                                         modifier = Modifier
                                             .fillMaxSize()
-                                            .verticalScroll(rememberScrollState())
-                                            .padding(horizontal = 16.dp, vertical = 16.dp),
+                                            .padding(horizontal = 16.dp, vertical = 10.dp),
                                         horizontalAlignment = Alignment.CenterHorizontally,
                                         verticalArrangement = Arrangement.Center
                                     ) {
@@ -961,12 +996,12 @@ class AlarmActivity : ComponentActivity() {
                                             text = currentTime.value,
                                             style = typo.displayLarge,
                                             color = colors.textPrimary,
-                                            fontSize = 36.sp,
+                                            fontSize = 32.sp,
                                             fontWeight = FontWeight.Bold
                                         )
-                                        Spacer(modifier = Modifier.height(16.dp))
+                                        Spacer(modifier = Modifier.height(10.dp))
                                         SudokuGateScreen(
-                                            mode = if (isHard) SudokuMode.HARD else SudokuMode.STANDARD,
+                                            mode = sudokuMode,
                                             seed = sudokuSeed,
                                             onGateSolved = {
                                                 completePuzzle()

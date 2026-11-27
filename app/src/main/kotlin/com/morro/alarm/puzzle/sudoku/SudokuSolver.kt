@@ -105,6 +105,79 @@ object SudokuSolver {
         return (candidates and boxPeerUnion.inv()) != 0
     }
 
+    /**
+     * Simulates a human solver using only naked-single and hidden-single rules (no guessing or
+     * backtracking). Returns `true` only if every empty cell in [grid] can be filled in sequence
+     * without ambiguity.
+     */
+    fun isLogicallySolvable(grid: SudokuGrid): Boolean {
+        var current = grid
+        val remaining = current.emptyCells().toMutableSet()
+        while (remaining.isNotEmpty()) {
+            var progressed = false
+            val iterator = remaining.iterator()
+            while (iterator.hasNext()) {
+                val (r, c) = iterator.next()
+                if (isLogicallyDeducible(current, r, c)) {
+                    val candidates = candidatesFor(current, r, c)
+                    val value = when {
+                        candidates.size == 1 -> candidates.first()
+                        else -> uniqueHiddenValue(current, r, c, candidates) ?: continue
+                    }
+                    current = current.set(r, c, value)
+                    iterator.remove()
+                    progressed = true
+                }
+            }
+            if (!progressed) return false
+        }
+        return SudokuGrid.isSolved(current)
+    }
+
+    private fun uniqueHiddenValue(
+        grid: SudokuGrid,
+        row: Int,
+        col: Int,
+        candidates: Set<Int>
+    ): Int? {
+        val n = grid.size
+        // Check row hidden single
+        for (v in candidates) {
+            var rowUnique = true
+            for (c in 0 until n) {
+                if (c != col && grid[row, c] == 0 && v in candidatesFor(grid, row, c)) {
+                    rowUnique = false
+                    break
+                }
+            }
+            if (rowUnique) return v
+
+            var colUnique = true
+            for (r in 0 until n) {
+                if (r != row && grid[r, col] == 0 && v in candidatesFor(grid, r, col)) {
+                    colUnique = false
+                    break
+                }
+            }
+            if (colUnique) return v
+
+            var boxUnique = true
+            val br = (row / grid.boxRows) * grid.boxRows
+            val bc = (col / grid.boxCols) * grid.boxCols
+            for (r in br until br + grid.boxRows) {
+                for (c in bc until bc + grid.boxCols) {
+                    if ((r != row || c != col) && grid[r, c] == 0 && v in candidatesFor(grid, r, c)) {
+                        boxUnique = false
+                        break
+                    }
+                }
+                if (!boxUnique) break
+            }
+            if (boxUnique) return v
+        }
+        return null
+    }
+
     /** All candidate values for an empty cell. */
     internal fun candidatesFor(grid: SudokuGrid, row: Int, col: Int): Set<Int> {
         val n = grid.size

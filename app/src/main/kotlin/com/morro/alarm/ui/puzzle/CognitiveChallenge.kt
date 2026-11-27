@@ -2,6 +2,7 @@ package com.morro.alarm.ui.puzzle
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.morro.alarm.puzzle.sudoku.SudokuMode
 
 /**
  * The cognitive challenge gates available for the alarm.
@@ -43,6 +44,7 @@ object CognitivePrefs {
     private const val PREFS_NAME = "morro_prefs"
     private const val KEY_CHALLENGE = "cognitive_challenge"
     private const val KEY_DIFFICULTY = "cognitive_difficulty"
+    private const val KEY_SUDOKU_MODE = "cognitive_sudoku_mode"
 
     // Testing hook allowing tests to inject mock SharedPreferences without Android Context stub crashes
     internal var prefsOpener: ((context: Context, name: String) -> SharedPreferences)? = null
@@ -89,6 +91,33 @@ object CognitivePrefs {
         try {
             val prefs = getPrefs(context)
             prefs.edit().putString(KEY_DIFFICULTY, difficulty.name).apply()
+        } catch (_: Throwable) {
+            // Safe no-op on storage failure
+        }
+    }
+
+    /** Returns the saved [SudokuMode] tier (Easy / Medium / Hard), defaulting to [SudokuMode.EASY]. */
+    fun getSudokuMode(context: Context): SudokuMode {
+        return try {
+            val prefs = getPrefs(context)
+            val name = prefs.getString(KEY_SUDOKU_MODE, null)
+            if (name != null) {
+                SudokuMode.valueOf(name)
+            } else if (getDifficulty(context) == CognitiveDifficulty.HARD) {
+                SudokuMode.HARD
+            } else {
+                SudokuMode.EASY
+            }
+        } catch (_: Throwable) {
+            SudokuMode.EASY
+        }
+    }
+
+    /** Persists the chosen [SudokuMode] tier. */
+    fun setSudokuMode(context: Context, mode: SudokuMode) {
+        try {
+            val prefs = getPrefs(context)
+            prefs.edit().putString(KEY_SUDOKU_MODE, mode.name).apply()
         } catch (_: Throwable) {
             // Safe no-op on storage failure
         }

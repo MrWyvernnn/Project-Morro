@@ -151,162 +151,107 @@ class SudokuGeneratorTest {
     // --- Determinism ---
 
     @Test
-    fun `same seed produces identical puzzle for STANDARD`() {
-        val a = SudokuGenerator.generate(42L, SudokuMode.STANDARD)
-        val b = SudokuGenerator.generate(42L, SudokuMode.STANDARD)
-        assertEquals(a.grid, b.grid)
-        assertEquals(a.solution, b.solution)
-        assertEquals(a.mode, b.mode)
-        assertEquals(a.seed, b.seed)
+    fun `same seed produces identical puzzle across all three tiers`() {
+        for (mode in SudokuMode.values()) {
+            val a = SudokuGenerator.generate(42L, mode)
+            val b = SudokuGenerator.generate(42L, mode)
+            assertEquals("grid mismatch for $mode", a.grid, b.grid)
+            assertEquals("solution mismatch for $mode", a.solution, b.solution)
+            assertEquals(mode, a.mode)
+            assertEquals(42L, a.seed)
+        }
     }
 
-    @Test
-    fun `same seed produces identical puzzle for HARD`() {
-        val a = SudokuGenerator.generate(42L, SudokuMode.HARD)
-        val b = SudokuGenerator.generate(42L, SudokuMode.HARD)
-        assertEquals(a.grid, b.grid)
-        assertEquals(a.solution, b.solution)
-    }
-
-    // --- Removal count ---
+    // --- Wake-up calibrated removal counts ---
 
     @Test
-    fun `STANDARD removes 6 to 8 cells`() {
+    fun `EASY removes 6 cells on 4x4`() {
         for (seed in 1L..100L) {
-            val puzzle = SudokuGenerator.generate(seed, SudokuMode.STANDARD)
+            val puzzle = SudokuGenerator.generate(seed, SudokuMode.EASY)
+            assertEquals(4, puzzle.grid.size)
+            assertEquals(2, puzzle.grid.boxRows)
+            assertEquals(2, puzzle.grid.boxCols)
+            assertEquals("Seed $seed EASY empty count", 6, puzzle.grid.emptyCells().size)
+        }
+    }
+
+    @Test
+    fun `MEDIUM removes 6 cells on 9x9`() {
+        for (seed in 1L..100L) {
+            val puzzle = SudokuGenerator.generate(seed, SudokuMode.MEDIUM)
+            assertEquals(9, puzzle.grid.size)
+            assertEquals(3, puzzle.grid.boxRows)
+            assertEquals(3, puzzle.grid.boxCols)
+            assertEquals("Seed $seed MEDIUM empty count", 6, puzzle.grid.emptyCells().size)
+        }
+    }
+
+    @Test
+    fun `HARD removes 10 to 12 cells on 9x9`() {
+        for (seed in 1L..100L) {
+            val puzzle = SudokuGenerator.generate(seed, SudokuMode.HARD)
+            assertEquals(9, puzzle.grid.size)
             val empties = puzzle.grid.emptyCells().size
             assertTrue(
-                "Seed $seed: STANDARD should remove 6-8 cells, got $empties",
-                empties in 6..8
+                "Seed $seed: HARD should remove 10-12 cells, got $empties",
+                empties in 10..12
             )
         }
     }
 
-    @Test
-    fun `HARD removes 5 to 7 cells`() {
-        for (seed in 1L..100L) {
-            val puzzle = SudokuGenerator.generate(seed, SudokuMode.HARD)
-            val empties = puzzle.grid.emptyCells().size
-            assertTrue(
-                "Seed $seed: HARD should remove 5-7 cells, got $empties",
-                empties in 5..7
-            )
-        }
-    }
-
-    // --- Uniqueness: 500 seeds per mode ---
+    // --- Uniqueness: 500 seeds per tier ---
 
     @Test
-    fun `500 seeds STANDARD all have exactly one solution`() {
-        for (seed in 1L..500L) {
-            val puzzle = SudokuGenerator.generate(seed, SudokuMode.STANDARD)
-            val count = SudokuSolver.countSolutions(puzzle.grid, 2)
-            assertEquals("Seed $seed: STANDARD should have exactly 1 solution", 1, count)
-        }
-    }
-
-    @Test
-    fun `500 seeds HARD all have exactly one solution`() {
-        for (seed in 1L..500L) {
-            val puzzle = SudokuGenerator.generate(seed, SudokuMode.HARD)
-            val count = SudokuSolver.countSolutions(puzzle.grid, 2)
-            assertEquals("Seed $seed: HARD should have exactly 1 solution", 1, count)
-        }
-    }
-
-    // --- Logical deducibility ---
-
-    @Test
-    fun `every removed cell in STANDARD is logically deducible without guessing`() {
-        for (seed in 1L..500L) {
-            val puzzle = SudokuGenerator.generate(seed, SudokuMode.STANDARD)
-            var current = puzzle.grid
-            val remaining = current.emptyCells().toMutableSet()
-            while (remaining.isNotEmpty()) {
-                val deducible = remaining.firstOrNull { (r, c) ->
-                    SudokuSolver.isLogicallyDeducible(current, r, c)
-                }
-                assertNotNull(
-                    "Seed $seed: stuck with no logically deducible cells! Remaining: $remaining",
-                    deducible
-                )
-                val (r, c) = deducible!!
-                current = current.set(r, c, puzzle.solution[r, c])
-                remaining.remove(deducible)
+    fun `500 seeds per tier all have exactly one solution`() {
+        for (mode in SudokuMode.values()) {
+            for (seed in 1L..500L) {
+                val puzzle = SudokuGenerator.generate(seed, mode)
+                val count = SudokuSolver.countSolutions(puzzle.grid, 2)
+                assertEquals("Seed $seed $mode should have exactly 1 solution", 1, count)
             }
-            assertEquals(puzzle.solution, current)
         }
     }
 
+    // --- Logical deducibility: 500 seeds per tier ---
+
     @Test
-    fun `every removed cell in HARD is logically deducible without guessing`() {
-        for (seed in 1L..500L) {
-            val puzzle = SudokuGenerator.generate(seed, SudokuMode.HARD)
-            var current = puzzle.grid
-            val remaining = current.emptyCells().toMutableSet()
-            while (remaining.isNotEmpty()) {
-                val deducible = remaining.firstOrNull { (r, c) ->
-                    SudokuSolver.isLogicallyDeducible(current, r, c)
-                }
-                assertNotNull(
-                    "Seed $seed: stuck with no logically deducible cells! Remaining: $remaining",
-                    deducible
+    fun `500 seeds per tier are logically deducible without guessing`() {
+        for (mode in SudokuMode.values()) {
+            for (seed in 1L..500L) {
+                val puzzle = SudokuGenerator.generate(seed, mode)
+                assertTrue(
+                    "Seed $seed $mode must pass logical-solve verification",
+                    SudokuSolver.isLogicallySolvable(puzzle.grid)
                 )
-                val (r, c) = deducible!!
-                current = current.set(r, c, puzzle.solution[r, c])
-                remaining.remove(deducible)
             }
-            assertEquals(puzzle.solution, current)
         }
     }
 
     // --- Solution validity ---
 
     @Test
-    fun `generated solutions are valid`() {
-        for (seed in 1L..50L) {
-            val std = SudokuGenerator.generate(seed, SudokuMode.STANDARD)
-            assertTrue("STANDARD seed $seed solution is solved", SudokuGrid.isSolved(std.solution))
-
-            val hard = SudokuGenerator.generate(seed, SudokuMode.HARD)
-            assertTrue("HARD seed $seed solution is solved", SudokuGrid.isSolved(hard.solution))
+    fun `generated solutions are valid across all tiers`() {
+        for (mode in SudokuMode.values()) {
+            for (seed in 1L..50L) {
+                val puzzle = SudokuGenerator.generate(seed, mode)
+                assertTrue("$mode seed $seed solution is solved", SudokuGrid.isSolved(puzzle.solution))
+            }
         }
     }
 
     // --- Performance ---
 
     @Test
-    fun `STANDARD generation under 50ms average`() {
-        // Warm up
-        repeat(10) { SudokuGenerator.generate(it.toLong(), SudokuMode.STANDARD) }
-
-        val start = System.nanoTime()
-        val iterations = 100
-        repeat(iterations) { SudokuGenerator.generate(it.toLong() + 1000, SudokuMode.STANDARD) }
-        val elapsed = (System.nanoTime() - start) / 1_000_000.0
-        val avg = elapsed / iterations
-
-        assertTrue(
-            "STANDARD avg generation ${avg}ms should be under 50ms",
-            avg < 50.0
-        )
-    }
-
-    @Test
-    fun `HARD generation under 50ms average`() {
-        // Warm up
-        repeat(10) { SudokuGenerator.generate(it.toLong(), SudokuMode.HARD) }
-
-        val start = System.nanoTime()
-        val iterations = 100
-        repeat(iterations) { SudokuGenerator.generate(it.toLong() + 1000, SudokuMode.HARD) }
-        val elapsed = (System.nanoTime() - start) / 1_000_000.0
-        val avg = elapsed / iterations
-
-        assertTrue(
-            "HARD avg generation ${avg}ms should be under 50ms",
-            avg < 50.0
-        )
+    fun `all tiers generate in under 50ms average`() {
+        for (mode in SudokuMode.values()) {
+            repeat(10) { SudokuGenerator.generate(it.toLong(), mode) }
+            val start = System.nanoTime()
+            val iterations = 100
+            repeat(iterations) { SudokuGenerator.generate(it.toLong() + 1000, mode) }
+            val elapsedMs = (System.nanoTime() - start) / 1_000_000.0
+            val avg = elapsedMs / iterations
+            assertTrue("$mode avg generation ${avg}ms should be under 50ms", avg < 50.0)
+        }
     }
 
     // --- Solver & Grid Hardening ---
@@ -352,14 +297,19 @@ class SudokuGeneratorTest {
     fun `edge case seeds generate valid deterministic puzzles with target hole counts`() {
         val edgeSeeds = listOf(0L, -1L, -42L, Long.MIN_VALUE, Long.MAX_VALUE)
         for (seed in edgeSeeds) {
-            val std = SudokuGenerator.generate(seed, SudokuMode.STANDARD)
-            assertEquals(std, SudokuGenerator.generate(seed, SudokuMode.STANDARD))
-            assertTrue("Seed $seed STANDARD empties=${std.grid.emptyCells().size}", std.grid.emptyCells().size in 6..8)
+            val std = SudokuGenerator.generate(seed, SudokuMode.EASY)
+            assertEquals(std, SudokuGenerator.generate(seed, SudokuMode.EASY))
+            assertEquals(6, std.grid.emptyCells().size)
             assertEquals(1, SudokuSolver.countSolutions(std.grid, 2))
+
+            val med = SudokuGenerator.generate(seed, SudokuMode.MEDIUM)
+            assertEquals(med, SudokuGenerator.generate(seed, SudokuMode.MEDIUM))
+            assertEquals(6, med.grid.emptyCells().size)
+            assertEquals(1, SudokuSolver.countSolutions(med.grid, 2))
 
             val hard = SudokuGenerator.generate(seed, SudokuMode.HARD)
             assertEquals(hard, SudokuGenerator.generate(seed, SudokuMode.HARD))
-            assertTrue("Seed $seed HARD empties=${hard.grid.emptyCells().size}", hard.grid.emptyCells().size in 5..7)
+            assertTrue("Seed $seed HARD empties=${hard.grid.emptyCells().size}", hard.grid.emptyCells().size in 10..12)
             assertEquals(1, SudokuSolver.countSolutions(hard.grid, 2))
         }
     }

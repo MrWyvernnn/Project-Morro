@@ -175,7 +175,7 @@ class SudokuUiTest {
         assertEquals(3, puzzle.grid.boxRows)
         assertEquals(3, puzzle.grid.boxCols)
         val emptyCells = puzzle.grid.emptyCells()
-        assertTrue(emptyCells.size in 5..7)
+        assertTrue(emptyCells.size in 10..12)
     }
 
     @Test

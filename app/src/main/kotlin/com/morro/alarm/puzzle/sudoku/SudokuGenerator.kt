@@ -3,17 +3,25 @@ package com.morro.alarm.puzzle.sudoku
 import kotlin.random.Random
 
 /**
- * The two difficulty modes for Sudoku puzzles.
+ * Wake-up calibrated Sudoku tiers.
+ *
+ * - [EASY]: 4×4 grid, 2×2 boxes, digits 1–4, 6 cells removed (target <= 20s).
+ * - [MEDIUM]: 9×9 grid, 3×3 boxes, digits 1–9, 6 cells removed (target <= 45s).
+ * - [HARD]: 9×9 grid, 3×3 boxes, digits 1–9, 10–12 cells removed (target <= 90s).
  */
-enum class SudokuMode {
-    /** 4×4 grid, 2×2 boxes, digits 1–4, remove 6–8 cells. */
-    STANDARD,
-    /** 9×9 grid, 3×3 boxes, digits 1–9, remove 5–7 cells. */
-    HARD
+enum class SudokuMode(val label: String, val detail: String) {
+    EASY("Easy", "4×4 · 6 blanks"),
+    MEDIUM("Medium", "9×9 · 6 blanks"),
+    HARD("Hard", "9×9 · 10–12 blanks");
+
+    companion object {
+        /** Legacy alias preserved for existing tests targeting 4×4 quick solve. */
+        val STANDARD: SudokuMode get() = EASY
+    }
 }
 
 /**
- * A generated Sudoku puzzle with its solution.
+ * A generated Sudoku puzzle with its unique solution.
  */
 data class SudokuPuzzle(
     val grid: SudokuGrid,
@@ -23,28 +31,23 @@ data class SudokuPuzzle(
 )
 
 /**
- * Deterministic Sudoku generator. Same seed + same mode → identical puzzle.
- * Uses seeded [Random] for all randomness; solver is deterministic.
+ * Deterministic Sudoku generator. Same seed + same mode -> identical puzzle.
+ * Every puzzle has a unique solution and is 100% solvable using naked/hidden singles.
  */
 object SudokuGenerator {
 
-    private const val MAX_GRID_ATTEMPTS = 16
+    private const val MAX_GRID_ATTEMPTS = 24
     private const val SHUFFLES_PER_GRID = 4
 
     /**
-     * Generate a puzzle for the given [mode] using [seed] for reproducibility.
-     *
-     * - STANDARD: 4×4, remove 6–8 cells.
-     * - HARD: 9×9, remove 5–7 cells.
-     *
-     * Every removed cell is logically deducible (naked-single or hidden-single)
-     * and the puzzle has exactly one solution.
+     * Generates a puzzle for [mode] deterministically from [seed].
      */
     fun generate(seed: Long, mode: SudokuMode): SudokuPuzzle {
         val rng = Random(seed)
         val params = when (mode) {
-            SudokuMode.STANDARD -> GridParams(4, 2, 2, 6, 8)
-            SudokuMode.HARD -> GridParams(9, 3, 3, 5, 7)
+            SudokuMode.EASY -> GridParams(4, 2, 2, minRemove = 6, maxRemove = 6)
+            SudokuMode.MEDIUM -> GridParams(9, 3, 3, minRemove = 6, maxRemove = 6)
+            SudokuMode.HARD -> GridParams(9, 3, 3, minRemove = 10, maxRemove = 12)
         }
 
         var bestPuzzle: SudokuGrid? = null
@@ -54,8 +57,16 @@ object SudokuGenerator {
         for (attempt in 0 until MAX_GRID_ATTEMPTS) {
             val solution = generateFullGrid(rng, params.size, params.boxRows, params.boxCols)
             for (shuffleTry in 0 until SHUFFLES_PER_GRID) {
-                val (candidate, removed) = removeCells(rng, solution, params.maxRemove)
-                if (removed >= params.minRemove) {
+                val targetRemove = if (params.minRemove == params.maxRemove) {
+                    params.maxRemove
+                } else {
+                    rng.nextInt(params.minRemove, params.maxRemove + 1)
+                }
+                val (candidate, removed) = removeCells(rng, solution, targetRemove)
+                if (removed >= params.minRemove &&
+                    SudokuSolver.countSolutions(candidate, 2) == 1 &&
+                    SudokuSolver.isLogicallySolvable(candidate)
+                ) {
                     return SudokuPuzzle(
                         grid = candidate,
                         solution = solution,
@@ -63,7 +74,10 @@ object SudokuGenerator {
                         seed = seed
                     )
                 }
-                if (removed > bestRemoved) {
+                if (removed > bestRemoved &&
+                    SudokuSolver.countSolutions(candidate, 2) == 1 &&
+                    SudokuSolver.isLogicallySolvable(candidate)
+                ) {
                     bestRemoved = removed
                     bestPuzzle = candidate
                     bestSolution = solution
@@ -71,15 +85,15 @@ object SudokuGenerator {
             }
         }
 
+        val fallbackSolution = bestSolution ?: generateFullGrid(rng, params.size, params.boxRows, params.boxCols)
+        val fallbackGrid = bestPuzzle ?: removeCells(rng, fallbackSolution, params.minRemove).first
         return SudokuPuzzle(
-            grid = bestPuzzle!!,
-            solution = bestSolution!!,
+            grid = fallbackGrid,
+            solution = fallbackSolution,
             mode = mode,
             seed = seed
         )
     }
-
-    // --- Internal helpers ---
 
     private data class GridParams(
         val size: Int,
@@ -89,10 +103,6 @@ object SudokuGenerator {
         val maxRemove: Int
     )
 
-    /**
-     * Build a complete, valid Sudoku grid using randomised backtracking.
-     * The [rng] controls the shuffle order of candidate values.
-     */
     private fun generateFullGrid(
         rng: Random, size: Int, boxRows: Int, boxCols: Int
     ): SudokuGrid {
@@ -109,7 +119,6 @@ object SudokuGenerator {
             val used = rowMask[r] or colMask[c] or boxMask[b]
 
             val values = IntArray(size) { it + 1 }
-            // Fisher-Yates shuffle with rng
             for (i in size - 1 downTo 1) {
                 val j = rng.nextInt(i + 1)
                 val tmp = values[i]
@@ -138,17 +147,10 @@ object SudokuGenerator {
         return SudokuGrid(size, boxRows, boxCols, board)
     }
 
-    /**
-     * Remove up to [maxRemove] cells from [solution].
-     *
-     * A removal is kept only if:
-     * 1. The puzzle still has exactly one solution.
-     * 2. The removed cell is logically deducible (naked/hidden single).
-     */
     private fun removeCells(
         rng: Random,
         solution: SudokuGrid,
-        maxRemove: Int
+        targetRemove: Int
     ): Pair<SudokuGrid, Int> {
         val n = solution.size
         val positions = ArrayList<Pair<Int, Int>>(n * n)
@@ -159,15 +161,11 @@ object SudokuGenerator {
         var removed = 0
 
         for ((r, c) in positions) {
-            if (removed >= maxRemove) break
+            if (removed >= targetRemove) break
             if (current[r, c] == 0) continue
 
             val candidate = current.set(r, c, 0)
-
-            // Must remain uniquely solvable
             if (SudokuSolver.countSolutions(candidate, 2) != 1) continue
-
-            // The emptied cell must be deducible without guessing
             if (!SudokuSolver.isLogicallyDeducible(candidate, r, c)) continue
 
             current = candidate

@@ -38,6 +38,16 @@ object AlarmScheduler {
      */
     private const val CATCH_UP_REQUEST_CODE = 1006
 
+    /**
+     * Dedicated slot for [AlarmForegroundService.onTaskRemoved] swipe recovery.
+     *
+     * Distinct from daily alarm (1001), wake-up check (1003/1004), and catch-up (1006), so arming
+     * or cancelling swipe recovery never overwrites tomorrow's alarm or poisons MissedAlarmLog.
+     */
+    private const val RECOVERY_REQUEST_CODE = 1007
+    const val ACTION_RECOVER_RING = "com.morro.alarm.ACTION_RECOVER_RING"
+    const val EXTRA_RECOVERY_ALARM_ID = "com.morro.alarm.EXTRA_RECOVERY_ALARM_ID"
+
     /** Long enough for this process to return, short enough that the ring feels immediate. */
     internal const val CATCH_UP_DELAY_MILLIS = 2_000L
 
@@ -244,6 +254,7 @@ object AlarmScheduler {
      * @return true when the snooze itself was armed.
      */
     fun snoozeAlarm(context: Context, minutes: Int = 10): Boolean {
+        AlarmForegroundService.markRingDismissedOrSnoozed(context)
         val triggerTime = System.currentTimeMillis() + minutes * 60_000L
         if (scheduleAlarm(context, triggerTime)) {
             // A snooze is the most likely pending trigger at the moment of a reboot, so the mirror
@@ -256,6 +267,52 @@ object AlarmScheduler {
             scheduleDailyAlarm(context, hour, minute)
         }
         return false
+    }
+
+    /**
+     * Schedules a one-shot recovery broadcast at `now + delayMs` via `setAlarmClock()` when the
+     * task is swiped away mid-ring.
+     *
+     * Does NOT touch `morro_prefs` daily trigger bookkeeping or `AlarmBootMirror`.
+     *
+     * Honest limit: this survives a swipe from Recents (which triggers `onTaskRemoved`). It does
+     * NOT survive Force Stop from Android Settings, because Force Stop kills all scheduled
+     * `AlarmManager` triggers across the app — for that case, `MainActivity` re-arms stale alarms
+     * on next launch.
+     */
+    fun scheduleRecoveryAlarm(
+        context: Context,
+        delayMs: Long = 1_000L,
+        alarmId: Long = System.currentTimeMillis()
+    ): Boolean {
+        val intent = Intent(context, AlarmReceiver::class.java).apply {
+            action = ACTION_RECOVER_RING
+            putExtra(EXTRA_RECOVERY_ALARM_ID, alarmId)
+        }
+        return armAlarmClock(
+            context = context,
+            finalTriggerTime = System.currentTimeMillis() + delayMs.coerceAtLeast(250L),
+            requestCode = RECOVERY_REQUEST_CODE,
+            triggerIntent = intent
+        )
+    }
+
+    /** Cancels any pending swipe-recovery trigger (called on legitimate dismiss or snooze). */
+    fun cancelRecoveryAlarm(context: Context) {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+        try {
+            alarmManager.cancel(
+                PendingIntent.getBroadcast(
+                    context,
+                    RECOVERY_REQUEST_CODE,
+                    Intent(context, AlarmReceiver::class.java).apply {
+                        action = ACTION_RECOVER_RING
+                    },
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+            )
+        } catch (_: Exception) {
+        }
     }
 
     fun cancelAlarm(context: Context) {
@@ -288,6 +345,7 @@ object AlarmScheduler {
             // Ignore
         }
 
+        cancelRecoveryAlarm(context)
         clearPrefs(context)
         AlarmBootMirror.clear(context)
     }

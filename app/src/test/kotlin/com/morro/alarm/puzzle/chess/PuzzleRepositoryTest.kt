@@ -123,13 +123,14 @@ class PuzzleRepositoryTest {
         val fbAfter1 = fbAfter0.apply(fbMoves[1])
         assertTrue("FALLBACK moves[1] must deliver checkmate", ChessRules.isCheckmate(fbAfter1, fbAfter1.sideToMove))
 
-        // 2. Validate every Mate-in-1 row
+        // 2. Validate every Mate-in-1 row (1100..1600, ~1200 rows)
         val m1Lines = parseAssetLines("puzzles/mate_in_1.csv.gz")
-        assertTrue("mate_in_1 should have at least 50 puzzles", m1Lines.size > 50)
+        assertTrue("mate_in_1 should have ~1200 puzzles (found ${m1Lines.size - 1})", m1Lines.size - 1 >= 1000)
         for (line in m1Lines.drop(1)) {
             val record = PuzzleRepository.parseLine(line)
             assertNotNull("Row should parse & validate: $line", record)
-            val board = FenParser.parse(record!!.fen).getOrThrow()
+            assertTrue("mate_in_1 rating ${record!!.rating} out of 1100..1600", record.rating in 1100..1600)
+            val board = FenParser.parse(record.fen).getOrThrow()
             val moves = record.moves.split(" ").map { ChessMove.fromUci(it)!! }
             assertEquals("Mate-in-1 must have 2 moves: $line", 2, moves.size)
             assertTrue("Moves[0] illegal in $line", moves[0] in ChessRules.allLegalMoves(board))
@@ -139,13 +140,14 @@ class PuzzleRepositoryTest {
             assertTrue("Moves[1] does not deliver checkmate in $line", ChessRules.isCheckmate(b2, b2.sideToMove))
         }
 
-        // 3. Validate every Mate-in-2 row
+        // 3. Validate every Mate-in-2 row (1300..1800, ~800 rows)
         val m2Lines = parseAssetLines("puzzles/mate_in_2.csv.gz")
-        assertTrue("mate_in_2 should have at least 50 puzzles", m2Lines.size > 50)
+        assertTrue("mate_in_2 should have ~800 puzzles (found ${m2Lines.size - 1})", m2Lines.size - 1 >= 700)
         for (line in m2Lines.drop(1)) {
             val record = PuzzleRepository.parseLine(line)
             assertNotNull("Row should parse & validate: $line", record)
-            val board = FenParser.parse(record!!.fen).getOrThrow()
+            assertTrue("mate_in_2 rating ${record!!.rating} out of 1300..1800", record.rating in 1300..1800)
+            val board = FenParser.parse(record.fen).getOrThrow()
             val moves = record.moves.split(" ").map { ChessMove.fromUci(it)!! }
             assertEquals("Mate-in-2 must have 4 moves: $line", 4, moves.size)
             assertTrue("Moves[0] illegal in $line", moves[0] in ChessRules.allLegalMoves(board))

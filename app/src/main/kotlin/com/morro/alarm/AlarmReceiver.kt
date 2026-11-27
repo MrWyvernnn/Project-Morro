@@ -32,14 +32,25 @@ class AlarmReceiver : BroadcastReceiver() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
-        Log.d(TAG, "(2) Broadcast received: AlarmReceiver fired")
+        Log.d(TAG, "(2) Broadcast received: AlarmReceiver fired action=${intent.action}")
 
+        val isRecovery = intent.action == AlarmScheduler.ACTION_RECOVER_RING
         val isWakeUpRering = intent.getBooleanExtra(WakeUpCheck.EXTRA_RERING, false)
+
+        if (isRecovery) {
+            val isRinging = AlarmForegroundService.isPersistedRingActive(context)
+            val alreadyActive = AlarmSoundPlayer.isPlaying() && AlarmActivity.isForegroundActive
+            if (!recoveryNeeded(isRinging = isRinging, ringAlreadyActive = alreadyActive)) {
+                Log.d(TAG, "Swipe recovery ignored (isRinging=$isRinging, alreadyActive=$alreadyActive)")
+                return
+            }
+        }
 
         // Health log first: the expected trigger is still in prefs at this instant, and the
         // dismissal path re-arms tomorrow's alarm later in the same ring, which would overwrite it.
-        // A debug test ring and a wake-up re-ring are not the morning ring, so neither is logged.
-        if (intent.action != ACTION_TEST_ALARM && !isWakeUpRering) {
+        // Debug test rings, wake-up re-rings, and swipe recoveries never touch MissedAlarmLog.
+        var resolvedAlarmId = intent.getLongExtra(AlarmScheduler.EXTRA_RECOVERY_ALARM_ID, 0L)
+        if (!isRecovery && intent.action != ACTION_TEST_ALARM && !isWakeUpRering) {
             // A catch-up delivery carries the occurrence it is standing in for, and that is more
             // trustworthy than the stored trigger: if the pending alarm was cancelled or replaced in
             // the seconds between arming the catch-up and this broadcast, prefs no longer describe
@@ -51,6 +62,9 @@ class AlarmReceiver : BroadcastReceiver() {
                 AlarmScheduler.getNextAlarmTime(context)
             }
             val now = System.currentTimeMillis()
+            if (resolvedAlarmId == 0L) {
+                resolvedAlarmId = expected ?: now
+            }
 
             // One occurrence rings once. The locked-boot catch-up exists because a due alarm can be
             // sitting undelivered; if that delivery then arrives too, both paths must agree that
@@ -65,6 +79,10 @@ class AlarmReceiver : BroadcastReceiver() {
             if (expected != null && lateFireFor(expected, now) != null) {
                 MissedAlarmLog.recordLateFire(context, expected, now, volumeRatio)
             }
+        }
+        if (resolvedAlarmId == 0L) {
+            resolvedAlarmId = AlarmForegroundService.persistedRingAlarmId(context).takeIf { it != 0L }
+                ?: System.currentTimeMillis()
         }
 
         // Acquire PARTIAL_WAKE_LOCK immediately so the CPU stays alive while we
@@ -93,7 +111,9 @@ class AlarmReceiver : BroadcastReceiver() {
             var serviceStarted = false
             try {
                 Log.d(TAG, "Starting AlarmForegroundService")
-                val serviceIntent = Intent(context, AlarmForegroundService::class.java)
+                val serviceIntent = Intent(context, AlarmForegroundService::class.java).apply {
+                    putExtra(AlarmForegroundService.EXTRA_ALARM_ID, resolvedAlarmId)
+                }
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     context.startForegroundService(serviceIntent)
                 } else {
