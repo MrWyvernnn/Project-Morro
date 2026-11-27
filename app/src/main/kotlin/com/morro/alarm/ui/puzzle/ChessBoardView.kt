@@ -1,24 +1,36 @@
 package com.morro.alarm.ui.puzzle
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -33,24 +45,34 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.morro.alarm.puzzle.chess.ChessBoard
+import com.morro.alarm.puzzle.chess.ChessEngine
 import com.morro.alarm.puzzle.chess.ChessMove
 import com.morro.alarm.puzzle.chess.ChessRules
 import com.morro.alarm.puzzle.chess.Color as PieceColor
@@ -62,14 +84,18 @@ import com.morro.alarm.puzzle.chess.Square
 import com.morro.alarm.ui.motion.MorroMotion
 import com.morro.alarm.ui.motion.pressScale
 import com.morro.alarm.ui.motion.rememberReducedMotion
+import com.morro.alarm.ui.theme.MorroSpring
 import com.morro.alarm.ui.theme.morroColors
+import com.morro.alarm.ui.theme.morroGlassBorder
 import com.morro.alarm.ui.theme.morroHairline
 import com.morro.alarm.ui.theme.morroShapes
 import com.morro.alarm.ui.theme.morroTypography
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.hypot
+import kotlin.math.sin
 
 /**
  * Result of a user move attempt.
@@ -86,6 +112,13 @@ private data class MovingPieceState(
     val to: Square
 )
 
+private enum class PuzzleBannerKind {
+    NEUTRAL,
+    GOOD,
+    WRONG,
+    SOLVED
+}
+
 private val PROMOTION_CHOICES = listOf(
     PieceType.QUEEN to "Queen",
     PieceType.ROOK to "Rook",
@@ -93,23 +126,25 @@ private val PROMOTION_CHOICES = listOf(
     PieceType.KNIGHT to "Knight"
 )
 
+// Exact Chess.com Classic Green + Neo palette
+private val ChessComFrameDark = ComposeColor(0xFF262421)
+private val ChessComStripSurface = ComposeColor(0xFF302E2B)
+private val ChessComLightSquare = ComposeColor(0xFFEEEED2)
+private val ChessComDarkSquare = ComposeColor(0xFF769656)
+private val ChessComHighlightYellow = ComposeColor(0xFFF6F669)
+private val ChessComGreenBanner = ComposeColor(0xFF81B64C)
+private val ChessComCrimson = ComposeColor(0xFFCA3431)
+private val ChessComCheckGlow = ComposeColor(0xFFE02828)
+
 /**
- * 8×8 Canvas-drawn chess board view designed for morning cognitive gate puzzles.
+ * 8×8 Canvas-drawn chess board view matching Chess.com's Classic Green + Neo puzzle experience.
  *
- * Rules:
- * - Square tones: light = surfaceHigh (#231F19), dark = surface (#0B0A08) (readable on AMOLED).
- * - Sizing: fits available width, 41–43dp per square on a 360dp screen, never scrolls.
- * - Interaction: tap-to-select, tap-to-destination (no drag and drop).
- * - Selected square: honey at 20% overlay + borderActive hairline.
- * - Legal destinations: textPrimary at 18% dots, 8dp radius circle.
- * - Last move: honey at 10% on both squares (from & to).
- * - King in check: error hairline ring on that square.
- * - Axis-aligned nearest-square tap snapping with +6dp tolerance band (covers corners cleanly).
- * - Opponent setup move (Moves[0]) auto-plays on entry with both squares highlighted for 600ms before user may act.
- * - Mate-in-2 handling: accepts immediate mate-in-1, Moves[1], OR any forced mate-in-2, then auto-plays opponent reply and lets user deliver checkmate.
- * - Pawn promotion: presents a Morro-styled Q/R/B/N picker without spoiling underpromotions.
- * - Survival: board state persists across configuration changes via rememberSaveable.
- * - Reduced motion: honors rememberReducedMotion().
+ * - Palette: Exact `#769656` dark green & `#EEEED2` cream squares, `#F6F669` move/select highlights,
+ *   crimson radial check glow, and Chess.com `#CA3431` / `#81B64C` feedback banners.
+ * - Interaction: Smooth physical drag-and-drop AND tap-to-move with lifted piece preview and
+ *   target-square hover ring.
+ * - Engine safety: Verifies forced Mate-in-1 / Mate-in-2 accurately (without accepting blunders),
+ *   persists across rotation via rememberSaveable, and honors rememberReducedMotion().
  */
 @Composable
 fun ChessBoardView(
@@ -123,6 +158,7 @@ fun ChessBoardView(
     val reducedMotion = rememberReducedMotion()
     val haptic = LocalHapticFeedback.current
     val density = LocalDensity.current
+    val viewConfig = LocalViewConfiguration.current
     val scope = rememberCoroutineScope()
 
     val currentOnMoveAttempt by rememberUpdatedState(onMoveAttempt)
@@ -137,6 +173,8 @@ fun ChessBoardView(
         FenParser.parse(puzzleRecord.fen).getOrNull() ?: board
     }
     val initialFen = remember(initialBoard) { FenParser.toFen(initialBoard) }
+
+    // Initial position's sideToMove plays Moves[0] (the opponent setup move), so player plays the opposite.
     val playerColor = remember(initialBoard) { initialBoard.sideToMove.opposite() }
     val isFlipped = (playerColor == PieceColor.BLACK)
 
@@ -158,6 +196,16 @@ fun ChessBoardView(
     var pendingPromotion by remember(puzzleRecord.puzzleId) { mutableStateOf<Pair<Square, Square>?>(null) }
     var isAnimating by remember(puzzleRecord.puzzleId) { mutableStateOf(false) }
 
+    // Drag-and-drop live gesture state
+    var draggingFrom by remember(puzzleRecord.puzzleId) { mutableStateOf<Square?>(null) }
+    var dragPointerPx by remember(puzzleRecord.puzzleId) { mutableStateOf<Offset?>(null) }
+    var dragHoverSquare by remember(puzzleRecord.puzzleId) { mutableStateOf<Square?>(null) }
+
+    // Chess.com incorrect / good move feedback banner state
+    var wrongFlashSquare by remember(puzzleRecord.puzzleId) { mutableStateOf<Square?>(null) }
+    var feedbackKind by remember(puzzleRecord.puzzleId) { mutableStateOf(PuzzleBannerKind.NEUTRAL) }
+    var wrongCounter by remember(puzzleRecord.puzzleId) { mutableIntStateOf(0) }
+
     val isUserTurnEnabled = setupPlayed &&
         !isSolved &&
         !isAnimating &&
@@ -168,17 +216,22 @@ fun ChessBoardView(
     val moveProgress = remember(puzzleRecord.puzzleId) { Animatable(0f) }
     var movingPiece by remember(puzzleRecord.puzzleId) { mutableStateOf<MovingPieceState?>(null) }
 
-    // Colors
+    val selectedPiecePop by animateFloatAsState(
+        targetValue = if (selectedSquare != null && draggingFrom == null && !reducedMotion) 1.07f else 1f,
+        animationSpec = if (reducedMotion) tween(0) else MorroSpring.FloatSpringPlayful,
+        label = "selectedPiecePop"
+    )
+    val legalDotsScale by animateFloatAsState(
+        targetValue = if (legalDestinations.isNotEmpty()) 1f else 0f,
+        animationSpec = if (reducedMotion) tween(0) else MorroSpring.FloatSpringPlayful,
+        label = "legalDotsScale"
+    )
+
     val colors = morroColors()
-    val lightSquareColor = colors.surfaceHigh
-    val darkSquareColor = colors.surface
-    val selectedOverlayColor = colors.honey.copy(alpha = 0.20f)
-    val selectedBorderColor = colors.borderActive
-    val lastMoveColor = colors.honey.copy(alpha = 0.10f)
-    val legalDotColor = colors.textPrimary.copy(alpha = 0.18f)
-    val kingCheckColor = colors.error
-    val pieceColor = colors.textPrimary
-    val pressedOverlayColor = colors.textPrimary.copy(alpha = 0.08f)
+    val selectedOverlayColor = ChessComHighlightYellow.copy(alpha = 0.56f)
+    val lastMoveColor = ChessComHighlightYellow.copy(alpha = 0.45f)
+    val legalDotColor = ComposeColor(0xFF000000).copy(alpha = 0.14f)
+    val textMeasurer = rememberTextMeasurer()
 
     // King in check identification
     val inCheckKingSquare = remember(currentBoard) {
@@ -189,10 +242,23 @@ fun ChessBoardView(
         }
     }
 
-    fun triggerWrongMove() {
+    LaunchedEffect(wrongCounter) {
+        if (wrongCounter > 0) {
+            delay(1_250)
+            wrongFlashSquare = null
+            if (!isSolved) {
+                feedbackKind = if (currentStepIndex > 1) PuzzleBannerKind.GOOD else PuzzleBannerKind.NEUTRAL
+            }
+        }
+    }
+
+    fun triggerWrongMove(targetSquare: Square? = null) {
         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
         selectedSquare = null
         legalDestinations = emptyList()
+        wrongFlashSquare = targetSquare
+        feedbackKind = PuzzleBannerKind.WRONG
+        wrongCounter++
         if (!reducedMotion) {
             scope.launch {
                 shakeOffset.snapTo(0f)
@@ -214,7 +280,7 @@ fun ChessBoardView(
             moveProgress.animateTo(
                 targetValue = 1f,
                 animationSpec = tween(
-                    durationMillis = MorroMotion.MoveMillis,
+                    durationMillis = 190,
                     easing = MorroMotion.MoveEasing
                 )
             )
@@ -234,18 +300,19 @@ fun ChessBoardView(
         val chosenReply = when {
             scriptedReply != null && scriptedReply in legalReplies &&
                 ChessRules.hasMateInOne(boardBeforeReply.apply(scriptedReply)) -> scriptedReply
-            else -> ChessRules.pickReplyForForcedMateInTwo(boardBeforeReply)
+            else -> ChessEngine.pickSmartReply(boardBeforeReply)
+                ?: ChessRules.pickReplyForForcedMateInTwo(boardBeforeReply)
         }
 
         if (chosenReply == null) {
-            // No legal reply (checkmate/stalemate) -> if checkmate, solved!
             isSolved = true
             isAnimating = false
+            feedbackKind = PuzzleBannerKind.SOLVED
             currentOnPuzzleSolved()
             return
         }
 
-        delay(400)
+        delay(240)
         playAnimatedMove(boardBeforeReply, chosenReply)
         currentStepIndex = stepIdxAfterUserMove + 1
         isAnimating = false
@@ -259,7 +326,7 @@ fun ChessBoardView(
 
         val legalMovesFrom = ChessRules.allLegalMoves(currentBoard).filter { it.from == from && it.to == to }
         if (legalMovesFrom.isEmpty()) {
-            triggerWrongMove()
+            triggerWrongMove(to)
             return
         }
 
@@ -269,7 +336,7 @@ fun ChessBoardView(
             ChessMove(from, to, null)
         }
         if (userMove !in legalMovesFrom) {
-            triggerWrongMove()
+            triggerWrongMove(to)
             return
         }
 
@@ -289,9 +356,12 @@ fun ChessBoardView(
         }
 
         if (!isCorrect) {
-            triggerWrongMove()
+            triggerWrongMove(to)
             return
         }
+
+        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        wrongFlashSquare = null
 
         scope.launch {
             isAnimating = true
@@ -304,8 +374,10 @@ fun ChessBoardView(
             if (solvedNow) {
                 isSolved = true
                 isAnimating = false
+                feedbackKind = PuzzleBannerKind.SOLVED
                 currentOnPuzzleSolved()
             } else {
+                feedbackKind = PuzzleBannerKind.GOOD
                 playOpponentReply(updatedBoard, currentStepIndex + 1)
             }
         }
@@ -318,7 +390,7 @@ fun ChessBoardView(
 
         val legal = ChessRules.legalMoves(currentBoard, from)
         if (to !in legal) {
-            triggerWrongMove()
+            triggerWrongMove(to)
             return
         }
 
@@ -370,45 +442,88 @@ fun ChessBoardView(
 
             if (setupMove != null && setupMove in legalAtStart) {
                 isAnimating = true
-                if (!reducedMotion) delay(120)
+                if (!reducedMotion) delay(100)
                 playAnimatedMove(initialBoard, setupMove)
-                delay(600)
+                delay(180)
                 isAnimating = false
                 setupPlayed = true
             } else {
-                // Corrupt/empty setup move fallback: allow player if already their turn, else fail safely
                 setupPlayed = true
                 if (initialBoard.sideToMove != playerColor) {
                     isSolved = true
+                    feedbackKind = PuzzleBannerKind.SOLVED
                     currentOnPuzzleSolved()
                 }
             }
         } else if (currentBoard.sideToMove != playerColor && !isAnimating) {
-            // Resumed mid-delay after rotation on opponent's turn
             isAnimating = true
             playOpponentReply(currentBoard, currentStepIndex + 1)
         }
     }
 
+    val totalUserMoves = if (puzzleMoves.size > 2) 2 else 1
+    val completedUserMoves = ((currentStepIndex - 1) / 2).coerceIn(0, totalUserMoves)
+    val effectiveKind = if (isSolved) PuzzleBannerKind.SOLVED else feedbackKind
+    val bannerBgColor by animateColorAsState(
+        targetValue = when (effectiveKind) {
+            PuzzleBannerKind.SOLVED, PuzzleBannerKind.GOOD -> ChessComGreenBanner
+            PuzzleBannerKind.WRONG -> ChessComCrimson
+            PuzzleBannerKind.NEUTRAL -> ChessComStripSurface
+        },
+        animationSpec = tween(180),
+        label = "chessBannerBg"
+    )
+    val bannerText = when {
+        isSolved -> "Puzzle solved! Checkmate."
+        effectiveKind == PuzzleBannerKind.WRONG -> "Incorrect move — try again"
+        !setupPlayed || isAnimating -> "Opponent is playing..."
+        effectiveKind == PuzzleBannerKind.GOOD && totalUserMoves == 2 -> "Best move! Finish the mate."
+        totalUserMoves == 2 -> "Find Mate in 2 · Move ${(completedUserMoves + 1).coerceAtMost(2)} of 2"
+        else -> "Find Checkmate in 1"
+    }
+    val ratingText = if (puzzleRecord.rating > 0) " · ${puzzleRecord.rating}" else ""
+
     Column(
         modifier = modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(
-            text = if (playerColor == PieceColor.WHITE) "White to play" else "Black to play",
-            style = morroTypography().headlineMedium,
-            color = colors.textPrimary,
-            modifier = Modifier.padding(bottom = 4.dp)
-        )
+        // Chess.com Dark Top Player / Puzzle Strip
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp)
+                .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp, bottomStart = 6.dp, bottomEnd = 6.dp))
+                .background(ChessComFrameDark)
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Canvas(modifier = Modifier.size(20.dp)) {
+                    ChessPieces.drawPiece(
+                        scope = this,
+                        piece = Piece(PieceType.KING, playerColor),
+                        bounds = Rect(0f, 0f, size.width, size.height)
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = if (playerColor == PieceColor.WHITE) "White to Move" else "Black to Move",
+                    style = morroTypography().titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = ComposeColor(0xFFF3F3F1)
+                )
+            }
 
-        Text(
-            text = if (puzzleMoves.size > 2) "Find the mate in two moves" else "Find the checkmate in one move",
-            style = morroTypography().bodyMedium,
-            color = colors.textSecondary,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
+            Text(
+                text = (if (totalUserMoves == 2) "Mate in 2" else "Mate in 1") + ratingText,
+                style = morroTypography().labelLarge.copy(fontFamily = FontFamily.Monospace, fontSize = 12.sp),
+                color = ComposeColor(0xFFB5B4B0)
+            )
+        }
 
-        // Shake sits BEFORE clip/background so the entire framed board well moves cleanly
+        Spacer(modifier = Modifier.height(6.dp))
+
+        // Chess.com Dark Frame + 8x8 Classic Green Board
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -416,52 +531,119 @@ fun ChessBoardView(
                 .graphicsLayer {
                     translationX = with(density) { shakeOffset.value.dp.toPx() }
                 }
-                .clip(morroShapes().Card)
-                .background(colors.surfaceCard)
-                .morroHairline(radius = 16.dp, color = colors.borderSubtle)
-                .padding(6.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(ChessComFrameDark)
+                .padding(5.dp)
         ) {
             BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(1f)
+                    .clip(RoundedCornerShape(6.dp))
             ) {
                 val boardWidthPx = with(density) { maxWidth.toPx() }
                 val squareSizePx = boardWidthPx / 8f
-                val dotRadiusPx = with(density) { 8.dp.toPx() }
                 val hairlinePx = with(density) { 1.dp.toPx() }
                 val snapPadPx = with(density) { 6.dp.toPx() }
+                val dragSlopPx = viewConfig.touchSlop
 
                 Canvas(
                     modifier = Modifier
                         .matchParentSize()
-                        .pointerInput(isUserTurnEnabled, isFlipped, squareSizePx, pendingPromotion) {
-                            detectTapGestures { offset ->
+                        .pointerInput(isUserTurnEnabled, isFlipped, squareSizePx, pendingPromotion, dragSlopPx) {
+                            awaitEachGesture {
+                                val down = awaitFirstDown(requireUnconsumed = false)
                                 currentOnUserInteraction()
-                                if (!isUserTurnEnabled || isSolved) return@detectTapGestures
+                                if (!isUserTurnEnabled || isSolved) return@awaitEachGesture
                                 if (pendingPromotion != null) {
                                     pendingPromotion = null
-                                    return@detectTapGestures
+                                    return@awaitEachGesture
                                 }
 
-                                val closestSquare = resolveTappedChessSquare(
-                                    tapX = offset.x,
-                                    tapY = offset.y,
+                                val startSquare = resolveTappedChessSquare(
+                                    tapX = down.position.x,
+                                    tapY = down.position.y,
                                     squareSizePx = squareSizePx,
                                     snapPadPx = snapPadPx,
                                     isFlipped = isFlipped
                                 )
 
-                                if (closestSquare != null) {
-                                    scope.launch {
-                                        pressedSquare = closestSquare
-                                        delay(MorroMotion.PressMillis.toLong())
-                                        if (pressedSquare == closestSquare) {
+                                val startPiece = startSquare?.let { currentBoard[it] }
+                                val canDragFromStart = startPiece != null && startPiece.color == playerColor
+                                val startPos = down.position
+                                var isDragging = false
+
+                                if (startSquare != null) {
+                                    pressedSquare = startSquare
+                                }
+
+                                while (true) {
+                                    val event = awaitPointerEvent()
+                                    val change = event.changes.firstOrNull { it.id == down.id }
+                                        ?: event.changes.firstOrNull()
+                                        ?: break
+
+                                    if (!change.pressed) {
+                                        val releasePos = change.position
+                                        change.consume()
+                                        pressedSquare = null
+
+                                        val endSquare = resolveTappedChessSquare(
+                                            tapX = releasePos.x.coerceIn(0f, boardWidthPx - 1f),
+                                            tapY = releasePos.y.coerceIn(0f, boardWidthPx - 1f),
+                                            squareSizePx = squareSizePx,
+                                            snapPadPx = snapPadPx,
+                                            isFlipped = isFlipped
+                                        )
+
+                                        if (isDragging && startSquare != null) {
+                                            draggingFrom = null
+                                            dragPointerPx = null
+                                            dragHoverSquare = null
+                                            if (endSquare != null && endSquare != startSquare) {
+                                                if (currentBoard[endSquare]?.color == playerColor) {
+                                                    selectedSquare = endSquare
+                                                    legalDestinations = ChessRules.legalMoves(currentBoard, endSquare)
+                                                } else {
+                                                    executeUserMove(startSquare, endSquare)
+                                                }
+                                            }
+                                        } else if (endSquare != null) {
+                                            onSquareTapped(endSquare)
+                                        }
+                                        break
+                                    }
+
+                                    if (change.positionChanged()) {
+                                        val dist = hypot(
+                                            change.position.x - startPos.x,
+                                            change.position.y - startPos.y
+                                        )
+                                        if (!isDragging && canDragFromStart && startSquare != null && dist > dragSlopPx) {
+                                            isDragging = true
                                             pressedSquare = null
+                                            draggingFrom = startSquare
+                                            selectedSquare = startSquare
+                                            legalDestinations = ChessRules.legalMoves(currentBoard, startSquare)
+                                        }
+                                        if (isDragging) {
+                                            change.consume()
+                                            dragPointerPx = change.position
+                                            dragHoverSquare = resolveTappedChessSquare(
+                                                tapX = change.position.x.coerceIn(0f, boardWidthPx - 1f),
+                                                tapY = change.position.y.coerceIn(0f, boardWidthPx - 1f),
+                                                squareSizePx = squareSizePx,
+                                                snapPadPx = 0f,
+                                                isFlipped = isFlipped
+                                            )
                                         }
                                     }
-                                    onSquareTapped(closestSquare)
                                 }
+
+                                pressedSquare = null
+                                draggingFrom = null
+                                dragPointerPx = null
+                                dragHoverSquare = null
                             }
                         }
                 ) {
@@ -472,9 +654,13 @@ fun ChessBoardView(
                             val square = coordsToSquare(col, row, isFlipped)
                             val isLight = (square.file + square.rank) % 2 == 1
                             val squareTopLeft = Offset(col * squareSizePx, row * squareSizePx)
+                            val squareCenter = Offset(
+                                squareTopLeft.x + squareSizePx / 2f,
+                                squareTopLeft.y + squareSizePx / 2f
+                            )
 
                             drawRect(
-                                color = if (isLight) lightSquareColor else darkSquareColor,
+                                color = if (isLight) ChessComLightSquare else ChessComDarkSquare,
                                 topLeft = squareTopLeft,
                                 size = sqSize
                             )
@@ -493,64 +679,121 @@ fun ChessBoardView(
                                     topLeft = squareTopLeft,
                                     size = sqSize
                                 )
-                                drawRect(
-                                    color = selectedBorderColor,
-                                    topLeft = Offset(squareTopLeft.x + hairlinePx / 2f, squareTopLeft.y + hairlinePx / 2f),
-                                    size = Size(squareSizePx - hairlinePx, squareSizePx - hairlinePx),
-                                    style = Stroke(width = hairlinePx)
-                                )
                             }
 
                             if (square == pressedSquare) {
                                 drawRect(
-                                    color = pressedOverlayColor,
+                                    color = ComposeColor.Black.copy(alpha = 0.08f),
+                                    topLeft = squareTopLeft,
+                                    size = sqSize
+                                )
+                            }
+
+                            if (square == wrongFlashSquare) {
+                                drawRect(
+                                    color = ChessComCrimson.copy(alpha = 0.55f),
                                     topLeft = squareTopLeft,
                                     size = sqSize
                                 )
                             }
 
                             if (square == inCheckKingSquare) {
-                                val pad = hairlinePx * 2f
-                                drawRoundRect(
-                                    color = kingCheckColor,
-                                    topLeft = Offset(squareTopLeft.x + pad, squareTopLeft.y + pad),
-                                    size = Size(squareSizePx - pad * 2f, squareSizePx - pad * 2f),
-                                    cornerRadius = CornerRadius(hairlinePx * 4f, hairlinePx * 4f),
-                                    style = Stroke(width = hairlinePx * 2f)
+                                drawRect(
+                                    brush = Brush.radialGradient(
+                                        colors = listOf(
+                                            ChessComCheckGlow.copy(alpha = 0.92f),
+                                            ChessComCheckGlow.copy(alpha = 0.45f),
+                                            ComposeColor.Transparent
+                                        ),
+                                        center = squareCenter,
+                                        radius = squareSizePx * 0.56f
+                                    ),
+                                    topLeft = squareTopLeft,
+                                    size = sqSize
                                 )
                             }
 
-                            if (square in legalDestinations) {
-                                val center = Offset(
-                                    squareTopLeft.x + squareSizePx / 2f,
-                                    squareTopLeft.y + squareSizePx / 2f
+                            // Chess.com white border ring on drag-hover destination
+                            if (draggingFrom != null && square == dragHoverSquare) {
+                                val pad = hairlinePx * 2f
+                                drawRect(
+                                    color = ComposeColor.White.copy(alpha = 0.65f),
+                                    topLeft = Offset(squareTopLeft.x + pad, squareTopLeft.y + pad),
+                                    size = Size(squareSizePx - pad * 2f, squareSizePx - pad * 2f),
+                                    style = Stroke(width = hairlinePx * 2.5f)
                                 )
-                                drawCircle(
-                                    color = legalDotColor,
-                                    radius = dotRadiusPx,
-                                    center = center
+                            }
+
+                            if (square in legalDestinations && legalDotsScale > 0.02f) {
+                                if (currentBoard[square] != null) {
+                                    drawCircle(
+                                        color = legalDotColor,
+                                        radius = squareSizePx * 0.42f * legalDotsScale,
+                                        center = squareCenter,
+                                        style = Stroke(width = squareSizePx * 0.085f)
+                                    )
+                                } else {
+                                    drawCircle(
+                                        color = legalDotColor,
+                                        radius = squareSizePx * 0.165f * legalDotsScale,
+                                        center = squareCenter
+                                    )
+                                }
+                            }
+
+                            // Classic Chess.com coordinates
+                            val coordColor = if (isLight) ChessComDarkSquare else ChessComLightSquare
+                            val coordStyle = TextStyle(
+                                color = coordColor,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            val coordPad = squareSizePx * 0.06f
+                            if (col == 0) {
+                                val rankLabel = ('1' + square.rank).toString()
+                                val measured = textMeasurer.measure(rankLabel, style = coordStyle)
+                                drawText(
+                                    textLayoutResult = measured,
+                                    topLeft = Offset(
+                                        squareTopLeft.x + coordPad,
+                                        squareTopLeft.y + coordPad
+                                    )
+                                )
+                            }
+                            if (row == 7) {
+                                val fileLabel = ('a' + square.file).toString()
+                                val measured = textMeasurer.measure(fileLabel, style = coordStyle)
+                                drawText(
+                                    textLayoutResult = measured,
+                                    topLeft = Offset(
+                                        squareTopLeft.x + squareSizePx - measured.size.width - coordPad,
+                                        squareTopLeft.y + squareSizePx - measured.size.height - coordPad
+                                    )
                                 )
                             }
 
                             val piece = currentBoard[square]
-                            if (piece != null && square != movingPiece?.from) {
-                                val inset = squareSizePx * 0.10f
+                            val isHiddenForMove = (square == movingPiece?.from) || (square == draggingFrom)
+                            if (piece != null && !isHiddenForMove) {
+                                val scaleBoost = if (square == selectedSquare) selectedPiecePop else 1f
+                                val baseInset = squareSizePx * 0.07f
+                                val halfDrawn = (squareSizePx / 2f - baseInset) * scaleBoost
                                 val pieceBounds = Rect(
-                                    squareTopLeft.x + inset,
-                                    squareTopLeft.y + inset,
-                                    squareTopLeft.x + squareSizePx - inset,
-                                    squareTopLeft.y + squareSizePx - inset
+                                    squareCenter.x - halfDrawn,
+                                    squareCenter.y - halfDrawn,
+                                    squareCenter.x + halfDrawn,
+                                    squareCenter.y + halfDrawn
                                 )
                                 ChessPieces.drawPiece(
                                     scope = this,
                                     piece = piece,
-                                    bounds = pieceBounds,
-                                    color = pieceColor
+                                    bounds = pieceBounds
                                 )
                             }
                         }
                     }
 
+                    // Smooth move-slide animation
                     movingPiece?.let { anim ->
                         val fromCoord = squareToCoords(anim.from, isFlipped)
                         val toCoord = squareToCoords(anim.to, isFlipped)
@@ -565,27 +808,51 @@ fun ChessBoardView(
                         )
 
                         val t = moveProgress.value
+                        val liftArc = sin(t * PI).toFloat()
                         val curX = fromCenter.x + (toCenter.x - fromCenter.x) * t
-                        val curY = fromCenter.y + (toCenter.y - fromCenter.y) * t
+                        val curY = fromCenter.y + (toCenter.y - fromCenter.y) * t - liftArc * (squareSizePx * 0.06f)
 
-                        val inset = squareSizePx * 0.10f
-                        val halfSize = squareSizePx / 2f - inset
-                        val movingBounds = Rect(
-                            curX - halfSize,
-                            curY - halfSize,
-                            curX + halfSize,
-                            curY + halfSize
-                        )
+                        if (liftArc > 0.05f) {
+                            drawOval(
+                                color = ComposeColor.Black.copy(alpha = 0.20f * liftArc),
+                                topLeft = Offset(curX - squareSizePx * 0.26f, curY + squareSizePx * 0.28f),
+                                size = Size(squareSizePx * 0.52f, squareSizePx * 0.14f)
+                            )
+                        }
+
+                        val inset = squareSizePx * 0.07f
+                        val halfSize = (squareSizePx / 2f - inset) * (1f + 0.10f * liftArc)
                         ChessPieces.drawPiece(
                             scope = this,
                             piece = anim.piece,
-                            bounds = movingBounds,
-                            color = pieceColor
+                            bounds = Rect(curX - halfSize, curY - halfSize, curX + halfSize, curY + halfSize)
                         )
+                    }
+
+                    // Active dragged piece floating directly under finger
+                    val activeDragSquare = draggingFrom
+                    val activeDragPos = dragPointerPx
+                    if (activeDragSquare != null && activeDragPos != null) {
+                        val draggedPiece = currentBoard[activeDragSquare]
+                        if (draggedPiece != null) {
+                            val drawX = activeDragPos.x.coerceIn(0f, boardWidthPx)
+                            val drawY = (activeDragPos.y - squareSizePx * 0.16f).coerceIn(0f, boardWidthPx)
+                            val halfSize = squareSizePx * 0.54f
+                            drawOval(
+                                color = ComposeColor.Black.copy(alpha = 0.26f),
+                                topLeft = Offset(drawX - squareSizePx * 0.30f, drawY + squareSizePx * 0.34f),
+                                size = Size(squareSizePx * 0.60f, squareSizePx * 0.16f)
+                            )
+                            ChessPieces.drawPiece(
+                                scope = this,
+                                piece = draggedPiece,
+                                bounds = Rect(drawX - halfSize, drawY - halfSize, drawX + halfSize, drawY + halfSize)
+                            )
+                        }
                     }
                 }
 
-                // TalkBack & Switch-Access overlay WITHOUT .clickable so pointer taps hit Canvas snapping!
+                // TalkBack & Switch-Access overlay WITHOUT .clickable so Canvas drag/tap snapping works cleanly
                 Column(modifier = Modifier.matchParentSize()) {
                     for (row in 0..7) {
                         Row(
@@ -636,7 +903,7 @@ fun ChessBoardView(
                     }
                 }
 
-                // Pawn promotion picker (never peeks at expectedUci, never blocks underpromotion mates)
+                // Pawn promotion picker
                 pendingPromotion?.let { (promoFrom, promoTo) ->
                     Box(
                         modifier = Modifier
@@ -655,8 +922,8 @@ fun ChessBoardView(
                             modifier = Modifier
                                 .padding(horizontal = 16.dp)
                                 .clip(morroShapes().Card)
-                                .background(colors.surfaceElevated)
-                                .morroHairline(radius = 16.dp, color = colors.borderActive)
+                                .background(ChessComFrameDark)
+                                .morroGlassBorder(radius = 16.dp, topAlpha = 0.30f, bottomAlpha = 0.08f, tint = ChessComGreenBanner)
                                 .clickable(
                                     interactionSource = remember { MutableInteractionSource() },
                                     indication = null,
@@ -669,7 +936,7 @@ fun ChessBoardView(
                             Text(
                                 text = "Promote pawn",
                                 style = morroTypography().titleMedium,
-                                color = colors.textPrimary
+                                color = ComposeColor.White
                             )
                             Row(
                                 horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -682,8 +949,8 @@ fun ChessBoardView(
                                             .size(56.dp)
                                             .pressScale(btnInteraction, pressedScale = MorroMotion.PressedScale)
                                             .clip(morroShapes().Button)
-                                            .background(colors.surfaceCard)
-                                            .morroHairline(radius = 12.dp, color = colors.borderStrong)
+                                            .background(ChessComLightSquare)
+                                            .morroHairline(radius = 12.dp, color = ChessComDarkSquare)
                                             .clickable(
                                                 interactionSource = btnInteraction,
                                                 indication = null,
@@ -703,8 +970,7 @@ fun ChessBoardView(
                                             ChessPieces.drawPiece(
                                                 scope = this,
                                                 piece = Piece(promoType, playerColor),
-                                                bounds = Rect(0f, 0f, size.width, size.height),
-                                                color = pieceColor
+                                                bounds = Rect(0f, 0f, size.width, size.height)
                                             )
                                         }
                                     }
@@ -713,6 +979,38 @@ fun ChessBoardView(
                         }
                     }
                 }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        // Chess.com Bottom Puzzle Feedback Banner
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp)
+                .clip(RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp, bottomStart = 12.dp, bottomEnd = 12.dp))
+                .background(bannerBgColor)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            AnimatedContent(
+                targetState = bannerText,
+                transitionSpec = {
+                    if (reducedMotion) {
+                        fadeIn(tween(0)) togetherWith fadeOut(tween(0))
+                    } else {
+                        (fadeIn(tween(160)) + slideInVertically { it / 3 })
+                            .togetherWith(fadeOut(tween(110)))
+                    }
+                },
+                label = "chessFeedbackBanner"
+            ) { msg ->
+                Text(
+                    text = msg,
+                    style = morroTypography().titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = ComposeColor.White
+                )
             }
         }
     }

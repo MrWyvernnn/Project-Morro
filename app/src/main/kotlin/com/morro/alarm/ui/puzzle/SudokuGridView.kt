@@ -1,27 +1,49 @@
 package com.morro.alarm.ui.puzzle
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.filled.Backspace
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -31,7 +53,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -42,19 +68,47 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.morro.alarm.puzzle.sudoku.SudokuGenerator
 import com.morro.alarm.puzzle.sudoku.SudokuGrid
 import com.morro.alarm.puzzle.sudoku.SudokuMode
 import com.morro.alarm.puzzle.sudoku.SudokuPuzzle
-import com.morro.alarm.ui.theme.morroColors
+import com.morro.alarm.ui.motion.MorroMotion
+import com.morro.alarm.ui.motion.pressScale
+import com.morro.alarm.ui.motion.rememberReducedMotion
+import com.morro.alarm.ui.theme.MorroSpring
 import com.morro.alarm.ui.theme.morroHairline
-import com.morro.alarm.ui.theme.morroShapes
 import com.morro.alarm.ui.theme.morroTypography
+import kotlinx.coroutines.launch
 import kotlin.math.min
+
+// Exact Easybrain Sudoku.com Dark Mode tokens
+private val SudokuDarkBg = Color(0xFF161B26)
+private val SudokuDarkHeaderBg = Color(0xFF1A202D)
+private val SudokuCrosshairBg = Color(0xFF21293A)
+private val SudokuSameDigitBg = Color(0xFF293D5E)
+private val SudokuSelectedBg = Color(0xFF334E7A)
+private val SudokuSelectedRing = Color(0xFF5B9BFF)
+private val SudokuConflictBg = Color(0xFF3E1E26)
+private val SudokuSubLine = Color(0xFF2B3448)
+private val SudokuBoxLine = Color(0xFF586784)
+private val SudokuGivenInk = Color(0xFFF3F4F6)
+private val SudokuUserInk = Color(0xFF68A8FF)
+private val SudokuNoteInk = Color(0xFF94A3B8)
+private val SudokuConflictInk = Color(0xFFF87171)
+private val SudokuMutedInk = Color(0xFF9CA3AF)
+private val SudokuToolSurface = Color(0xFF222A3A)
+
+private data class SudokuSnapshot(
+    val grid: SudokuGrid,
+    val notes: Map<Pair<Int, Int>, Set<Int>>,
+)
 
 private fun sudokuGridSaver(template: SudokuGrid): Saver<SudokuGrid, IntArray> = Saver(
     save = { grid ->
@@ -73,20 +127,50 @@ private fun sudokuGridSaver(template: SudokuGrid): Saver<SudokuGrid, IntArray> =
     }
 )
 
+private fun notesMapSaver(gridSize: Int): Saver<Map<Pair<Int, Int>, Set<Int>>, IntArray> = Saver(
+    save = { map ->
+        val masks = IntArray(gridSize * gridSize)
+        map.forEach { (rc, digits) ->
+            val idx = rc.first * gridSize + rc.second
+            if (idx in masks.indices) {
+                var mask = 0
+                digits.forEach { d -> if (d in 1..gridSize) mask = mask or (1 shl d) }
+                masks[idx] = mask
+            }
+        }
+        masks
+    },
+    restore = { masks ->
+        if (masks.size != gridSize * gridSize) {
+            emptyMap()
+        } else {
+            buildMap {
+                for (r in 0 until gridSize) {
+                    for (c in 0 until gridSize) {
+                        val mask = masks[r * gridSize + c]
+                        if (mask != 0) {
+                            val set = (1..gridSize).filter { (mask and (1 shl it)) != 0 }.toSet()
+                            if (set.isNotEmpty()) put(r to c, set)
+                        }
+                    }
+                }
+            }
+        }
+    }
+)
+
 private val NullablePairSaver: Saver<Pair<Int, Int>?, IntArray> = Saver(
     save = { pair -> if (pair == null) intArrayOf() else intArrayOf(pair.first, pair.second) },
     restore = { arr -> if (arr.size == 2) arr[0] to arr[1] else null }
 )
 
 /**
- * Canvas-rendered Sudoku grid strictly adhering to Morro design system rules:
- * - Canvas grid: cell lines borderSubtle, box boundaries borderStrong at 1.5.dp
- * - Givens: textPrimary, inert
- * - User entries: honey, scaled cleanly to cell size
- * - Conflict state: error at 16% background on wrong user entries only
- * - Expanded hit region: cell bounds + 8dp on each side, resolved to nearest empty cell
- * - Selected cell indicator: borderActive hairline + honey at 12% fill (omitted on error cells)
- * - Full TalkBack & Switch-Access support without intercepting Canvas touch snapping
+ * Canvas-rendered Sudoku grid modeled faithfully on Easybrain's Sudoku.com Dark Mode:
+ * - Deep charcoal-navy grid canvas (`#161B26`) with crisp `1.dp` cell hairlines and `2.dp` box boundaries.
+ * - Full Sudoku.com highlighting: row/column/box crosshair (`#21293A`), matching-digit highlight
+ *   across the board (`#293D5E`), royal-blue active cell (`#334E7A` + `#5B9BFF` stroke), and soft
+ *   crimson conflict shading (`#3E1E26` / `#F87171`).
+ * - Crisp `#F3F4F6` given numbers, `#68A8FF` user entries, and `2×2` / `3×3` pencil candidate marks.
  */
 @Composable
 fun SudokuGridView(
@@ -95,31 +179,41 @@ fun SudokuGridView(
     selectedCell: Pair<Int, Int>?,
     conflicts: Set<Pair<Int, Int>>,
     onCellSelected: (row: Int, col: Int) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    notes: Map<Pair<Int, Int>, Set<Int>> = emptyMap(),
+    lastEnteredCell: Pair<Int, Int>? = null,
+    entryPopScale: Float = 1f,
+    onInspectGivenCell: ((row: Int, col: Int) -> Unit)? = null,
 ) {
-    val colors = morroColors()
     val typo = morroTypography()
     val density = LocalDensity.current
-    val textMeasurer = rememberTextMeasurer(cacheSize = 24)
+    val textMeasurer = rememberTextMeasurer(cacheSize = 48)
     val currentOnCellSelected by rememberUpdatedState(onCellSelected)
+    val currentOnInspectGiven by rememberUpdatedState(onInspectGivenCell)
 
     val subtleStrokePx = with(density) { 1.dp.toPx() }
-    val strongStrokePx = with(density) { 1.5.dp.toPx() }
+    val strongStrokePx = with(density) { 2.dp.toPx() }
     val expandPx = with(density) { 8.dp.toPx() }
 
     val gridSize = initialGrid.size
     val boxRows = initialGrid.boxRows
     val boxCols = initialGrid.boxCols
 
+    val selectedDigit = selectedCell?.let { (r, c) ->
+        if (r in 0 until gridSize && c in 0 until gridSize) currentGrid[r, c] else 0
+    } ?: 0
+
     Box(
-        modifier = modifier.aspectRatio(1f)
+        modifier = modifier
+            .aspectRatio(1f)
+            .background(SudokuDarkBg)
     ) {
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(initialGrid, expandPx) {
+                .pointerInput(initialGrid, expandPx, gridSize) {
                     detectTapGestures { offset ->
-                        val cell = resolveNearestEmptyCell(
+                        val emptyTarget = resolveNearestEmptyCell(
                             tapX = offset.x,
                             tapY = offset.y,
                             gridWidthPx = size.width.toFloat(),
@@ -127,8 +221,12 @@ fun SudokuGridView(
                             initialGrid = initialGrid,
                             expandPx = expandPx
                         )
-                        cell?.let { (r, c) ->
-                            currentOnCellSelected(r, c)
+                        if (emptyTarget != null) {
+                            currentOnCellSelected(emptyTarget.first, emptyTarget.second)
+                        } else if (currentOnInspectGiven != null) {
+                            val col = ((offset.x / size.width.toFloat()) * gridSize).toInt().coerceIn(0, gridSize - 1)
+                            val row = ((offset.y / size.height.toFloat()) * gridSize).toInt().coerceIn(0, gridSize - 1)
+                            currentOnInspectGiven?.invoke(row, col)
                         }
                     }
                 }
@@ -138,43 +236,71 @@ fun SudokuGridView(
             val cellWidth = width / gridSize
             val cellHeight = height / gridSize
 
-            // 1. Conflict cell backgrounds: error at 16% alpha
+            // 1. Crosshair (row, col, box) & matching digit highlight
+            selectedCell?.let { (sr, sc) ->
+                if (sr in 0 until gridSize && sc in 0 until gridSize) {
+                    val sBoxR = sr / boxRows
+                    val sBoxC = sc / boxCols
+                    for (r in 0 until gridSize) {
+                        for (c in 0 until gridSize) {
+                            val inCrosshair = (r == sr || c == sc || (r / boxRows == sBoxR && c / boxCols == sBoxC))
+                            val sameDigit = selectedDigit != 0 && currentGrid[r, c] == selectedDigit && (r to c) != selectedCell
+                            if (sameDigit) {
+                                drawRect(
+                                    color = SudokuSameDigitBg,
+                                    topLeft = Offset(c * cellWidth, r * cellHeight),
+                                    size = Size(cellWidth, cellHeight)
+                                )
+                            } else if (inCrosshair && (r to c) != selectedCell) {
+                                drawRect(
+                                    color = SudokuCrosshairBg,
+                                    topLeft = Offset(c * cellWidth, r * cellHeight),
+                                    size = Size(cellWidth, cellHeight)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 2. Conflict shading on incorrect user digits
             for ((r, c) in conflicts) {
                 if (r in 0 until gridSize && c in 0 until gridSize) {
                     drawRect(
-                        color = colors.error.copy(alpha = 0.16f),
+                        color = SudokuConflictBg,
                         topLeft = Offset(c * cellWidth, r * cellHeight),
                         size = Size(cellWidth, cellHeight)
                     )
                 }
             }
 
-            // 2. Selected cell: honey at 12% fill (unless already shaded in conflict) + borderActive hairline
+            // 3. Selected cell royal-blue focus fill + crisp border ring
             selectedCell?.let { (r, c) ->
                 if (r in 0 until gridSize && c in 0 until gridSize) {
                     if ((r to c) !in conflicts) {
                         drawRect(
-                            color = colors.honey.copy(alpha = 0.12f),
+                            color = SudokuSelectedBg,
                             topLeft = Offset(c * cellWidth, r * cellHeight),
                             size = Size(cellWidth, cellHeight)
                         )
                     }
-                    val halfSubtle = subtleStrokePx / 2f
+                    val activeStroke = strongStrokePx * 0.95f
+                    val half = activeStroke / 2f
                     drawRect(
-                        color = colors.borderActive,
-                        topLeft = Offset(c * cellWidth + halfSubtle, r * cellHeight + halfSubtle),
-                        size = Size(cellWidth - subtleStrokePx, cellHeight - subtleStrokePx),
-                        style = Stroke(width = subtleStrokePx)
+                        color = if ((r to c) in conflicts) SudokuConflictInk else SudokuSelectedRing,
+                        topLeft = Offset(c * cellWidth + half, r * cellHeight + half),
+                        size = Size(cellWidth - activeStroke, cellHeight - activeStroke),
+                        style = Stroke(width = activeStroke)
                     )
                 }
             }
 
-            // 3. Subtle grid lines between cells inside boxes
+            // 4. Inner cell thin hairlines
             for (c in 1 until gridSize) {
                 if (c % boxCols != 0) {
                     val x = c * cellWidth
                     drawLine(
-                        color = colors.borderSubtle,
+                        color = SudokuSubLine,
                         start = Offset(x, 0f),
                         end = Offset(x, height),
                         strokeWidth = subtleStrokePx
@@ -185,7 +311,7 @@ fun SudokuGridView(
                 if (r % boxRows != 0) {
                     val y = r * cellHeight
                     drawLine(
-                        color = colors.borderSubtle,
+                        color = SudokuSubLine,
                         start = Offset(0f, y),
                         end = Offset(width, y),
                         strokeWidth = subtleStrokePx
@@ -193,11 +319,11 @@ fun SudokuGridView(
                 }
             }
 
-            // 4. Box boundary lines: borderStrong at 1.5dp
+            // 5. Bold sub-grid box boundaries & outer perimeter
             for (c in boxCols until gridSize step boxCols) {
                 val x = c * cellWidth
                 drawLine(
-                    color = colors.borderStrong,
+                    color = SudokuBoxLine,
                     start = Offset(x, 0f),
                     end = Offset(x, height),
                     strokeWidth = strongStrokePx
@@ -206,32 +332,36 @@ fun SudokuGridView(
             for (r in boxRows until gridSize step boxRows) {
                 val y = r * cellHeight
                 drawLine(
-                    color = colors.borderStrong,
+                    color = SudokuBoxLine,
                     start = Offset(0f, y),
                     end = Offset(width, y),
                     strokeWidth = strongStrokePx
                 )
             }
-
-            // Outer frame hairline
             val halfStrong = strongStrokePx / 2f
             drawRect(
-                color = colors.borderStrong,
+                color = SudokuBoxLine,
                 topLeft = Offset(halfStrong, halfStrong),
                 size = Size(width - strongStrokePx, height - strongStrokePx),
                 style = Stroke(width = strongStrokePx)
             )
 
-            // 5. Cell digits scaled safely to cell size so large fontScale never clips
-            val targetFontSp = with(density) { (min(cellWidth, cellHeight) * 0.54f).toSp() }
-            val cellFontSp = if (targetFontSp.value < typo.headlineMedium.fontSize.value) {
-                targetFontSp
-            } else {
-                typo.headlineMedium.fontSize
-            }
+            // 6. Cell digits & Pencil Notes mini candidate marks
+            val targetFontSp = with(density) { (min(cellWidth, cellHeight) * 0.56f).toSp() }
+            val cellFontSp = minOf(targetFontSp.value, typo.headlineMedium.fontSize.value).sp
             val digitStyle = typo.headlineMedium.copy(
+                fontFamily = FontFamily.SansSerif,
+                fontWeight = FontWeight.Medium,
                 fontSize = cellFontSp,
                 lineHeight = cellFontSp,
+                textAlign = TextAlign.Center
+            )
+            val noteFontSp = with(density) { (min(cellWidth / boxCols, cellHeight / boxRows) * 0.64f).toSp() }
+            val noteStyle = typo.labelLarge.copy(
+                fontFamily = FontFamily.SansSerif,
+                fontWeight = FontWeight.Medium,
+                fontSize = noteFontSp.value.coerceIn(7f, 13f).sp,
+                lineHeight = noteFontSp.value.coerceIn(7f, 13f).sp,
                 textAlign = TextAlign.Center
             )
 
@@ -240,17 +370,51 @@ fun SudokuGridView(
                     val value = currentGrid[r, c]
                     if (value != 0) {
                         val isGiven = initialGrid[r, c] != 0
-                        val textColor = if (isGiven) colors.textPrimary else colors.honey
+                        val textColor = when {
+                            isGiven -> SudokuGivenInk
+                            (r to c) in conflicts -> SudokuConflictInk
+                            else -> SudokuUserInk
+                        }
                         val layoutResult = textMeasurer.measure(
                             text = value.toString(),
-                            style = digitStyle.copy(color = textColor)
+                            style = digitStyle.copy(
+                                color = textColor,
+                                fontWeight = if (isGiven) FontWeight.SemiBold else FontWeight.Medium
+                            )
                         )
                         val x = c * cellWidth + (cellWidth - layoutResult.size.width) / 2f
                         val y = r * cellHeight + (cellHeight - layoutResult.size.height) / 2f
-                        drawText(
-                            textLayoutResult = layoutResult,
-                            topLeft = Offset(x, y)
-                        )
+                        val cellScale = if ((r to c) == lastEnteredCell) entryPopScale else 1f
+                        if (cellScale != 1f) {
+                            val cellCenter = Offset(c * cellWidth + cellWidth / 2f, r * cellHeight + cellHeight / 2f)
+                            scale(scale = cellScale, pivot = cellCenter) {
+                                drawText(textLayoutResult = layoutResult, topLeft = Offset(x, y))
+                            }
+                        } else {
+                            drawText(textLayoutResult = layoutResult, topLeft = Offset(x, y))
+                        }
+                    } else {
+                        val cellNotes = notes[r to c].orEmpty()
+                        if (cellNotes.isNotEmpty()) {
+                            val subW = cellWidth / boxCols
+                            val subH = cellHeight / boxRows
+                            for (digit in cellNotes) {
+                                val idx = digit - 1
+                                val sr = idx / boxCols
+                                val sc = idx % boxCols
+                                val isMatchingSelected = (selectedDigit == digit)
+                                val noteLayout = textMeasurer.measure(
+                                    text = digit.toString(),
+                                    style = noteStyle.copy(
+                                        color = if (isMatchingSelected) SudokuSelectedRing else SudokuNoteInk,
+                                        fontWeight = if (isMatchingSelected) FontWeight.Bold else FontWeight.Medium
+                                    )
+                                )
+                                val nx = c * cellWidth + sc * subW + (subW - noteLayout.size.width) / 2f
+                                val ny = r * cellHeight + sr * subH + (subH - noteLayout.size.height) / 2f
+                                drawText(textLayoutResult = noteLayout, topLeft = Offset(nx, ny))
+                            }
+                        }
                     }
                 }
             }
@@ -328,13 +492,11 @@ fun SudokuGridView(
 )
 
 /**
- * Full-screen Sudoku gate composable integrating [SudokuGridView] and [SudokuKeypad].
- *
- * Implements the behavioral contracts:
- * - Automatically calls [onGateSolved] once the instant the final correct digit is placed.
- * - Fires [onUserAction] on every cell tap, digit tap, and clear tap (for audio ducking).
- * - On wrong digit: marks only that user cell in conflict and triggers haptic feedback.
- * - Preserves board entries and selection across rotation via rememberSaveable.
+ * Full-screen Sudoku gate matching Easybrain's Sudoku.com Dark Mode layout:
+ * - Header bar with Difficulty, Mistakes counter, and Remaining count.
+ * - Crisp dark slate 4×4 / 9×9 board with row/col/box crosshair + matching digit highlights.
+ * - Horizontal Action Toolbar (`Undo`, `Erase`, `Notes` toggle with auto-clearing pencil marks).
+ * - Clean single-row number strip (`1..4` or `1..9`) with completion fade.
  */
 @Composable
 fun SudokuGateScreen(
@@ -346,9 +508,11 @@ fun SudokuGateScreen(
     onUserAction: () -> Unit = {},
     onGenerationFailed: () -> Unit = {}
 ) {
-    val colors = morroColors()
     val typo = morroTypography()
     val haptics = LocalHapticFeedback.current
+    val density = LocalDensity.current
+    val scope = rememberCoroutineScope()
+    val reducedMotion = rememberReducedMotion()
     val currentOnGateSolved by rememberUpdatedState(onGateSolved)
     val currentOnUserAction by rememberUpdatedState(onUserAction)
     val currentOnGenerationFailed by rememberUpdatedState(onGenerationFailed)
@@ -369,18 +533,44 @@ fun SudokuGateScreen(
     var currentGrid by rememberSaveable(activePuzzle, stateSaver = sudokuGridSaver(initialGrid)) {
         mutableStateOf(initialGrid)
     }
+    var notesMap by rememberSaveable(activePuzzle, stateSaver = notesMapSaver(initialGrid.size)) {
+        mutableStateOf(emptyMap())
+    }
     var selectedCell by rememberSaveable(activePuzzle, stateSaver = NullablePairSaver) {
         mutableStateOf(initialGrid.emptyCells().firstOrNull())
     }
-    var isSolved by rememberSaveable(activePuzzle) {
-        mutableStateOf(false)
-    }
+    var notesMode by rememberSaveable(activePuzzle) { mutableStateOf(false) }
+    var mistakesCount by rememberSaveable(activePuzzle) { mutableIntStateOf(0) }
+    var isSolved by rememberSaveable(activePuzzle) { mutableStateOf(false) }
+
+    var undoStack by remember(activePuzzle) { mutableStateOf<List<SudokuSnapshot>>(emptyList()) }
+    var lastEnteredCell by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    val entryPop = remember { Animatable(1f) }
+    val gridShakeOffset = remember { Animatable(0f) }
 
     val conflicts by remember(currentGrid, activePuzzle) {
         derivedStateOf { computeConflicts(activePuzzle, currentGrid) }
     }
 
-    // Auto-dismiss once the instant the final correct digit is placed
+    val remainingEmptyCount by remember(currentGrid) {
+        derivedStateOf { currentGrid.emptyCells().size }
+    }
+    val completedDigits by remember(currentGrid, conflicts) {
+        derivedStateOf {
+            val n = currentGrid.size
+            val counts = IntArray(n + 1)
+            for (r in 0 until n) {
+                for (c in 0 until n) {
+                    val v = currentGrid[r, c]
+                    if (v in 1..n && (r to c) !in conflicts) {
+                        counts[v]++
+                    }
+                }
+            }
+            (1..n).filter { counts[it] >= n }.toSet()
+        }
+    }
+
     LaunchedEffect(currentGrid, activePuzzle, isSolved) {
         if (!isSolved && (currentGrid == activePuzzle.solution || SudokuGrid.isSolved(currentGrid))) {
             isSolved = true
@@ -394,27 +584,79 @@ fun SudokuGateScreen(
         if (!isSolved) {
             selectedCell?.let { (r, c) ->
                 if (initialGrid[r, c] == 0) {
-                    val newGrid = currentGrid.set(r, c, digit)
-                    currentGrid = newGrid
-                    val isCorrect = (digit == activePuzzle.solution[r, c])
-                    if (!isCorrect) {
-                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    if (notesMode) {
+                        undoStack = (undoStack + SudokuSnapshot(currentGrid, notesMap)).takeLast(40)
+                        val existing = notesMap[r to c].orEmpty()
+                        val updated = if (digit in existing) existing - digit else existing + digit
+                        val nextNotes = notesMap.toMutableMap()
+                        if (updated.isEmpty()) nextNotes.remove(r to c) else nextNotes[r to c] = updated
+                        // Clear any conflicting digit so pencil notes show visibly in the cell
+                        if (currentGrid[r, c] != 0) {
+                            currentGrid = currentGrid.set(r, c, 0)
+                        }
+                        notesMap = nextNotes
                     } else {
-                        selectedCell = nextTargetCellAfterEntry(activePuzzle, newGrid, r, c)
+                        undoStack = (undoStack + SudokuSnapshot(currentGrid, notesMap)).takeLast(40)
+                        val newGrid = currentGrid.set(r, c, digit)
+                        currentGrid = newGrid
+                        notesMap = clearPeerNotesForEntry(
+                            notes = notesMap,
+                            row = r,
+                            col = c,
+                            digit = digit,
+                            boxRows = initialGrid.boxRows,
+                            boxCols = initialGrid.boxCols
+                        )
+                        lastEnteredCell = r to c
+                        val isCorrect = (digit == activePuzzle.solution[r, c])
+                        if (!reducedMotion) {
+                            scope.launch {
+                                entryPop.snapTo(0.74f)
+                                entryPop.animateTo(1f, MorroSpring.FloatSpringPlayful)
+                            }
+                        }
+                        if (!isCorrect) {
+                            mistakesCount++
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            if (!reducedMotion) {
+                                scope.launch {
+                                    gridShakeOffset.snapTo(0f)
+                                    for (dpOff in MorroMotion.WrongShakeOffsetsDp) {
+                                        gridShakeOffset.animateTo(dpOff, tween(MorroMotion.ShakeStepMillis))
+                                    }
+                                }
+                            }
+                        } else {
+                            selectedCell = nextTargetCellAfterEntry(activePuzzle, newGrid, r, c)
+                        }
                     }
                 }
             }
         }
     }
 
-    val onClearClick: () -> Unit = {
+    val onEraseClick: () -> Unit = {
         currentOnUserAction()
         if (!isSolved) {
             selectedCell?.let { (r, c) ->
-                if (initialGrid[r, c] == 0) {
+                if (initialGrid[r, c] == 0 && (currentGrid[r, c] != 0 || !notesMap[r to c].isNullOrEmpty())) {
+                    undoStack = (undoStack + SudokuSnapshot(currentGrid, notesMap)).takeLast(40)
                     currentGrid = currentGrid.set(r, c, 0)
+                    if (!notesMap[r to c].isNullOrEmpty()) {
+                        notesMap = notesMap - (r to c)
+                    }
                 }
             }
+        }
+    }
+
+    val onUndoClick: () -> Unit = {
+        currentOnUserAction()
+        if (!isSolved && undoStack.isNotEmpty()) {
+            val prev = undoStack.last()
+            undoStack = undoStack.dropLast(1)
+            currentGrid = prev.grid
+            notesMap = prev.notes
         }
     }
 
@@ -423,51 +665,248 @@ fun SudokuGateScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Text(
-            text = if (activePuzzle.mode == SudokuMode.STANDARD) "Sudoku 4×4" else "Sudoku 9×9",
-            style = typo.headlineMedium,
-            color = colors.textPrimary,
-            modifier = Modifier.padding(bottom = 4.dp)
-        )
-        Text(
-            text = "Tap an empty cell, then enter a digit",
-            style = typo.bodyMedium,
-            color = colors.textSecondary,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
+        // Sudoku.com Dark Mode Top Stats Strip (Difficulty · Mistakes · Remaining)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(SudokuDarkHeaderBg)
+                .morroHairline(radius = 12.dp, color = SudokuSubLine)
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = if (activePuzzle.mode == SudokuMode.STANDARD) "Quick 4×4" else "Classic 9×9",
+                style = typo.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                color = SudokuGivenInk
+            )
 
-        // Bento card enclosure around the grid with 16dp rounded corners and hairline
+            Text(
+                text = "Mistakes: $mistakesCount",
+                style = typo.labelLarge.copy(fontFamily = FontFamily.SansSerif, fontSize = 12.sp),
+                color = if (mistakesCount > 0) SudokuConflictInk else SudokuMutedInk
+            )
+
+            AnimatedContent(
+                targetState = remainingEmptyCount,
+                transitionSpec = {
+                    if (reducedMotion) {
+                        fadeIn(tween(0)) togetherWith fadeOut(tween(0))
+                    } else {
+                        (fadeIn(tween(150)) + slideInVertically { it / 2 })
+                            .togetherWith(fadeOut(tween(100)))
+                    }
+                },
+                label = "sudokuRemaining"
+            ) { rem ->
+                Text(
+                    text = if (rem == 0) "Solved" else "$rem left",
+                    style = typo.labelLarge.copy(fontFamily = FontFamily.Monospace),
+                    color = SudokuUserInk
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Board Frame
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 4.dp)
-                .clip(morroShapes().Card)
-                .background(colors.surfaceCard)
-                .morroHairline(radius = 16.dp, color = colors.borderSubtle)
-                .padding(6.dp)
+                .graphicsLayer {
+                    translationX = with(density) { gridShakeOffset.value.dp.toPx() }
+                }
+                .clip(RoundedCornerShape(10.dp))
+                .background(SudokuDarkBg)
+                .morroHairline(radius = 10.dp, color = SudokuBoxLine)
+                .padding(2.dp)
         ) {
             SudokuGridView(
                 initialGrid = initialGrid,
                 currentGrid = currentGrid,
                 selectedCell = selectedCell,
                 conflicts = conflicts,
+                notes = notesMap,
                 onCellSelected = { r, c ->
                     currentOnUserAction()
                     if (!isSolved) selectedCell = r to c
                 },
-                modifier = Modifier.fillMaxWidth()
+                onInspectGivenCell = { r, c ->
+                    currentOnUserAction()
+                    if (!isSolved) selectedCell = r to c
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp)),
+                lastEnteredCell = lastEnteredCell,
+                entryPopScale = entryPop.value
             )
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // Sudoku.com Action Toolbar: Undo · Erase · Notes (no Cheat Hint in alarm gate)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            SudokuToolActionButton(
+                icon = Icons.AutoMirrored.Filled.Undo,
+                label = "Undo",
+                enabled = !isSolved && undoStack.isNotEmpty(),
+                onClick = onUndoClick
+            )
+            SudokuToolActionButton(
+                icon = Icons.Filled.Backspace,
+                label = "Erase",
+                enabled = !isSolved && selectedCell != null,
+                onClick = onEraseClick
+            )
+            SudokuToolActionButton(
+                icon = Icons.Filled.Edit,
+                label = "Notes",
+                badgeText = if (notesMode) "ON" else "OFF",
+                active = notesMode,
+                enabled = !isSolved,
+                onClick = {
+                    currentOnUserAction()
+                    notesMode = !notesMode
+                }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
 
         SudokuKeypad(
             mode = activePuzzle.mode,
             onDigitClick = onDigitClick,
-            onClearClick = onClearClick,
+            onClearClick = onEraseClick,
             enabled = !isSolved,
+            completedDigits = completedDigits,
+            notesMode = notesMode,
+            includeClearKey = false,
             modifier = Modifier.fillMaxWidth()
         )
+    }
+}
+
+@Composable
+private fun SudokuToolActionButton(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    active: Boolean = false,
+    badgeText: String? = null,
+) {
+    val haptics = LocalHapticFeedback.current
+    val interaction = remember { MutableInteractionSource() }
+    val circleBg by animateColorAsState(
+        targetValue = when {
+            active -> SudokuSelectedBg
+            enabled -> SudokuToolSurface
+            else -> SudokuToolSurface.copy(alpha = 0.45f)
+        },
+        animationSpec = tween(160),
+        label = "sudokuToolBg"
+    )
+    val contentTint = when {
+        active -> SudokuUserInk
+        enabled -> SudokuGivenInk
+        else -> SudokuMutedInk.copy(alpha = 0.45f)
+    }
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .defaultMinSize(minWidth = 64.dp, minHeight = 48.dp)
+            .pressScale(interaction, enabled = enabled, releaseSpec = MorroSpring.FloatSpringPlayful)
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                enabled = enabled,
+                role = Role.Button,
+                onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onClick()
+                }
+            )
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+    ) {
+        Box(contentAlignment = Alignment.TopEnd) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(circleBg)
+                    .morroHairline(
+                        radius = 22.dp,
+                        color = if (active) SudokuSelectedRing else SudokuSubLine
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = label,
+                    tint = contentTint,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            if (badgeText != null) {
+                Text(
+                    text = badgeText,
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (active) Color.White else SudokuMutedInk,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(if (active) SudokuSelectedRing else SudokuDarkBg)
+                        .padding(horizontal = 4.dp, vertical = 1.dp)
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = label,
+            fontSize = 11.sp,
+            fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
+            color = contentTint
+        )
+    }
+}
+
+/**
+ * Clears conflicting pencil candidate [digit] from the same cell, row, column, and sub-box.
+ */
+internal fun clearPeerNotesForEntry(
+    notes: Map<Pair<Int, Int>, Set<Int>>,
+    row: Int,
+    col: Int,
+    digit: Int,
+    boxRows: Int,
+    boxCols: Int,
+): Map<Pair<Int, Int>, Set<Int>> {
+    if (notes.isEmpty()) return notes
+    val boxR = row / boxRows
+    val boxC = col / boxCols
+    return buildMap {
+        notes.forEach { (cell, set) ->
+            val (r, c) = cell
+            if (r == row && c == col) {
+                // Cell now holds a definite digit
+                return@forEach
+            }
+            val samePeer = (r == row || c == col || (r / boxRows == boxR && c / boxCols == boxC))
+            val updated = if (samePeer) set - digit else set
+            if (updated.isNotEmpty()) put(cell, updated)
+        }
     }
 }
 

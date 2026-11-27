@@ -16,291 +16,495 @@ import com.morro.alarm.puzzle.chess.Piece
 import com.morro.alarm.puzzle.chess.PieceType
 
 /**
- * Chess piece vector rendering directly on Canvas.
+ * Authentic Chess.com "Neo" vector piece set rendered smoothly via Canvas Bézier curves.
  *
- * Rules:
- * - 6 vector silhouettes: Pawn, Knight, Bishop, Rook, Queen, King.
- * - No font glyphs, no images, no assets, no emojis.
- * - White: FILLED textPrimary.
- * - Black: STROKED textPrimary at 1.6.dp with NO fill.
- *   (Print-diagram monochrome style, high contrast, instant legibility).
+ * Visual language matches Chess.com's default Neo set:
+ * - Clean minimalist Staunton curves with spherical finials (Queen pearls, Bishop cap, Pawn orb).
+ * - White pieces: crisp bright ivory/white (#FFFFFF) with `#D8D7D0` base shading and `#312E2B` outline.
+ * - Black pieces: deep matte charcoal (#4B4947) with `#22201F` outline and subtle `#B8B5B0` internal
+ *   slit/crown accents for high readability on both `#769656` dark green and `#EEEED2` cream squares.
  */
 object ChessPieces {
 
     val StrokeWidth: Dp = 1.6.dp
+    private val NeoWhiteFill = Color(0xFFFFFFFF)
+    private val NeoWhiteOutline = Color(0xFF312E2B)
+    private val NeoWhiteShade = Color(0xFFDAD9D2)
+    private val NeoBlackFill = Color(0xFF4B4947)
+    private val NeoBlackOutline = Color(0xFF211F1E)
+    private val NeoBlackDetail = Color(0xFFBDBAB4)
 
     /**
-     * Draws the given [piece] inside [bounds].
+     * Draws the given [piece] inside [bounds] using the Chess.com Neo style.
      */
     fun drawPiece(
         scope: DrawScope,
         piece: Piece,
         bounds: Rect,
-        color: Color,
+        color: Color = Color.Unspecified,
         strokeWidth: Dp = StrokeWidth
     ) {
-        val path = createPiecePath(piece.type, bounds)
-        when (piece.color) {
-            PieceColor.WHITE -> {
-                scope.drawPath(path = path, color = color, style = Fill)
+        val w = bounds.width
+        val h = bounds.height
+        val l = bounds.left
+        val t = bounds.top
+        fun p(nx: Float, ny: Float): Offset = Offset(l + nx * w, t + ny * h)
+
+        val isWhite = piece.color == PieceColor.WHITE
+        val fillColor = if (isWhite) NeoWhiteFill else NeoBlackFill
+        val outlineColor = if (isWhite) NeoWhiteOutline else NeoBlackOutline
+        val accentColor = if (isWhite) NeoWhiteShade else NeoBlackDetail
+        val strokePx = with(scope) { (w * 0.036f).coerceIn(1.3f, strokeWidth.toPx() * 1.25f) }
+        val strokeStyle = Stroke(width = strokePx, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        val detailPx = (strokePx * 0.80f).coerceAtLeast(1.1f)
+
+        val bodyPath = createPiecePath(piece.type, bounds)
+
+        // 1. Main body fill
+        scope.drawPath(path = bodyPath, color = fillColor, style = Fill)
+
+        // 2. Subtle base shadow stripe so pieces feel grounded like Chess.com Neo
+        if (piece.type != PieceType.PAWN) {
+            scope.drawLine(
+                color = accentColor.copy(alpha = if (isWhite) 0.75f else 0.30f),
+                start = p(0.28f, 0.845f),
+                end = p(0.72f, 0.845f),
+                strokeWidth = (strokePx * 1.15f).coerceAtLeast(1.4f),
+                cap = StrokeCap.Round
+            )
+        }
+
+        // 3. Outer crisp silhouette stroke
+        scope.drawPath(path = bodyPath, color = outlineColor, style = strokeStyle)
+
+        // 4. Piece-specific Neo signatures (pearls, slits, eyes, collar rings)
+        when (piece.type) {
+            PieceType.PAWN -> {
+                // Collar ring accent
+                scope.drawLine(
+                    color = outlineColor,
+                    start = p(0.39f, 0.50f),
+                    end = p(0.61f, 0.50f),
+                    strokeWidth = detailPx,
+                    cap = StrokeCap.Round
+                )
+                // Base rim line
+                scope.drawLine(
+                    color = if (isWhite) NeoWhiteOutline.copy(alpha = 0.45f) else NeoBlackDetail.copy(alpha = 0.45f),
+                    start = p(0.30f, 0.78f),
+                    end = p(0.70f, 0.78f),
+                    strokeWidth = detailPx * 0.9f,
+                    cap = StrokeCap.Round
+                )
             }
-            PieceColor.BLACK -> {
-                val strokePx = with(scope) { strokeWidth.toPx() }
-                scope.drawPath(
-                    path = path,
-                    color = color,
-                    style = Stroke(
-                        width = strokePx,
-                        cap = StrokeCap.Round,
-                        join = StrokeJoin.Round
-                    )
+
+            PieceType.ROOK -> {
+                // Upper parapet line + plinth line
+                scope.drawLine(
+                    color = if (isWhite) NeoWhiteOutline.copy(alpha = 0.60f) else NeoBlackDetail.copy(alpha = 0.50f),
+                    start = p(0.32f, 0.41f),
+                    end = p(0.68f, 0.41f),
+                    strokeWidth = detailPx,
+                    cap = StrokeCap.Round
+                )
+                scope.drawLine(
+                    color = if (isWhite) NeoWhiteOutline.copy(alpha = 0.55f) else NeoBlackDetail.copy(alpha = 0.48f),
+                    start = p(0.30f, 0.77f),
+                    end = p(0.70f, 0.77f),
+                    strokeWidth = detailPx,
+                    cap = StrokeCap.Round
+                )
+            }
+
+            PieceType.KNIGHT -> {
+                // Crisp Neo eye & subtle muzzle detail
+                val eyeRadius = (w * 0.030f).coerceAtLeast(1.2f)
+                scope.drawCircle(
+                    color = if (isWhite) NeoWhiteOutline else NeoBlackDetail,
+                    radius = eyeRadius,
+                    center = p(0.415f, 0.345f)
+                )
+                // Nostril slash
+                scope.drawCircle(
+                    color = if (isWhite) NeoWhiteOutline else NeoBlackDetail,
+                    radius = (w * 0.019f).coerceAtLeast(0.9f),
+                    center = p(0.285f, 0.485f)
+                )
+                // Base plinth line
+                scope.drawLine(
+                    color = if (isWhite) NeoWhiteOutline.copy(alpha = 0.50f) else NeoBlackDetail.copy(alpha = 0.48f),
+                    start = p(0.28f, 0.79f),
+                    end = p(0.72f, 0.79f),
+                    strokeWidth = detailPx,
+                    cap = StrokeCap.Round
+                )
+            }
+
+            PieceType.BISHOP -> {
+                // Finial orb atop mitre
+                val orbCenter = p(0.50f, 0.145f)
+                val orbR = w * 0.044f
+                scope.drawCircle(color = fillColor, radius = orbR, center = orbCenter)
+                scope.drawCircle(color = outlineColor, radius = orbR, center = orbCenter, style = strokeStyle)
+
+                // Classic Chess.com diagonal mitre cross-cut
+                val cutColor = if (isWhite) NeoWhiteOutline else NeoBlackDetail
+                scope.drawLine(
+                    color = cutColor,
+                    start = p(0.44f, 0.34f),
+                    end = p(0.56f, 0.25f),
+                    strokeWidth = detailPx,
+                    cap = StrokeCap.Round
+                )
+                scope.drawLine(
+                    color = cutColor,
+                    start = p(0.47f, 0.26f),
+                    end = p(0.53f, 0.33f),
+                    strokeWidth = detailPx,
+                    cap = StrokeCap.Round
+                )
+                // Collar line
+                scope.drawLine(
+                    color = if (isWhite) NeoWhiteOutline.copy(alpha = 0.65f) else NeoBlackDetail.copy(alpha = 0.55f),
+                    start = p(0.39f, 0.525f),
+                    end = p(0.61f, 0.525f),
+                    strokeWidth = detailPx,
+                    cap = StrokeCap.Round
+                )
+            }
+
+            PieceType.QUEEN -> {
+                // Five Neo spherical crown pearls atop the coronet tips
+                val pearlPositions = listOf(
+                    p(0.18f, 0.29f),
+                    p(0.33f, 0.21f),
+                    p(0.50f, 0.17f),
+                    p(0.67f, 0.21f),
+                    p(0.82f, 0.29f)
+                )
+                val pearlR = w * 0.039f
+                for (pt in pearlPositions) {
+                    scope.drawCircle(color = fillColor, radius = pearlR, center = pt)
+                    scope.drawCircle(color = outlineColor, radius = pearlR, center = pt, style = strokeStyle)
+                }
+                // Waist arc & skirt ring
+                val beltColor = if (isWhite) NeoWhiteOutline.copy(alpha = 0.60f) else NeoBlackDetail.copy(alpha = 0.55f)
+                scope.drawLine(
+                    color = beltColor,
+                    start = p(0.35f, 0.64f),
+                    end = p(0.65f, 0.64f),
+                    strokeWidth = detailPx,
+                    cap = StrokeCap.Round
+                )
+                scope.drawLine(
+                    color = beltColor,
+                    start = p(0.28f, 0.78f),
+                    end = p(0.72f, 0.78f),
+                    strokeWidth = detailPx,
+                    cap = StrokeCap.Round
+                )
+            }
+
+            PieceType.KING -> {
+                // Iconic Neo center divider ridge & crown collar bands
+                val crownLine = if (isWhite) NeoWhiteOutline.copy(alpha = 0.55f) else NeoBlackDetail.copy(alpha = 0.55f)
+                scope.drawLine(
+                    color = crownLine,
+                    start = p(0.50f, 0.34f),
+                    end = p(0.50f, 0.56f),
+                    strokeWidth = detailPx,
+                    cap = StrokeCap.Round
+                )
+                scope.drawLine(
+                    color = crownLine,
+                    start = p(0.35f, 0.58f),
+                    end = p(0.65f, 0.58f),
+                    strokeWidth = detailPx,
+                    cap = StrokeCap.Round
+                )
+                scope.drawLine(
+                    color = crownLine,
+                    start = p(0.28f, 0.78f),
+                    end = p(0.72f, 0.78f),
+                    strokeWidth = detailPx,
+                    cap = StrokeCap.Round
                 )
             }
         }
     }
 
     /**
-     * Constructs a normalized vector [Path] for the given [type] fitted to [bounds].
+     * Constructs smooth Neo-style Staunton vector paths fitted cleanly into [bounds].
      */
     fun createPiecePath(type: PieceType, bounds: Rect): Path {
         val l = bounds.left
         val t = bounds.top
         val w = bounds.width
         val h = bounds.height
-
-        fun p(nx: Float, ny: Float): Offset = Offset(l + nx * w, t + ny * h)
+        fun x(nx: Float) = l + nx * w
+        fun y(ny: Float) = t + ny * h
 
         return Path().apply {
             when (type) {
                 PieceType.PAWN -> {
-                    // Base
-                    moveTo(p(0.24f, 0.88f).x, p(0.24f, 0.88f).y)
-                    lineTo(p(0.76f, 0.88f).x, p(0.76f, 0.88f).y)
-                    lineTo(p(0.74f, 0.82f).x, p(0.74f, 0.82f).y)
-                    lineTo(p(0.66f, 0.78f).x, p(0.66f, 0.78f).y)
-                    // Right body to collar
+                    // Wide Neo rounded base -> gentle neck curve -> circular head
+                    moveTo(x(0.25f), y(0.88f))
+                    lineTo(x(0.75f), y(0.88f))
                     cubicTo(
-                        p(0.64f, 0.68f).x, p(0.64f, 0.68f).y,
-                        p(0.58f, 0.58f).x, p(0.58f, 0.58f).y,
-                        p(0.58f, 0.52f).x, p(0.58f, 0.52f).y
-                    )
-                    // Collar right
-                    lineTo(p(0.62f, 0.50f).x, p(0.62f, 0.50f).y)
-                    lineTo(p(0.62f, 0.46f).x, p(0.62f, 0.46f).y)
-                    lineTo(p(0.57f, 0.44f).x, p(0.57f, 0.44f).y)
-                    // Spherical head
-                    cubicTo(
-                        p(0.65f, 0.38f).x, p(0.65f, 0.38f).y,
-                        p(0.64f, 0.20f).x, p(0.64f, 0.20f).y,
-                        p(0.50f, 0.20f).x, p(0.50f, 0.20f).y
+                        x(0.77f), y(0.88f),
+                        x(0.77f), y(0.80f),
+                        x(0.68f), y(0.77f)
                     )
                     cubicTo(
-                        p(0.36f, 0.20f).x, p(0.36f, 0.20f).y,
-                        p(0.35f, 0.38f).x, p(0.35f, 0.38f).y,
-                        p(0.43f, 0.44f).x, p(0.43f, 0.44f).y
+                        x(0.64f), y(0.66f),
+                        x(0.59f), y(0.56f),
+                        x(0.57f), y(0.50f)
                     )
-                    // Collar left
-                    lineTo(p(0.38f, 0.46f).x, p(0.38f, 0.46f).y)
-                    lineTo(p(0.38f, 0.50f).x, p(0.38f, 0.50f).y)
-                    lineTo(p(0.42f, 0.52f).x, p(0.42f, 0.52f).y)
-                    // Left body down to base
                     cubicTo(
-                        p(0.42f, 0.58f).x, p(0.42f, 0.58f).y,
-                        p(0.36f, 0.68f).x, p(0.36f, 0.68f).y,
-                        p(0.34f, 0.78f).x, p(0.34f, 0.78f).y
+                        x(0.64f), y(0.49f),
+                        x(0.64f), y(0.44f),
+                        x(0.57f), y(0.43f)
                     )
-                    lineTo(p(0.26f, 0.82f).x, p(0.26f, 0.82f).y)
+                    // Spherical head (right side up to crown)
+                    cubicTo(
+                        x(0.66f), y(0.36f),
+                        x(0.64f), y(0.21f),
+                        x(0.50f), y(0.21f)
+                    )
+                    // Crown down left side
+                    cubicTo(
+                        x(0.36f), y(0.21f),
+                        x(0.34f), y(0.36f),
+                        x(0.43f), y(0.43f)
+                    )
+                    cubicTo(
+                        x(0.36f), y(0.44f),
+                        x(0.36f), y(0.49f),
+                        x(0.43f), y(0.50f)
+                    )
+                    cubicTo(
+                        x(0.41f), y(0.56f),
+                        x(0.36f), y(0.66f),
+                        x(0.32f), y(0.77f)
+                    )
+                    cubicTo(
+                        x(0.23f), y(0.80f),
+                        x(0.23f), y(0.88f),
+                        x(0.25f), y(0.88f)
+                    )
                     close()
                 }
 
                 PieceType.ROOK -> {
-                    // Base plinth
-                    moveTo(p(0.22f, 0.88f).x, p(0.22f, 0.88f).y)
-                    lineTo(p(0.78f, 0.88f).x, p(0.78f, 0.88f).y)
-                    lineTo(p(0.76f, 0.82f).x, p(0.76f, 0.82f).y)
-                    lineTo(p(0.68f, 0.78f).x, p(0.68f, 0.78f).y)
-                    // Right tower wall
-                    lineTo(p(0.66f, 0.42f).x, p(0.66f, 0.42f).y)
-                    // Cornice right shelf
-                    lineTo(p(0.74f, 0.40f).x, p(0.74f, 0.40f).y)
-                    lineTo(p(0.74f, 0.36f).x, p(0.74f, 0.36f).y)
-                    // Battlements (Right, notch, center, notch, left)
-                    lineTo(p(0.74f, 0.22f).x, p(0.74f, 0.22f).y)
-                    lineTo(p(0.64f, 0.22f).x, p(0.64f, 0.22f).y)
-                    lineTo(p(0.64f, 0.30f).x, p(0.64f, 0.30f).y)
-                    lineTo(p(0.56f, 0.30f).x, p(0.56f, 0.30f).y)
-                    lineTo(p(0.56f, 0.22f).x, p(0.56f, 0.22f).y)
-                    lineTo(p(0.44f, 0.22f).x, p(0.44f, 0.22f).y)
-                    lineTo(p(0.44f, 0.30f).x, p(0.44f, 0.30f).y)
-                    lineTo(p(0.36f, 0.30f).x, p(0.36f, 0.30f).y)
-                    lineTo(p(0.36f, 0.22f).x, p(0.36f, 0.22f).y)
-                    lineTo(p(0.26f, 0.22f).x, p(0.26f, 0.22f).y)
-                    // Left cornice shelf
-                    lineTo(p(0.26f, 0.36f).x, p(0.26f, 0.36f).y)
-                    lineTo(p(0.26f, 0.40f).x, p(0.26f, 0.40f).y)
-                    lineTo(p(0.34f, 0.42f).x, p(0.34f, 0.42f).y)
-                    // Left tower wall down to base
-                    lineTo(p(0.32f, 0.78f).x, p(0.32f, 0.78f).y)
-                    lineTo(p(0.24f, 0.82f).x, p(0.24f, 0.82f).y)
+                    moveTo(x(0.22f), y(0.88f))
+                    lineTo(x(0.78f), y(0.88f))
+                    lineTo(x(0.78f), y(0.81f))
+                    lineTo(x(0.70f), y(0.77f))
+                    // Tapered tower right
+                    lineTo(x(0.67f), y(0.43f))
+                    lineTo(x(0.74f), y(0.39f))
+                    lineTo(x(0.74f), y(0.21f))
+                    // Battlements
+                    lineTo(x(0.63f), y(0.21f))
+                    lineTo(x(0.63f), y(0.29f))
+                    lineTo(x(0.56f), y(0.29f))
+                    lineTo(x(0.56f), y(0.21f))
+                    lineTo(x(0.44f), y(0.21f))
+                    lineTo(x(0.44f), y(0.29f))
+                    lineTo(x(0.37f), y(0.29f))
+                    lineTo(x(0.37f), y(0.21f))
+                    lineTo(x(0.26f), y(0.21f))
+                    lineTo(x(0.26f), y(0.39f))
+                    lineTo(x(0.33f), y(0.43f))
+                    // Tapered tower left
+                    lineTo(x(0.30f), y(0.77f))
+                    lineTo(x(0.22f), y(0.81f))
                     close()
                 }
 
                 PieceType.KNIGHT -> {
-                    // Base
-                    moveTo(p(0.24f, 0.88f).x, p(0.24f, 0.88f).y)
-                    lineTo(p(0.76f, 0.88f).x, p(0.76f, 0.88f).y)
-                    lineTo(p(0.74f, 0.80f).x, p(0.74f, 0.80f).y)
-                    // Arched back / mane up to ears
+                    // Flowing Chess.com Neo Knight silhouette
+                    moveTo(x(0.22f), y(0.88f))
+                    lineTo(x(0.78f), y(0.88f))
                     cubicTo(
-                        p(0.75f, 0.60f).x, p(0.75f, 0.60f).y,
-                        p(0.70f, 0.36f).x, p(0.70f, 0.36f).y,
-                        p(0.58f, 0.20f).x, p(0.58f, 0.20f).y
+                        x(0.78f), y(0.81f),
+                        x(0.76f), y(0.77f),
+                        x(0.74f), y(0.76f)
                     )
-                    // Notch between ears
-                    lineTo(p(0.53f, 0.25f).x, p(0.53f, 0.25f).y)
-                    lineTo(p(0.48f, 0.22f).x, p(0.48f, 0.22f).y)
-                    // Forehead down to snout
+                    // Sweeping arched mane right up to ears
                     cubicTo(
-                        p(0.42f, 0.28f).x, p(0.42f, 0.28f).y,
-                        p(0.34f, 0.34f).x, p(0.34f, 0.34f).y,
-                        p(0.25f, 0.44f).x, p(0.25f, 0.44f).y
+                        x(0.79f), y(0.52f),
+                        x(0.74f), y(0.28f),
+                        x(0.59f), y(0.18f)
                     )
-                    // Nose and chin
-                    lineTo(p(0.25f, 0.49f).x, p(0.25f, 0.49f).y)
-                    lineTo(p(0.32f, 0.52f).x, p(0.32f, 0.52f).y)
-                    // Throat / jaw indent
+                    // Ear + forelock silhouette
+                    lineTo(x(0.54f), y(0.23f))
                     cubicTo(
-                        p(0.35f, 0.52f).x, p(0.35f, 0.52f).y,
-                        p(0.38f, 0.54f).x, p(0.38f, 0.54f).y,
-                        p(0.40f, 0.55f).x, p(0.40f, 0.55f).y
+                        x(0.51f), y(0.19f),
+                        x(0.48f), y(0.17f),
+                        x(0.45f), y(0.17f)
                     )
-                    // Proud chest curve down to front base
+                    lineTo(x(0.44f), y(0.23f))
+                    // Brow to sculpted muzzle nose
                     cubicTo(
-                        p(0.34f, 0.64f).x, p(0.34f, 0.64f).y,
-                        p(0.30f, 0.72f).x, p(0.30f, 0.72f).y,
-                        p(0.28f, 0.80f).x, p(0.28f, 0.80f).y
+                        x(0.36f), y(0.26f),
+                        x(0.26f), y(0.37f),
+                        x(0.22f), y(0.48f)
+                    )
+                    cubicTo(
+                        x(0.20f), y(0.53f),
+                        x(0.25f), y(0.57f),
+                        x(0.31f), y(0.55f)
+                    )
+                    // Jaw curve tucked to throat
+                    cubicTo(
+                        x(0.36f), y(0.54f),
+                        x(0.41f), y(0.51f),
+                        x(0.45f), y(0.48f)
+                    )
+                    // Proud muscular chest down to front base
+                    cubicTo(
+                        x(0.43f), y(0.58f),
+                        x(0.33f), y(0.65f),
+                        x(0.27f), y(0.77f)
+                    )
+                    cubicTo(
+                        x(0.22f), y(0.80f),
+                        x(0.22f), y(0.85f),
+                        x(0.22f), y(0.88f)
                     )
                     close()
                 }
 
                 PieceType.BISHOP -> {
-                    // Base
-                    moveTo(p(0.24f, 0.88f).x, p(0.24f, 0.88f).y)
-                    lineTo(p(0.76f, 0.88f).x, p(0.76f, 0.88f).y)
-                    lineTo(p(0.74f, 0.82f).x, p(0.74f, 0.82f).y)
-                    lineTo(p(0.64f, 0.78f).x, p(0.64f, 0.78f).y)
-                    // Body right
-                    lineTo(p(0.54f, 0.56f).x, p(0.54f, 0.56f).y)
-                    // Collar right
-                    lineTo(p(0.60f, 0.52f).x, p(0.60f, 0.52f).y)
-                    lineTo(p(0.56f, 0.48f).x, p(0.56f, 0.48f).y)
-                    // Mitre head right curving to tip
+                    moveTo(x(0.22f), y(0.88f))
+                    lineTo(x(0.78f), y(0.88f))
                     cubicTo(
-                        p(0.64f, 0.42f).x, p(0.64f, 0.42f).y,
-                        p(0.62f, 0.26f).x, p(0.62f, 0.26f).y,
-                        p(0.50f, 0.16f).x, p(0.50f, 0.16f).y
+                        x(0.79f), y(0.82f),
+                        x(0.75f), y(0.78f),
+                        x(0.67f), y(0.76f)
                     )
-                    // Mitre head left with distinctive slit
+                    // Flared Neo body curve up to collar
                     cubicTo(
-                        p(0.43f, 0.22f).x, p(0.43f, 0.22f).y,
-                        p(0.40f, 0.28f).x, p(0.40f, 0.28f).y,
-                        p(0.42f, 0.30f).x, p(0.42f, 0.30f).y
+                        x(0.61f), y(0.67f),
+                        x(0.59f), y(0.58f),
+                        x(0.58f), y(0.53f)
                     )
-                    // Slit notch cut
-                    lineTo(p(0.48f, 0.34f).x, p(0.48f, 0.34f).y)
-                    lineTo(p(0.39f, 0.35f).x, p(0.39f, 0.35f).y)
+                    // Collar
                     cubicTo(
-                        p(0.36f, 0.42f).x, p(0.36f, 0.42f).y,
-                        p(0.42f, 0.46f).x, p(0.42f, 0.46f).y,
-                        p(0.44f, 0.48f).x, p(0.44f, 0.48f).y
+                        x(0.65f), y(0.51f),
+                        x(0.65f), y(0.46f),
+                        x(0.59f), y(0.45f)
                     )
-                    // Collar left
-                    lineTo(p(0.40f, 0.52f).x, p(0.40f, 0.52f).y)
-                    lineTo(p(0.46f, 0.56f).x, p(0.46f, 0.56f).y)
-                    // Body left
-                    lineTo(p(0.36f, 0.78f).x, p(0.36f, 0.78f).y)
-                    lineTo(p(0.26f, 0.82f).x, p(0.26f, 0.82f).y)
+                    // Smooth rounded mitre dome
+                    cubicTo(
+                        x(0.67f), y(0.38f),
+                        x(0.64f), y(0.23f),
+                        x(0.50f), y(0.18f)
+                    )
+                    cubicTo(
+                        x(0.36f), y(0.23f),
+                        x(0.33f), y(0.38f),
+                        x(0.41f), y(0.45f)
+                    )
+                    cubicTo(
+                        x(0.35f), y(0.46f),
+                        x(0.35f), y(0.51f),
+                        x(0.42f), y(0.53f)
+                    )
+                    cubicTo(
+                        x(0.41f), y(0.58f),
+                        x(0.39f), y(0.67f),
+                        x(0.33f), y(0.76f)
+                    )
+                    cubicTo(
+                        x(0.25f), y(0.78f),
+                        x(0.21f), y(0.82f),
+                        x(0.22f), y(0.88f)
+                    )
                     close()
                 }
 
                 PieceType.QUEEN -> {
-                    // Base
-                    moveTo(p(0.22f, 0.88f).x, p(0.22f, 0.88f).y)
-                    lineTo(p(0.78f, 0.88f).x, p(0.78f, 0.88f).y)
-                    lineTo(p(0.76f, 0.80f).x, p(0.76f, 0.80f).y)
-                    // Skirt right in to waist
+                    moveTo(x(0.22f), y(0.88f))
+                    lineTo(x(0.78f), y(0.88f))
                     cubicTo(
-                        p(0.70f, 0.72f).x, p(0.70f, 0.72f).y,
-                        p(0.62f, 0.65f).x, p(0.62f, 0.65f).y,
-                        p(0.58f, 0.58f).x, p(0.58f, 0.58f).y
+                        x(0.79f), y(0.81f),
+                        x(0.75f), y(0.78f),
+                        x(0.71f), y(0.76f)
                     )
-                    // Coronet / crown (5 peaks)
-                    lineTo(p(0.76f, 0.30f).x, p(0.76f, 0.30f).y) // right peak
-                    lineTo(p(0.68f, 0.38f).x, p(0.68f, 0.38f).y) // notch 1
-                    lineTo(p(0.63f, 0.24f).x, p(0.63f, 0.24f).y) // mid-right peak
-                    lineTo(p(0.56f, 0.36f).x, p(0.56f, 0.36f).y) // notch 2
-                    lineTo(p(0.50f, 0.20f).x, p(0.50f, 0.20f).y) // center peak
-                    lineTo(p(0.44f, 0.36f).x, p(0.44f, 0.36f).y) // notch 3
-                    lineTo(p(0.37f, 0.24f).x, p(0.37f, 0.24f).y) // mid-left peak
-                    lineTo(p(0.32f, 0.38f).x, p(0.32f, 0.38f).y) // notch 4
-                    lineTo(p(0.24f, 0.30f).x, p(0.24f, 0.30f).y) // left peak
-                    // Waist left
-                    lineTo(p(0.42f, 0.58f).x, p(0.42f, 0.58f).y)
-                    // Skirt left
+                    // Coronet flared rays
+                    lineTo(x(0.81f), y(0.32f))
+                    quadraticTo(x(0.70f), y(0.45f), x(0.66f), y(0.24f))
+                    quadraticTo(x(0.56f), y(0.42f), x(0.50f), y(0.20f))
+                    quadraticTo(x(0.44f), y(0.42f), x(0.34f), y(0.24f))
+                    quadraticTo(x(0.30f), y(0.45f), x(0.19f), y(0.32f))
+                    lineTo(x(0.29f), y(0.76f))
                     cubicTo(
-                        p(0.38f, 0.65f).x, p(0.38f, 0.65f).y,
-                        p(0.30f, 0.72f).x, p(0.30f, 0.72f).y,
-                        p(0.24f, 0.80f).x, p(0.24f, 0.80f).y
+                        x(0.25f), y(0.78f),
+                        x(0.21f), y(0.81f),
+                        x(0.22f), y(0.88f)
                     )
                     close()
                 }
 
                 PieceType.KING -> {
-                    // Base
-                    moveTo(p(0.22f, 0.88f).x, p(0.22f, 0.88f).y)
-                    lineTo(p(0.78f, 0.88f).x, p(0.78f, 0.88f).y)
-                    lineTo(p(0.76f, 0.80f).x, p(0.76f, 0.80f).y)
-                    // Right body
+                    moveTo(x(0.22f), y(0.88f))
+                    lineTo(x(0.78f), y(0.88f))
                     cubicTo(
-                        p(0.70f, 0.72f).x, p(0.70f, 0.72f).y,
-                        p(0.62f, 0.65f).x, p(0.62f, 0.65f).y,
-                        p(0.58f, 0.56f).x, p(0.58f, 0.56f).y
+                        x(0.79f), y(0.81f),
+                        x(0.75f), y(0.78f),
+                        x(0.70f), y(0.76f)
                     )
-                    // Crown right band
-                    lineTo(p(0.66f, 0.48f).x, p(0.66f, 0.48f).y)
-                    // Crown right dome up to cross
+                    // Waist & broad Neo shoulders
                     cubicTo(
-                        p(0.68f, 0.36f).x, p(0.68f, 0.36f).y,
-                        p(0.58f, 0.28f).x, p(0.58f, 0.28f).y,
-                        p(0.53f, 0.28f).x, p(0.53f, 0.28f).y
+                        x(0.68f), y(0.68f),
+                        x(0.64f), y(0.62f),
+                        x(0.63f), y(0.58f)
                     )
-                    // Cross on top (right side)
-                    lineTo(p(0.53f, 0.24f).x, p(0.53f, 0.24f).y)
-                    lineTo(p(0.60f, 0.24f).x, p(0.60f, 0.24f).y)
-                    lineTo(p(0.60f, 0.18f).x, p(0.60f, 0.18f).y)
-                    lineTo(p(0.53f, 0.18f).x, p(0.53f, 0.18f).y)
-                    lineTo(p(0.53f, 0.13f).x, p(0.53f, 0.13f).y)
-                    // Cross top
-                    lineTo(p(0.47f, 0.13f).x, p(0.47f, 0.13f).y)
-                    // Cross left side
-                    lineTo(p(0.47f, 0.18f).x, p(0.47f, 0.18f).y)
-                    lineTo(p(0.40f, 0.18f).x, p(0.40f, 0.18f).y)
-                    lineTo(p(0.40f, 0.24f).x, p(0.40f, 0.24f).y)
-                    lineTo(p(0.47f, 0.24f).x, p(0.47f, 0.24f).y)
-                    lineTo(p(0.47f, 0.28f).x, p(0.47f, 0.28f).y)
-                    // Crown left dome
+                    // Iconic twin rounded crown lobes
                     cubicTo(
-                        p(0.42f, 0.28f).x, p(0.42f, 0.28f).y,
-                        p(0.32f, 0.36f).x, p(0.32f, 0.36f).y,
-                        p(0.34f, 0.48f).x, p(0.34f, 0.48f).y
+                        x(0.78f), y(0.48f),
+                        x(0.79f), y(0.30f),
+                        x(0.63f), y(0.28f)
                     )
-                    // Crown left band
-                    lineTo(p(0.42f, 0.56f).x, p(0.42f, 0.56f).y)
-                    // Body left
                     cubicTo(
-                        p(0.38f, 0.65f).x, p(0.38f, 0.65f).y,
-                        p(0.30f, 0.72f).x, p(0.30f, 0.72f).y,
-                        p(0.24f, 0.80f).x, p(0.24f, 0.80f).y
+                        x(0.56f), y(0.27f),
+                        x(0.53f), y(0.31f),
+                        x(0.525f), y(0.33f)
+                    )
+                    // Upright smooth cross on crown
+                    lineTo(x(0.525f), y(0.24f))
+                    lineTo(x(0.585f), y(0.24f))
+                    lineTo(x(0.585f), y(0.185f))
+                    lineTo(x(0.525f), y(0.185f))
+                    lineTo(x(0.525f), y(0.125f))
+                    lineTo(x(0.475f), y(0.125f))
+                    lineTo(x(0.475f), y(0.185f))
+                    lineTo(x(0.415f), y(0.185f))
+                    lineTo(x(0.415f), y(0.24f))
+                    lineTo(x(0.475f), y(0.24f))
+                    lineTo(x(0.475f), y(0.33f))
+                    // Left crown lobe
+                    cubicTo(
+                        x(0.47f), y(0.31f),
+                        x(0.44f), y(0.27f),
+                        x(0.37f), y(0.28f)
+                    )
+                    cubicTo(
+                        x(0.21f), y(0.30f),
+                        x(0.22f), y(0.48f),
+                        x(0.37f), y(0.58f)
+                    )
+                    cubicTo(
+                        x(0.36f), y(0.62f),
+                        x(0.32f), y(0.68f),
+                        x(0.30f), y(0.76f)
+                    )
+                    cubicTo(
+                        x(0.25f), y(0.78f),
+                        x(0.21f), y(0.81f),
+                        x(0.22f), y(0.88f)
                     )
                     close()
                 }

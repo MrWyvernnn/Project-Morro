@@ -57,10 +57,13 @@ import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -94,6 +97,7 @@ import com.morro.alarm.ui.components.AlarmBuilderSheet
 import com.morro.alarm.ui.components.AlarmBuilderSheetContent
 import com.morro.alarm.ui.components.MorroAnalogClock
 import com.morro.alarm.ui.components.MorroCard
+import com.morro.alarm.ui.components.MorroGhostMascot
 import com.morro.alarm.ui.components.MorroPrimaryButton
 import com.morro.alarm.ui.components.MorroSettingsSheet
 import com.morro.alarm.ui.components.MorroSky
@@ -297,6 +301,7 @@ fun MainAlarmScreen(context: Context) {
     var showAlarmBuilder by remember { mutableStateOf(false) }
     var showPrivacyPolicy by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+    var showCompanionSheet by remember { mutableStateOf(false) }
     var wakeCheckEnabled by remember { mutableStateOf(WakeUpCheck.isEnabled(context)) }
 
     // Opening the app at all is an answer: a pending "Still up?" has served its purpose, and its
@@ -356,7 +361,7 @@ fun MainAlarmScreen(context: Context) {
         }
     }
 
-    val anySheetOpen = showAlarmBuilder || showSettings || showPrivacyPolicy
+    val anySheetOpen = showAlarmBuilder || showSettings || showPrivacyPolicy || showCompanionSheet
     val backdropScale by androidx.compose.animation.core.animateFloatAsState(
         targetValue = if (anySheetOpen && !reducedMotion) 0.94f else 1f,
         animationSpec = MorroSpring.FloatSpringDefault,
@@ -410,20 +415,46 @@ fun MainAlarmScreen(context: Context) {
                     .padding(horizontal = 24.dp, vertical = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-            // ── Top bar: wordmark, one quiet action ───────────────────────────
+            // ── Top bar: wordmark + interactive mascot chip, Privacy action ───
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "Morro",
-                    fontSize = 18.sp,
-                    fontFamily = FontFamily.SansSerif,
-                    fontWeight = FontWeight.Medium,
-                    color = colors.textPrimary,
-                    letterSpacing = (-0.2).sp
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Morro",
+                        fontSize = 18.sp,
+                        fontFamily = FontFamily.SansSerif,
+                        fontWeight = FontWeight.Medium,
+                        color = colors.textPrimary,
+                        letterSpacing = (-0.2).sp
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Row(
+                        modifier = Modifier
+                            .heightIn(min = 34.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(colors.surfaceCard.copy(alpha = 0.72f))
+                            .morroGlassBorder(radius = 50.dp, topAlpha = 0.22f, bottomAlpha = 0.04f)
+                            .clickable { showCompanionSheet = true }
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        MorroGhostMascot(
+                            modifier = Modifier.size(width = 24.dp, height = 26.dp),
+                            happy = true,
+                            interactive = false
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Poke",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = colors.honey
+                        )
+                    }
+                }
                 TextButton(onClick = { showPrivacyPolicy = true }) {
                     Icon(
                         imageVector = Icons.Filled.Lock,
@@ -605,6 +636,10 @@ fun MainAlarmScreen(context: Context) {
 
         if (showPrivacyPolicy) {
             MorroPrivacyPolicySheet(onDismiss = { showPrivacyPolicy = false })
+        }
+
+        if (showCompanionSheet) {
+            MorroCompanionSheet(onDismiss = { showCompanionSheet = false })
         }
 
         // The wrapper already reads the stored theme; this state only makes the switch respond on
@@ -918,6 +953,96 @@ private fun MissedRingCard(
                     .heightIn(min = 48.dp)
                     .wrapContentHeight(Alignment.CenterVertically)
                     .padding(horizontal = 16.dp)
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MorroCompanionSheet(
+    onDismiss: () -> Unit,
+) {
+    val colors = morroColors()
+    val reducedMotion = rememberReducedMotion()
+    var pokeCount by remember { mutableIntStateOf(0) }
+
+    val moodText = when (pokeCount) {
+        0 -> "Ready to keep tomorrow's promise."
+        1 -> "Boop! Wide awake and smiling."
+        2 -> "Hehe! Feeling bouncy today."
+        else -> "Wheee! Celebratory spin ($pokeCount pokes)."
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        containerColor = colors.surface,
+        contentColor = colors.textPrimary,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .padding(vertical = 12.dp)
+                    .width(40.dp)
+                    .height(4.dp)
+                    .background(colors.borderSubtle, RoundedCornerShape(2.dp))
+            )
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            MorroGhostMascot(
+                modifier = Modifier.size(width = 152.dp, height = 168.dp),
+                happy = true,
+                interactive = true,
+                pokeSignal = pokeCount,
+                onPoked = { pokeCount++ }
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            AnimatedContent(
+                targetState = moodText,
+                transitionSpec = {
+                    if (reducedMotion) {
+                        fadeIn(tween(0)) togetherWith fadeOut(tween(0))
+                    } else {
+                        (fadeIn(tween(180)) + slideInVertically { it / 3 })
+                            .togetherWith(fadeOut(tween(120)))
+                    }
+                },
+                label = "companionMood"
+            ) { line ->
+                Text(
+                    text = line,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = colors.textPrimary,
+                    textAlign = TextAlign.Center
+                )
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Text(
+                text = "Tap the button or tap Morro directly.",
+                fontSize = 12.sp,
+                color = colors.textTertiary,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            MorroPrimaryButton(
+                text = if (pokeCount == 0) "Poke Morro" else "Poke again ($pokeCount)",
+                onClick = { pokeCount++ },
+                modifier = Modifier.fillMaxWidth()
             )
         }
     }

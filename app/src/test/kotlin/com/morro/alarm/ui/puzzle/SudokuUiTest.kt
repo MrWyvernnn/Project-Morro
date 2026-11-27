@@ -211,4 +211,28 @@ class SudokuUiTest {
         g = g.set(r1, c1, puzzle.solution[r1, c1])
         assertEquals(r0 to c0, nextTargetCellAfterEntry(puzzle, g, r1, c1))
     }
+
+    @Test
+    fun `clearPeerNotesForEntry removes digit from row, column, box, and entered cell`() {
+        val initialNotes = mapOf(
+            (0 to 0) to setOf(3, 4), // target cell
+            (0 to 3) to setOf(2, 3), // same row
+            (3 to 0) to setOf(1, 3), // same col
+            (1 to 1) to setOf(3),    // same 2x2 box
+            (2 to 2) to setOf(3, 4)  // unrelated cell
+        )
+        val cleaned = clearPeerNotesForEntry(
+            notes = initialNotes,
+            row = 0,
+            col = 0,
+            digit = 3,
+            boxRows = 2,
+            boxCols = 2
+        )
+        assertNull(cleaned[0 to 0])
+        assertEquals(setOf(2), cleaned[0 to 3])
+        assertEquals(setOf(1), cleaned[3 to 0])
+        assertNull(cleaned[1 to 1])
+        assertEquals(setOf(3, 4), cleaned[2 to 2])
+    }
 }

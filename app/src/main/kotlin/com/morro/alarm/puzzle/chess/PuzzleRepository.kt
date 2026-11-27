@@ -96,7 +96,9 @@ object PuzzleRepository {
             CognitiveDifficulty.STANDARD -> mateIn1
             CognitiveDifficulty.HARD -> mateIn2
         }
-        if (pool.isNullOrEmpty()) return FALLBACK
+        if (pool.isNullOrEmpty()) {
+            return ChessEngine.generateTacticalPuzzle(difficulty, seed) ?: FALLBACK
+        }
 
         val candidates = if (excludeIds.isEmpty()) pool else pool.filter { it.puzzleId !in excludeIds }
         val source = candidates.ifEmpty { pool }
